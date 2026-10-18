@@ -1,0 +1,10 @@
+{
+  "id": "example",
+  "name": "Example mod",
+  "version": "1.0.0",
+  "author": "OpenGothic",
+  "description": "Shows the API: commands, events, timers, storage, quests and the player.",
+  "main": "index.js",
+  "apiVersion": 1,
+  "game": ["G1", "G2"]
+}

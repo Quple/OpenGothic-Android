@@ -88,6 +88,10 @@ public final class LauncherActivity extends Activity {
         choose.setOnClickListener(v -> pickArchive());
         left.addView(choose);
 
+        Button mods = button("Mods", false);
+        mods.setOnClickListener(v -> startActivity(new Intent(this, ModsActivity.class)));
+        left.addView(mods);
+
         Button help = button("How to start", false);
         help.setOnClickListener(v -> showHelp());
         left.addView(help);

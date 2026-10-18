@@ -152,6 +152,14 @@ add_definitions(-DMINIZ_NO_STDIO)
 add_library(miniz STATIC EXCLUDE_FROM_ALL "lib/miniz/miniz.h" "lib/miniz/miniz.c")
 target_link_libraries(${PROJECT_NAME} miniz)
 
+# JavaScript for the mods
+set(QJS_ENABLE_INSTALL   OFF CACHE INTERNAL "")
+set(QJS_BUILD_EXAMPLES   OFF CACHE INTERNAL "")
+set(QJS_BUILD_CLI_STATIC OFF CACHE INTERNAL "")
+set(QJS_BUILD_LIBC       OFF CACHE INTERNAL "")
+add_subdirectory(lib/quickjs EXCLUDE_FROM_ALL)
+target_link_libraries(${PROJECT_NAME} qjs)
+
 # bullet physics
 set(BULLET2_MULTITHREADING       ON  CACHE INTERNAL "")
 set(USE_MSVC_RUNTIME_LIBRARY_DLL ON  CACHE INTERNAL "")

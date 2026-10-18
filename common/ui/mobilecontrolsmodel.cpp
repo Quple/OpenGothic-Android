@@ -217,6 +217,7 @@ void Controls::buildSettings(const Anchor& a) {
   for(int i=0; i<SettingCount; ++i)
     add(width*0.22f,a.t+float(i)*44*scale,560,40,labels[i],Key::Enter).special = Special::FirstSetting+i;
   add(a.r-64*scale,a.b-60*scale,64,60,"BACK",Key::Escape).special = Special::Settings;
+  add(a.l,a.b-60*scale,100,60,"MODS",Key::Enter).special = Special::Mods;
   }
 
 void Controls::buildKeyboard(const Anchor& a) {

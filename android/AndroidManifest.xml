@@ -15,6 +15,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Mods: adding of zip files and the choice of the mods that start with the game -->
+        <activity android:name="org.opengothic.app.ModsActivity" android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
         <!-- Runs in its own process, the launcher stays alive when the game exits -->
         <activity android:name="org.opengothic.app.GameActivity" android:exported="false" android:process=":game"
             android:screenOrientation="landscape"

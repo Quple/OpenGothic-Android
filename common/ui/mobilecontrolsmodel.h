@@ -51,6 +51,7 @@ namespace Special {
     Settings,
     Target,
     Spell,
+    Mods,
     FirstSetting  = 8,
     FirstCategory = 24
     };

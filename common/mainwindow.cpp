@@ -24,6 +24,7 @@
 #include "game/globaleffects.h"
 #include "utils/gthfont.h"
 #include "utils/haptics.h"
+#include "scripting/gameapi.h"
 #include "utils/dbgpainter.h"
 
 #include "commandline.h"
@@ -117,12 +118,14 @@ MainWindow::MainWindow(Device& device)
 #ifdef OPENGOTHIC_TOUCH_UI
   setupMobileControls();
 #endif
+  Scripting::game::setup();
   }
 
 MainWindow::~MainWindow() {
 #ifdef OPENGOTHIC_TOUCH_UI
   androidControls.unbind();
 #endif
+  Scripting::ModHost::inst().stopAll();
   GameMusic::inst().stopMusic();
   Gothic::inst().cancelLoading();
   device.waitIdle();
@@ -132,6 +135,7 @@ MainWindow::~MainWindow() {
   takeWidget(&document);
   takeWidget(&video);
   takeWidget(&rootMenu);
+  takeWidget(&modMenu);
 #if defined(__MOBILE_PLATFORM__) && !defined(OPENGOTHIC_TOUCH_UI)
   takeWidget(&mobileUi);
 #endif
@@ -152,6 +156,7 @@ void MainWindow::setupUi() {
   addWidget(&chapter);
   addWidget(&video);
   addWidget(&rootMenu);
+  addWidget(&modMenu);
 #if defined(__MOBILE_PLATFORM__) && !defined(OPENGOTHIC_TOUCH_UI)
   addWidget(&mobileUi);
 #endif
@@ -442,6 +447,14 @@ void MainWindow::mouseWheelEvent(MouseEvent &event) {
   }
 
 void MainWindow::keyDownEvent(KeyEvent &event) {
+  if(modMenu.isActive()) {
+    event.accept();
+    modMenu.keyDownEvent(event);
+    uiKeyUp=&modMenu;
+    return;
+    }
+  Scripting::game::keyEvent(event,true);
+
   if(video.isActive()){
     event.accept();
     video.keyDownEvent(event);
@@ -510,6 +523,11 @@ void MainWindow::keyDownEvent(KeyEvent &event) {
   }
 
 void MainWindow::keyRepeatEvent(KeyEvent& event) {
+  if(modMenu.isActive()) {
+    event.accept();
+    modMenu.keyRepeatEvent(event);
+    return;
+    }
   if(uiKeyUp==&video){
     if(event.isAccepted())
       return;
@@ -539,6 +557,12 @@ void MainWindow::keyRepeatEvent(KeyEvent& event) {
   }
 
 void MainWindow::keyUpEvent(KeyEvent &event) {
+  Scripting::game::keyEvent(event,false);
+  if(uiKeyUp==&modMenu) {
+    uiKeyUp = nullptr;
+    event.accept();
+    return;
+    }
   if(uiKeyUp==&video){
     video.keyUpEvent(event);
     if(event.isAccepted())
@@ -945,7 +969,8 @@ void MainWindow::onMarvinKey() {
       }
     case Event::K_F10:
       if(runtimeMode==R_Suspended)
-        runtimeMode = R_Step;
+        runtimeMode = R_Step; else
+        modMenu.toggle();
       break;
     case Event::K_P:
       if(Gothic::inst().isMarvinEnabled()) {
@@ -960,6 +985,8 @@ void MainWindow::onMarvinKey() {
   }
 
 uint64_t MainWindow::tick() {
+  Scripting::game::tick();
+  modMenu.refresh();
 #ifdef OPENGOTHIC_TOUCH_UI
   updateMobileControls();
 #endif
@@ -1466,6 +1493,8 @@ void cycleSpell(Npc& pl) {
 }
 
 Mobile::Mode MainWindow::mobileContext() const {
+  if(modMenu.isActive())
+    return Mobile::Mode::Menu;
   if(Gothic::inst().checkLoading()!=Gothic::LoadState::Idle)
     return Mobile::Mode::Loading;
   if(video.isActive() || chapter.isActive() || document.isActive())
@@ -1495,6 +1524,8 @@ void MainWindow::setupMobileControls() {
     player.onRotateMouse(-dx,-dy);
     };
   androidControls.menuTouch = [this](float x, float y, int phase) {
+    if(modMenu.isActive())
+      modMenu.mobileTouch(x,y,phase); else
     if(rootMenu.isActive())
       rootMenu.mobileTouch(x,y,phase); else
     if(inventory.isActive())
@@ -1503,6 +1534,8 @@ void MainWindow::setupMobileControls() {
       dialogs.mobileTouch(x,y,phase);
     };
   androidControls.menuTap = [this](float x, float y) {
+    if(modMenu.isActive())
+      modMenu.mobileTap(x,y); else
     if(rootMenu.isActive())
       rootMenu.mobileTap(x,y); else
     if(inventory.isActive())
@@ -1527,6 +1560,11 @@ void MainWindow::setupMobileControls() {
   }
 
 void MainWindow::onMobileAction(int id) {
+  if(id==Mobile::Special::Mods) {
+    modMenu.open();
+    return;
+    }
+
   const int category = id-Mobile::Special::FirstCategory;
   if(0<=category && category<Mobile::CategoryCount) {
     if(mobileContext()==Mobile::Mode::Inventory)

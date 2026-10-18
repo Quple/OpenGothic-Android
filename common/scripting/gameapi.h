@@ -1,0 +1,48 @@
+#pragma once
+
+#include "modjs.h"
+
+class Npc;
+class World;
+
+namespace Tempest {
+  class KeyEvent;
+  }
+
+/// The objects of the game that mods see. Every object has a file of its own in the game/ folder.
+namespace Scripting::game {
+
+/// Connects the mods with the game: folders of the mods, the objects of the game in the scripts
+void setup();
+
+// --- objects of the scripts
+void installNpc   (JSContext* ctx);   // the prototype of the characters, see game_npc.cpp
+void installPlayer(JSContext* ctx);   // player
+void installNpcs  (JSContext* ctx);   // npcs
+void installWorld (JSContext* ctx);   // world
+void installQuests(JSContext* ctx);   // quests
+void installScreen(JSContext* ctx);   // screen
+void installInput (JSContext* ctx);   // input
+
+// --- characters
+constexpr uint32_t PlayerId = 0xFFFFFFFEu;
+
+/// A JS object for a character. The player is followed, whichever world it is in.
+JSValue wrapNpc(JSContext* ctx, Npc& npc);
+Npc*    resolveNpc(JSContext* ctx, JSValueConst obj);
+
+/// Index of the character in the world, -1 if it is not there
+int64_t npcIndex(World& world, const Npc& npc);
+
+/// Name of a script symbol of an instance, "" if there is no such
+std::string instanceName(World& world, size_t symbol);
+/// Finds an item or a character instance by its name
+size_t      findInstance(World& world, std::string_view name);
+
+// --- events of the game for the mods, called from the main window
+void tick();
+void keyEvent(const Tempest::KeyEvent& e, bool down);
+bool isKeyDown(std::string_view name);
+std::string keyName(int key);
+
+}

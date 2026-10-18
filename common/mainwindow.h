@@ -36,6 +36,7 @@
 #include "ui/touchinput.h"
 
 #include "utils/keycodec.h"
+#include "ui/modmenu.h"
 #include "utils/androidinput.h"
 #include "resources.h"
 
@@ -173,6 +174,7 @@ class MainWindow : public Tempest::Window {
     DocumentMenu              document;
     ChapterScreen             chapter;
     ConsoleWidget             console;
+    ModMenu                   modMenu;
 #if defined(__MOBILE_PLATFORM__) && !defined(OPENGOTHIC_TOUCH_UI)
     TouchInput                mobileUi;
 #endif
