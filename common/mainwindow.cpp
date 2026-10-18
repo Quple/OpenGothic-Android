@@ -160,6 +160,7 @@ void MainWindow::setupUi() {
 #if defined(__MOBILE_PLATFORM__) && !defined(OPENGOTHIC_TOUCH_UI)
   addWidget(&mobileUi);
 #endif
+  addWidget(&rootMenu);
 
   rootMenu.setMainMenu();
 
