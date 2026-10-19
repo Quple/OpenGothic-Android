@@ -381,6 +381,16 @@ JSValue addItem(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) 
   return JS_TRUE;
   }
 
+/// npc.openTrade(trader): the trade window of the player with a character, no dialog is needed
+JSValue openTrade(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) {
+  Npc* npc    = self(ctx,obj);
+  Npc* trader = argc>0 ? game::resolveNpc(ctx,argv[0]) : nullptr;
+  if(npc==nullptr || trader==nullptr || npc==trader || !npc->isPlayer())
+    return JS_FALSE;
+  Gothic::inst().onOpenTrade(*npc,*trader);
+  return JS_TRUE;
+  }
+
 JSValue removeItem(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) {
   Npc* npc = self(ctx,obj);
   if(npc==nullptr || argc<1)
@@ -527,6 +537,7 @@ void game::installNpc(JSContext* ctx) {
   js::fn(ctx,proto,"remove",    remove,0);
   js::fn(ctx,proto,"addItem",   addItem,2);
   js::fn(ctx,proto,"removeItem",removeItem,2);
+  js::fn(ctx,proto,"openTrade", openTrade,1);
   js::fn(ctx,proto,"itemCount", itemCount,1);
   js::fn(ctx,proto,"hasItem",   hasItem,1);
 

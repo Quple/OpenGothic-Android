@@ -200,6 +200,27 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     console.log(`${tag}: ${item} before=${before}, after=${after}; expected increase=${count}. Open the chest yourself to confirm.`);
                     break;
                 }
+                case "trader": {
+                    // a baker of the village with the dialog "Show me your wares" (it needs only that Q105 is not running)
+                    if (player.talking) throw new Error("Close the current dialog first.");
+                    const trader = "BAU_719_BAKER";
+                    id(trader);
+                    id("ITMIS_Q505_RUPERT");
+                    id("ITFO_APPLE");
+                    const p = player.position;
+                    const a = player.rotation * Math.PI / 180;
+                    const npc = npcs.spawn(trader, p.x + Math.cos(a) * 250, p.y, p.z + Math.sin(a) * 250, player.rotation + 180);
+                    if (!npc || !npc.valid) throw new Error("Cannot spawn the trader. Stand on open, level ground.");
+                    if (!debug.parkNpc(npc)) throw new Error("Cannot disable the trader's routine.");
+                    npc.addItem("ITMI_GOLD", 1000);
+                    player.addItem("ITMIS_Q505_RUPERT", 1);
+                    player.addItem("ITFO_APPLE", 3);
+                    const opened = player.openTrade(npc);
+                    console.log(`Trader ${trader} #${npc.id} stands in front of you. You got ITMIS_Q505_RUPERT (important) and 3 ITFO_APPLE.` +
+                        (opened ? " The trade window is open: close F10 and sell the items. " : " Close F10 and talk to him, choose the trade. ") +
+                        "The important item must not be sold (the hero shakes his head), the apples can.");
+                    break;
+                }
                 case "inventory": {
                     // LOCKINVENTORY of CoM: with the flag the inventory closes itself right after it was opened
                     const on = args[1] !== "off";
@@ -238,7 +259,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     smokersScene();
                     break;
                 default:
-                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
+                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
             }
