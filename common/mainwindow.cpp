@@ -464,6 +464,7 @@ void MainWindow::keyDownEvent(KeyEvent &event) {
     const int32_t code = KeyCodec::keyToCode(event.key);
     if(code>0 && code<int32_t(dmaKeysDown.size()) && !dmaKeysDown[size_t(code)]) {
       dmaKeysDown[size_t(code)] = true;
+      w->script().dmaKeyState(code,true);
       w->script().dmaKey(code);
       }
     }
@@ -573,8 +574,11 @@ void MainWindow::keyUpEvent(KeyEvent &event) {
   Scripting::game::keyEvent(event,false);
   {
   const int32_t code = KeyCodec::keyToCode(event.key);
-  if(code>0 && code<int32_t(dmaKeysDown.size()))
+  if(code>0 && code<int32_t(dmaKeysDown.size())) {
     dmaKeysDown[size_t(code)] = false;
+    if(auto* w = Gothic::inst().world())
+      w->script().dmaKeyState(code,false);
+    }
   }
   if(uiKeyUp==&modMenu) {
     uiKeyUp = nullptr;
