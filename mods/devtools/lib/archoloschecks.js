@@ -8,6 +8,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
     let ammunition = "";
     let previousGod = null;
     let lastShot = null;
+    let timeCheck = null;
 
     function call(name, args, context) {
         const result = debug.call(name, args, context);
@@ -199,6 +200,32 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     console.log(`${tag}: ${item} before=${before}, after=${after}; expected increase=${count}. Open the chest yourself to confirm.`);
                     break;
                 }
+                case "inventory": {
+                    // LOCKINVENTORY of CoM: with the flag the inventory closes itself right after it was opened
+                    const on = args[1] !== "off";
+                    debug.setSymbol("PLAYERLOCKINVENTORY", on ? 1 : 0);
+                    console.log(on ? "PLAYERLOCKINVENTORY=1. Close F10 and press the inventory key: it must close at once. Use comcheck inventory off."
+                                   : "PLAYERLOCKINVENTORY=0. The inventory opens normally.");
+                    break;
+                }
+                case "time": {
+                    // SCALETIME of the scripts changes the oCWorldTimer: the time of the world must run faster
+                    const now = world.time();
+                    const minutes = t => t.day * 1440 + t.hour * 60 + t.minute;
+                    if (args[1] === "stop") {
+                        call("CHANGETIMESPEED", [100]);
+                        if (!timeCheck) throw new Error("First run comcheck time.");
+                        const game = minutes(now) - timeCheck.minutes;
+                        const real = (Date.now() - timeCheck.real) / 1000;
+                        console.log(`Speed 100 again. ${real.toFixed(1)} s of the real time = ${game} game minutes (about ${(game * 60 / real).toFixed(1)} game seconds per second; the normal speed is about 14.5).`);
+                        timeCheck = null;
+                        break;
+                    }
+                    timeCheck = { minutes: minutes(now), real: Date.now() };
+                    call("CHANGETIMESPEED", [2200]);
+                    console.log(`Time speed 2200 started at day ${now.day} ${now.hour}:${String(now.minute).padStart(2, "0")}. Close F10, wait 10 seconds, open it and use comcheck time stop.`);
+                    break;
+                }
                 case "text":
                     message(player, `COM text with spaces: OK #${++sequence}`);
                     console.log("Close F10; the queued external must print COM text with spaces: OK.");
@@ -211,7 +238,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     smokersScene();
                     break;
                 default:
-                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
+                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
             }

@@ -1058,6 +1058,11 @@ void MainWindow::onMarvinKey() {
 
 uint64_t MainWindow::tick() {
   Scripting::game::tick();
+  if(auto* w = Gothic::inst().world()) {
+    // a script (CoM, fistfight) closes the inventory of the player
+    if(w->script().dmaTakeInventoryClose() && inventory.isActive())
+      inventory.close();
+    }
   modMenu.refresh();
 #ifdef OPENGOTHIC_TOUCH_UI
   {

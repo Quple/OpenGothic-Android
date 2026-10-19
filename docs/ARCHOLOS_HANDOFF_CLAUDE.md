@@ -326,7 +326,7 @@ Wszystkie ścieżki poniżej względem `C:/Users/Ernest/Desktop/opengothic`:
 | Zastana diagnostyka animacji | `common/graphics/mesh/animationsolver.cpp`, dodatkowe logi w GameScript/Npc/DialogMenu — zachować cudze zmiany |
 | Pakowanie modów do buildu | `cmake/embedmods.cmake`, `CMakeLists.txt`, wygenerowany `build-touch/builtin_mods.cpp` — nie edytować wygenerowanego pliku ręcznie |
 
-Następny agent powinien porównywać implementację z lokalnym DAT i kodem Ikarus/LeGo z dostarczonych materiałów. Nie rozszerzać zmiany na dowolne mechanizmy DLL/x86 bez związku z faktycznie używanymi ścieżkami Kronik.
+Następny agent powinien porównywać imdzialaplementację z lokalnym DAT i kodem Ikarus/LeGo z dostarczonych materiałów. Nie rozszerzać zmiany na dowolne mechanizmy DLL/x86 bez związku z faktycznie używanymi ścieżkami Kronik.
 
 ## 11. Postęp Claude, pakiet 1 (20.10.2026, bez commitu, bez testów w grze)
 

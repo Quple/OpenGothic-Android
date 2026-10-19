@@ -171,6 +171,7 @@ void InventoryMenu::open(Npc &pl) {
 
   Gothic::inst().emitGlobalSound("INV_OPEN");
   //Gothic::inst().emitGlobalSound("INV_CHANGE");
+  pl.world().script().dmaInventoryOpen(pl);
   }
 
 void InventoryMenu::trade(Npc &pl, Npc &tr) {
