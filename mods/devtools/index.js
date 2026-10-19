@@ -4,6 +4,10 @@
 "use strict";
 
 const { createPanel } = require("./lib/panel.js");
+const { registerArcholosChecks } = require("./lib/archoloschecks.js");
+
+if (typeof debug !== "undefined")
+    registerArcholosChecks({ debug, player, npcs, world, console, screen });
 
 if (typeof ui !== "undefined" && typeof debug !== "undefined") {
     const panel = createPanel({ ui, debug, player, npcs, world });

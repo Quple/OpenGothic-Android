@@ -560,7 +560,12 @@ void Controls::up(int id, float x, float y) {
   }
 
 void Controls::cancel() {
-  events.clear();
+  // A second layout change may happen before drain(). Keep releases queued by
+  // the first one: dropping them leaves keys (notably Action/Ctrl) held in the
+  // window dispatcher and prevents text fields from accepting characters.
+  events.erase(std::remove_if(events.begin(),events.end(),[](const Event& e) {
+    return e.kind!=Event::Up;
+    }),events.end());
   if((current==Mode::Menu || current==Mode::Inventory || current==Mode::Dialog) && hasOwner(&Finger::swipe))
     events.push_back({Event::MenuTouch,Key::Enter,0,0,3});
 

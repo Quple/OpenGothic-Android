@@ -433,10 +433,10 @@ void AndroidInput::Controller::dispatch(Window& window, Mobile::Mode mode, const
       const auto code = Mobile::KeyCodeBase+uint32_t(input.key);
       if(input.kind==Mobile::Event::Down) {
         KeyEvent event(key,code,Event::M_NoModifier,Event::KeyDown);
-        Dispatch::dispatchKeyDown(window,event,uint32_t(key));
+        Dispatch::dispatchKeyDown(window,event,code);
         } else {
         KeyEvent event(key,code,Event::M_NoModifier,Event::KeyUp);
-        Dispatch::dispatchKeyUp(window,event,uint32_t(key));
+        Dispatch::dispatchKeyUp(window,event,code);
         }
       break;
       }

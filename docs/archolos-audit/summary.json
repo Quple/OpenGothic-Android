@@ -1,0 +1,33 @@
+{
+  "source_files": 4999,
+  "source_function_definitions": 37428,
+  "dat_symbols": 206709,
+  "dat_bytecode_size": 6728153,
+  "source_hook_sites": 73,
+  "source_hook_status": {
+    "event_bridge": 15,
+    "no_event_bridge": 57,
+    "unresolved_expression": 1
+  },
+  "dat_hook_sites": 87,
+  "dat_hook_status": {
+    "dynamic_or_framework": 4,
+    "caller_overridden": 1,
+    "special_event_path": 2,
+    "no_event_bridge": 60,
+    "event_bridge": 19,
+    "declared_but_never_fired": 1
+  },
+  "dat_native_sites": 163,
+  "dat_native_status": {
+    "dynamic_expression": 40,
+    "caller_overridden": 8,
+    "native_registered": 40,
+    "registered_stub": 9,
+    "no_native_handler": 66
+  },
+  "unbound_external_declarations": 86,
+  "unbound_external_names_with_static_calls": 10,
+  "missing_distinct_native_addresses": 56,
+  "missing_distinct_hook_addresses": 59
+}

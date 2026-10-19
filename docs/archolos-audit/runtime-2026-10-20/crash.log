@@ -1,0 +1,16 @@
+---crashlog(SIGSEGV)---
+GPU: NVIDIA GeForce RTX 5050 Laptop GPU
+0x00007ff76dfabf66: dbg::call_stack<64u>::collect(unsigned int) in C:\Users\Ernest\Desktop\opengothic\build-touch\opengothic\Gothic2Notr.exe
+0x00007ff76dad7493: CrashLog::dumpStack(char const*, char const*) in C:\Users\Ernest\Desktop\opengothic\build-touch\opengothic\Gothic2Notr.exe
+0x00007ff76dad7969: signalHandler(int) in C:\Users\Ernest\Desktop\opengothic\build-touch\opengothic\Gothic2Notr.exe
+0x00007ff92567bcc4: XcptFilter in C:\Windows\System32\msvcrt.dll
+0x00007ff76df72440: __mingw_SEH_error_handler in C:\Users\Ernest\Desktop\opengothic\build-touch\opengothic\Gothic2Notr.exe
+0x00007ff925e464af: _chkstk in C:\Windows\SYSTEM32\ntdll.dll
+0x00007ff925da4065: RtlWow64GetCurrentMachine in C:\Windows\SYSTEM32\ntdll.dll
+0x00007ff925e45dee: KiUserExceptionDispatcher in C:\Windows\SYSTEM32\ntdll.dll
+0x00007ff76df8d5fc: AndroidInput::Controller::~Controller() in C:\Users\Ernest\Desktop\opengothic\build-touch\opengothic\Gothic2Notr.exe
+0x00007ff76da8151e: MainWindow::~MainWindow() in C:\Users\Ernest\Desktop\opengothic\build-touch\opengothic\Gothic2Notr.exe
+0x00007ff76e06d975: main in C:\Users\Ernest\Desktop\opengothic\build-touch\opengothic\Gothic2Notr.exe
+0x00007ff76da610fa: __tmainCRTStartup in C:\Users\Ernest\Desktop\opengothic\build-touch\opengothic\Gothic2Notr.exe
+0x00007ff92429dda7: BaseThreadInitThunk in C:\Windows\System32\KERNEL32.DLL
+0x00007ff925d5ee4c: RtlUserThreadStart in C:\Windows\SYSTEM32\ntdll.dll

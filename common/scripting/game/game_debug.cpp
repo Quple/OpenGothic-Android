@@ -2,12 +2,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <exception>
 
+#include "camera.h"
 #include "game/gamescript.h"
 #include "gothic.h"
 #include "utils/gamelog.h"
 #include "world/objects/npc.h"
+#include "world/objects/interactive.h"
 #include "world/triggers/movetrigger.h"
 #include "world/waypoint.h"
 #include "world/world.h"
@@ -185,6 +188,21 @@ JSValue call(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
     }
 
   const uint32_t count = sym->count();
+  JSValue list = argc>1 ? argv[1] : JS_UNDEFINED;
+  std::vector<Npc*> characters(count,nullptr);
+  // Validate instance arguments before putting anything on the VM stack.
+  for(uint32_t i=0; i<count; ++i) {
+    auto* parameter = vm.find_symbol_by_index(sym->index()+1+i);
+    if(parameter==nullptr)
+      return fail("invalid parameter symbol");
+    if(parameter->type()!=zenkit::DaedalusDataType::INSTANCE)
+      continue;
+    JSValue value = JS_IsArray(list) ? JS_GetPropertyUint32(ctx,list,i) : JS_UNDEFINED;
+    characters[i] = JS_IsObject(value) ? game::resolveNpc(ctx,value) : nullptr;
+    JS_FreeValue(ctx,value);
+    if(characters[i]==nullptr)
+      return fail("parameter "+std::to_string(i+1)+" is a character");
+    }
   std::shared_ptr<zenkit::DaedalusInstance> prevSelf, prevOther;
   auto* gs = vm.global_self();
   auto* go = vm.global_other();
@@ -196,7 +214,6 @@ JSValue call(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
     };
 
   try {
-    JSValue list = argc>1 ? argv[1] : JS_UNDEFINED;
     for(uint32_t i=0; i<count; ++i) {
       auto* p = vm.find_symbol_by_index(sym->index()+1+i);
       JSValue v = JS_IsArray(list) ? JS_GetPropertyUint32(ctx,list,i) : JS_UNDEFINED;
@@ -211,13 +228,7 @@ JSValue call(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
           vm.push_string(js::str(ctx,v));
           break;
         case zenkit::DaedalusDataType::INSTANCE: {
-          Npc* npc = JS_IsObject(v) ? game::resolveNpc(ctx,v) : nullptr;
-          if(npc==nullptr) {
-            JS_FreeValue(ctx,v);
-            restore();
-            return fail("parameter "+std::to_string(i+1)+" is a character");
-            }
-          vm.push_instance(npc->handlePtr());
+          vm.push_instance(characters[i]->handlePtr());
           break;
           }
         default: {
@@ -230,7 +241,7 @@ JSValue call(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
       JS_FreeValue(ctx,v);
       }
 
-    vm.unsafe_call(sym);
+    vm.invoke_function(sym);
     JS_SetPropertyStr(ctx,ret,"ok",JS_TRUE);
     if(sym->has_return()) {
       switch(sym->rtype()) {
@@ -260,6 +271,7 @@ JSValue symbol(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   JSValue ret = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx,ret,"type",JS_NewString(ctx,typeName(sym->type())));
   JS_SetPropertyStr(ctx,ret,"const",JS_NewBool(ctx,sym->is_const()));
+  JS_SetPropertyStr(ctx,ret,"index",JS_NewUint32(ctx,sym->index()));
   try {
     switch(sym->type()) {
       case zenkit::DaedalusDataType::INT:    JS_SetPropertyStr(ctx,ret,"value",JS_NewInt32(ctx,sym->get_int()));              break;
@@ -314,6 +326,89 @@ JSValue ikarus(JSContext* ctx, JSValueConst, int, JSValueConst*) {
   }
 
 // --- the world
+
+/// debug.placeOnGround(npc, waypoint, dx, dz) -> landing position or null.
+/// Resolve each offset against terrain; a waypoint's Y is not valid nearby.
+JSValue placeOnGround(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* npc = argc>0 ? game::resolveNpc(ctx,argv[0]) : nullptr;
+  if(npc==nullptr || argc<2)
+    return JS_NULL;
+  auto& w = npc->world();
+  auto* wp = w.findPoint(js::str(ctx,argv[1]),false);
+  if(wp==nullptr)
+    return JS_NULL;
+  double dx = 0, dz = 0;
+  if((argc>2 && JS_ToFloat64(ctx,&dx,argv[2])<0) ||
+     (argc>3 && JS_ToFloat64(ctx,&dz,argv[3])<0))
+    return JS_EXCEPTION;
+  if(!std::isfinite(dx) || !std::isfinite(dz) || std::abs(dx)>2000 || std::abs(dz)>2000)
+    return JS_NULL;
+
+  const auto old = npc->position();
+  const auto aim = wp->position()+Tempest::Vec3(float(dx),0,float(dz));
+  for(int radius=0; radius<=200; radius+=50) {
+    const int samples = radius==0 ? 1 : 8;
+    for(int i=0; i<samples; ++i) {
+      const float angle = float(i)*float(2*M_PI)/float(samples);
+      auto p = aim+Tempest::Vec3(std::cos(angle)*float(radius),0,std::sin(angle)*float(radius));
+      auto hit = w.physic()->landRay(p+Tempest::Vec3(0,500,0),1100);
+      if(!hit.hasCol || hit.n.y<0.65f || std::abs(hit.v.y-aim.y)>500)
+        continue;
+      p.y = hit.v.y+5;
+      npc->setPosition(p);
+      const bool blocked = npc->hasCollision();
+      npc->setPosition(old);
+      if(blocked)
+        continue;
+      if(!npc->setInteraction(nullptr,true))
+        return JS_NULL;
+      npc->clearAiQueue();
+      npc->clearSpeed();
+      npc->stopAnim("");
+      npc->setAnim(Npc::Anim::Idle);
+      npc->setPosition(p);
+      npc->updateTransform();
+      if(npc->isPlayer()) {
+        if(auto* camera = Gothic::inst().camera())
+          camera->reset(npc);
+        }
+      JSValue ret = JS_NewObject(ctx);
+      JS_SetPropertyStr(ctx,ret,"x",JS_NewFloat64(ctx,p.x));
+      JS_SetPropertyStr(ctx,ret,"y",JS_NewFloat64(ctx,p.y));
+      JS_SetPropertyStr(ctx,ret,"z",JS_NewFloat64(ctx,p.z));
+      return ret;
+      }
+    }
+  return JS_NULL;
+  }
+
+/// debug.parkNpc(npc): leave a disposable character under queue control only.
+/// Unlike a puppet it still processes AI commands, including aiming/shooting.
+JSValue parkNpc(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* npc = argc>0 ? game::resolveNpc(ctx,argv[0]) : nullptr;
+  if(npc==nullptr || npc->isPlayer() || npc->isPuppet())
+    return JS_FALSE;
+  npc->clearState(true);
+  npc->excRoutine(size_t(-1));
+  npc->clearAiQueue();
+  npc->setTarget(nullptr);
+  npc->setOther(nullptr);
+  npc->handlePtr()->daily_routine = 0;
+  npc->handlePtr()->start_aistate  = 0;
+  for(size_t i=0; i<PERC_Count; ++i)
+    npc->setPerceptionDisable(PercType(i));
+  npc->setAttitude(ATT_FRIENDLY);
+  npc->setTempAttitude(ATT_FRIENDLY);
+  return JS_TRUE;
+  }
+
+/// debug.setInfoKnown(info, known): reset/prepare the player's dialog history.
+JSValue setInfoKnown(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* pl = Gothic::inst().player();
+  if(pl==nullptr || argc<2)
+    return JS_FALSE;
+  return JS_NewBool(ctx,pl->world().script().setInfoKnown(*pl,js::str(ctx,argv[0]),JS_ToBool(ctx,argv[1])>0));
+  }
 
 /// debug.triggers(filter, max) -> [[name, kind, state], ...]: kind is "mover" or "trigger", the state of a mover is of zTMoverState
 JSValue triggers(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
@@ -370,6 +465,26 @@ JSValue points(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   }
 
 /// debug.god(on) and debug.marvin(on): the immortality of the player and the keys of the developer of the game
+/// debug.containers(radius) -> nearby container vob names, nearest first.
+JSValue containers(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  JSValue result = JS_NewArray(ctx);
+  auto* w = world();
+  auto* player = Gothic::inst().player();
+  if(w==nullptr || player==nullptr)
+    return result;
+  const float radius = float(number(ctx,argc,argv,0,500));
+  std::vector<std::pair<float,std::string>> found;
+  for(uint32_t i=0; auto* mob = w->mobsiById(i); ++i) {
+    const float distance = (mob->position()-player->position()).quadLength();
+    if(mob->isContainer() && !mob->tag().empty() && distance<=radius*radius)
+      found.emplace_back(distance,std::string(mob->tag()));
+    }
+  std::sort(found.begin(),found.end());
+  for(uint32_t i=0; i<found.size() && i<100; ++i)
+    JS_SetPropertyUint32(ctx,result,i,JS_NewString(ctx,found[i].second.c_str()));
+  return result;
+  }
+
 JSValue god(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   if(argc>0)
     Gothic::inst().setGodMode(JS_ToBool(ctx,argv[0])>0);
@@ -398,6 +513,10 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"triggers",  triggers,2);
   js::fn(ctx,dbg,"trigger",   trigger,2);
   js::fn(ctx,dbg,"points",    points,2);
+  js::fn(ctx,dbg,"containers",containers,1);
+  js::fn(ctx,dbg,"parkNpc",   parkNpc,1);
+  js::fn(ctx,dbg,"placeOnGround",placeOnGround,4);
+  js::fn(ctx,dbg,"setInfoKnown",setInfoKnown,2);
   js::fn(ctx,dbg,"god",       god,1);
   js::fn(ctx,dbg,"marvin",    marvin,1);
   JS_SetPropertyStr(ctx,global,"debug",dbg);

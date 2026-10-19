@@ -15,7 +15,7 @@ namespace {
 
 enum Prop : int {
   Valid, Id, Name, Instance, Level, Health, MaxHealth, Mana, MaxMana, Strength, Dexterity, Experience, Dead, GuildOf,
-  IsPlayer, X, Y, Z, Position, Rotation, Puppet, InstanceId, WeaponState_, WeaponItem, Overlays, Armor, RangedItem, Unconscious, Talking
+  IsPlayer, X, Y, Z, Position, Rotation, Puppet, InstanceId, WeaponState_, WeaponItem, Overlays, Armor, RangedItem, Unconscious, Talking, RangedShots
   };
 
 constexpr const char* HiddenId    = "__id";
@@ -70,6 +70,7 @@ JSValue get(JSContext* ctx, JSValueConst obj, int prop) {
       }
     case Unconscious: return JS_NewBool(ctx,npc->isUnconscious());
     case Talking:     return JS_NewBool(ctx,npc->isTalk());
+    case RangedShots:  return JS_NewUint32(ctx,npc->rangedShotCount());
     case WeaponState_: return JS_NewInt32(ctx,int32_t(npc->weaponState()));
     case WeaponItem: {
       const size_t it = npc->meleeWeaponInstance();
@@ -161,7 +162,10 @@ JSValue setPosition(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* ar
   double x = 0, y = 0, z = 0;
   if(JS_IsException(number(ctx,argv[0],x)) || JS_IsException(number(ctx,argv[1],y)) || JS_IsException(number(ctx,argv[2],z)))
     return JS_FALSE;
-  return JS_NewBool(ctx,npc->setPosition(float(x),float(y),float(z)));
+  // Npc::setPosition returns whether it moved, not whether the request succeeded.
+  // Being at the requested position already is a successful script operation.
+  npc->setPosition(float(x),float(y),float(z));
+  return JS_TRUE;
   }
 
 /// animation(): what the character plays, [[sequence, ms since it has started, comb, body state], ...]
@@ -356,7 +360,8 @@ JSValue teleport(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv)
   auto*      wp   = npc->world().findPoint(name,false);
   if(wp==nullptr)
     return JS_FALSE;
-  return JS_NewBool(ctx,npc->setPosition(wp->position()));
+  npc->setPosition(wp->position());
+  return JS_TRUE;
   }
 
 // --- items
@@ -497,6 +502,7 @@ void game::installNpc(JSContext* ctx) {
   getter(ctx,proto,"rangedItem", RangedItem);
   getter(ctx,proto,"unconscious",Unconscious);
   getter(ctx,proto,"talking",    Talking);
+  getter(ctx,proto,"rangedShots",RangedShots);
 
   js::fn(ctx,proto,"setHealth", setHealth,1);
   js::fn(ctx,proto,"heal",      heal,1);
