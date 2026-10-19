@@ -87,21 +87,28 @@ What it showed for CoM (scripts of CoM: about 5000 functions):
 - Every exception of a script prints the stack of the script the first two times (log, red): it says who did it.
 - `HookEngine` places that are not answered are listed in the tab Debug, Ikarus, not in the log (the log has one line).
 
-## Not done (in the order that CoM needs)
+## Not done
 
-1. **The rest of `oCNpc`.** Raw reading of the memory of a character (`MEM_ReadInt(npc + 0x1B8)`), the members of the vob,
-   `oCNpc::PutInSlot`, `GetSlotItem`, `Equip`. `INIT_QUIVERS_ALWAYS` of CoM is still switched off.
-2. **`oCLogManager`** (the log of quests as lists in memory: `LOG_MOVETOTOP` of CoM). The engine has its own `QuestLog`; the
-   functions of CoM that reach into the list can be replaced by C++.
-3. **Hooks that are events:** the change of the level (`_LEGO_CHANGELEVELHOOKBEGIN/END`), the saving and the loading of a
-   game (`_BW_SAVEGAME`, `_BR_SETSELECTEDSLOT`), the dialog (`oCInfoManager`), the death of a character. `PermMem` of LeGo
-   needs the saving and the loading to keep its data in the saves.
-4. **`Trialoge`:** the dialogs of LeGo use `AI_Function` (works: events of the animation `CALL ...`) and the camera of a
-   dialog (`zCAICamera::StartDialogCam`, not answered).
-5. The drawing of LeGo (`View`, `Draw3D`, `Render`): bars, texts, sprites. Part of it is answered, `zCView__Render` and the
-   renderer are not.
-6. Windows: file functions, `KmLib.dll` of CoM (Steam achievements and the music, `LoadLibrary` is answered by a
-   pretended handle, the calls into it are dropped).
+What of CoM does not work yet (every item is a place where the original engine is hooked or called, see the tab Debug,
+Ikarus, for the list of the hooks that nobody answers):
+
+1. **The custom inventory of CoM** (`CATINV_*`, about 30 hooks of `oCItemContainer`), the texts of the items in the
+   windows of recipes (`OCITEMCONTAINER__DRAWITEMINFO_HOOK`): the inventory of OpenGothic is used.
+2. **The windows of the dialogs** (`CRAFTINGVIEW_*`, `OCINFORMATIONMANAGER__UPDATE_HOOK`, `ZCVIEWDIALOGCHOICE__HANDLEEVENT_HOOK`):
+   the crafting and the answers that are typed work as the normal choices of a dialog, without the icons.
+3. **The status screen** (`STATUSSCREENSHOW_HOOK`, `UPDATE_MENU_ITEM`): the menu of the original has no items in memory.
+4. **Slots and equipment of the engine**: `oCNpc::GetSlotItem` (answers 0), `PutInSlot`, `RemoveFromSlot`, `EquipWeapon`,
+   `DropAllInHand`, the quivers (`_EVT_QUIVER_*`), the torch, `OCNPC__DROPUNCONSCIOUS_HOOK`.
+5. **Companions and the cutscenes of CoM**: `OCNPC__GETNEXTENEMY_REPLACEHOOK`, `HIDEFOCUSFORPARTYMEMBERS_*`,
+   `ZCCSCAMERA__ONTRIGGER`, `OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE` (and the two like it),
+   `zCAICamera::StartDialogCam`.
+6. **Drawing**: the color and the alpha of a text (the font has its own color), the sprites of LeGo (`_SPRITE_DORENDER`),
+   `Render`, `Draw3D`, the animations and the children of a `zCView`, the texture of the walls of the houses
+   (`zCTexture::Load`).
+7. **The picklock strings** (`HANDLE_SETPROPERPICKLOCKSTRLEN`), the important items that must not be dropped or sold
+   (`OCNPC__EVDROPVOB_HOOK`, `ITEMIMPORTANTFLAG_CHECKSELLINGITEMS`), `oCLogManager` (`LOG_MOVETOTOP` does nothing).
+8. Windows: `KmLib.dll` of CoM (Steam achievements and the music): `LoadLibrary` is answered by a pretended handle, the
+   calls into it are dropped.
 
 ## How to try CoM
 
