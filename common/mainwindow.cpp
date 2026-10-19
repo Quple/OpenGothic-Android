@@ -460,7 +460,7 @@ void MainWindow::keyDownEvent(KeyEvent &event) {
   Scripting::game::keyEvent(event,true);
 
   // the mods of Ikarus and LeGo hook the keys of the game (oCGame::HandleEvent), once for a press
-  if(auto* w = Gothic::inst().world(); w!=nullptr && !rootMenu.isActive() && !video.isActive()) {
+  if(auto* w = Gothic::inst().world(); w!=nullptr && !rootMenu.isActive() && !video.isActive() && !dialogs.wantsText()) {
     const int32_t code = KeyCodec::keyToCode(event.key);
     if(code>0 && code<int32_t(dmaKeysDown.size()) && !dmaKeysDown[size_t(code)]) {
       dmaKeysDown[size_t(code)] = true;
@@ -560,6 +560,7 @@ void MainWindow::keyRepeatEvent(KeyEvent& event) {
       return;
     }
   if(uiKeyUp==&dialogs){
+    dialogs.keyRepeatEvent(event);
     if(event.isAccepted())
       return;
     }
@@ -1057,7 +1058,11 @@ uint64_t MainWindow::tick() {
   {
     // a field of text of the menu of the mods gets the keyboard of the screen when it gets the focus
     static bool typing = false;
-    const bool  wants  = modMenu.wantsText();
+    const bool  wants  = modMenu.wantsText() || dialogs.wantsText();
+    if(dialogs.takeKeyboardRequest()) {
+      typing = true;
+      androidControls.keyboard(true);
+      }
     if(wants!=typing) {
       typing = wants;
       androidControls.keyboard(wants);
