@@ -77,6 +77,13 @@ What it showed for CoM (scripts of CoM: about 5000 functions):
   original engine calls `Init_Global` and `Init_<world>`, and the layer does the same (`GameSession`, only for such mods): LeGo
   then reads its file. At a change of the level LeGo is told by the hooks, otherwise it takes the init for a load and loses
   the handles.
+- **Views and texts of LeGo** are drawn by OpenGothic (`directmemory_ui.cpp`, `MainWindow::drawDmaOverlay`): the engine
+  functions `zCView::zCView/Open/Close/Top/Move/SetSize/InsertBack` keep the views (the position, the size, the texture
+  as an object whose name a script can read), the texts are read from the lists of the views and from the print view of
+  the screen (`PrintS`, `Print_Ext`), the texts with a time are removed when the time is over, the width and the height of
+  a text come from the real fonts (`zCFont::GetFontX/Y`, the screen of the scripts is 800x600). A view with the texture
+  `DEFAULT.TGA` is a rectangle of its color. Not done: the color and the alpha of the text (the font has its own color),
+  `zCFont::GetFontName`, the animations of `zCView` (`fxOpen`), the children of a view.
 - Every exception of a script prints the stack of the script the first two times (log, red): it says who did it.
 - `HookEngine` places that are not answered are listed in the tab Debug, Ikarus, not in the log (the log has one line).
 

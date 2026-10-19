@@ -3,6 +3,7 @@
 #include <bitset>
 
 #include "camera.h"
+#include "game/gamescript.h"
 #include "resources.h"
 
 #include <Tempest/Window>
@@ -77,6 +78,8 @@ class MainWindow : public Tempest::Window {
 #ifdef OPENGOTHIC_TOUCH_UI
     void drawTouchBars(Tempest::Painter& p, Npc& pl);
 #endif
+    void drawDmaOverlay(Tempest::Painter& p);
+    std::vector<GameScript::DmaOverlayItem> dmaOverlay;
     void drawMsg(Tempest::Painter& p);
     void drawProgress(Tempest::Painter& p, int x, int y, int w, int h, float v);
     void drawLoading (Tempest::Painter& p,int x,int y,int w,int h);

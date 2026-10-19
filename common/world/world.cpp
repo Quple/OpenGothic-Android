@@ -885,6 +885,8 @@ const zenkit::IFocus& World::searchPolicy(const Npc& pl, TargetCollect& collAlgo
       if(auto weapon = pl.inventory().activeWeapon()) {
         int32_t id  = weapon->spellId();
         auto&   spl = script().spellDesc(id);
+        // mods of Ikarus change the focus of the magic for some spells (CoM: the lock picking)
+        script().dmaSpellFocus(const_cast<Npc&>(pl),id);
         collAlgo = TargetCollect(spl.target_collect_algo);
         collType = TargetType(spl.target_collect_type);
         }
