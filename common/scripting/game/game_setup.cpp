@@ -58,6 +58,7 @@ void game::setup() {
     installScreen(ctx);
     installInput(ctx);
     installUi(ctx);
+    installDebug(ctx);
     };
 
   registerBuiltinMods(host);

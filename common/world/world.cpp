@@ -216,6 +216,11 @@ uint32_t World::nextNpcUid() {
   return wobj.nextNpcUid();
   }
 
+void World::forEachPoint(const std::function<void(const WayPoint&)>& f) const {
+  if(wmatrix!=nullptr)
+    wmatrix->forEachPoint(f);
+  }
+
 Npc* World::addNpcRemote(size_t npcInstance, const Tempest::Vec3& pos, uint32_t uid, bool puppet) {
   return wobj.addNpcRemote(npcInstance,pos,uid,puppet);
   }

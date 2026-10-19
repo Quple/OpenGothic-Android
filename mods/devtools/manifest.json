@@ -1,0 +1,9 @@
+{
+  "id": "devtools",
+  "name": "Developer tools",
+  "version": "0.1.0",
+  "author": "OpenGothic",
+  "description": "The tab Debug in the menu of the mods: the log of the game, calls of the functions of the scripts, symbols, teleports, triggers, spawns, and what the layer for Ikarus and LeGo says.",
+  "main": "index.js",
+  "api": 1
+}

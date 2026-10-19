@@ -76,6 +76,8 @@ class GameScript final {
     void         loadPerc(Serialize& fin);
 
     inline auto& getVm() { return vm; }
+    /// The report of the layer for Ikarus and LeGo, empty if the mod does not use them
+    auto         dmaReport() -> std::string;
     auto         questLog() const -> const QuestLog&;
 
     const World& world() const;

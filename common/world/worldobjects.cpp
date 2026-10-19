@@ -431,6 +431,12 @@ Bullet* WorldObjects::shootRemote(const Item& itm, const Vec3& pos, const Vec3& 
   return &b;
   }
 
+void WorldObjects::forEachTrigger(const std::function<void(AbstractTrigger&)>& f) {
+  for(auto* i:triggers)
+    if(i!=nullptr)
+      f(*i);
+  }
+
 Npc* WorldObjects::npcByUid(uint32_t uid) {
   auto h = npcUidHint.find(uid);
   if(h!=npcUidHint.end() && h->second<npcArr.size() && npcArr[h->second]->uid()==uid)

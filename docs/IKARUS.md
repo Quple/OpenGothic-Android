@@ -1,0 +1,99 @@
+# Ikarus and LeGo
+
+Ikarus and LeGo are libraries of scripts for Gothic 2. They read and write the memory of the original program
+(`MEM_ReadInt`, `_^`, `_@`), call its functions by their addresses in `Gothic2.exe` (`CALL__thiscall`) and replace its
+code (`HookEngine`). The mods that use them, for example *The Chronicles of Myrtana: Archolos* (CoM), cannot run in
+OpenGothic as they are, because there is no such memory.
+
+OpenGothic runs the scripts of the libraries in its own virtual machine and gives them a **pretended 32-bit memory**
+(`common/game/compatibility`). Upstream: https://github.com/Try/OpenGothic/issues/231.
+
+| File | What it does |
+|---|---|
+| `mem32.cpp` | the memory: regions that are allocated by the scripts, pinned to the data of the game, or *typed* (a function is called when a script reads or writes them) |
+| `mem32instances.h` | the layouts of the classes of the original engine that scripts read (`oGame`, `zCParser`, `zCMover`, ...), from `EngineClasses_G2` of Ikarus |
+| `cpu32.cpp` | a tiny x86 interpreter: Ikarus builds machine code for `CALL__*`, which is run here; the functions of the engine and of Windows are *answered* by C++ (`register_thiscall`, `register_cdecl`, `register_stdcall`) |
+| `directmemory.cpp` | the functions of the libraries that are replaced by C++ (`override_function`), the engine functions that are answered, the pinned data |
+
+`HookEngine` is not a patch of the engine. It is a table of the places where the library wants to be called (a frame, an
+event of an animation); the ones that OpenGothic can answer with an event are answered, the others are listed in the log
+as `not implemented call [HookEngineI]`.
+
+## What a mod needs: the analysis of the sources
+
+`tools/ikarus/analyze.py` reads the scripts of Ikarus, LeGo and a mod (CoM has a decompilation:
+https://github.com/lmichaelis/tcom-decompilation) and lists the engine functions that the mod reaches through the
+libraries and OpenGothic does not answer for, by how often the mod uses them:
+
+```bash
+python tools/ikarus/analyze.py --ikarus <Ikarus> --lego <LeGo> --mod <tcom-decompilation>
+```
+
+What it showed for CoM (scripts of CoM: about 5000 functions):
+
+- The mod itself touches the engine objects very little: 579 variables of `zCMover` (only `moverState`, 1156 reads),
+  53 of `oCNpc` (22 fields: `attribute`, `protection`, `bitfield`, `focus_vob`, `aivar`, ...), a few lists, views and symbols.
+  The rest is **in the libraries**: `AI_Function` (1730 calls), `Trialoge` (`TRIA_*`, about 1300), frame functions
+  (`FF_*`, 700), `MEM_SearchVobByName` (583), `PermMem`, `HookEngine` (about 90 places in the mod and in LeGo).
+- The engine functions that the libraries need and were not answered: see the output of the tool. After the work below the
+  list is short: file functions of Windows (`CreateFile`, ...), the drawing of LeGo (`zCRnd_D3D__*`, `zCView__Render`),
+  fonts (`zCFont__GetFontX/Y`), `oCNpc__PutInSlot/RemoveFromSlot/Equip/UnequipItem`, `zCVob::SetVobName`, `zCAICamera::StartDialogCam`.
+
+## Done
+
+- `MEM_SearchVobByName`, `MEM_SearchAllVobsByName`: the movers of the world are mirrored as `zCMover`
+  (`Compatibility::zCMover`, 624 bytes, the layout of Gothic 2) and found by the name of the vob. A script that waits for a
+  mover reads `moverState` (0 open, 1 opening, 2 closed, 3 closing), which comes from the real mover (`MoveTrigger::moverState`).
+  Other vobs are not found yet.
+- `MEM_GetGothOpt`, `MEM_SetGothOpt`, `MEM_GothOptExists`, `MEM_GothOptSectionExists` (Gothic.ini, the values are kept),
+  `MEM_GetModOpt`, `MEM_ModOptExists`, `MEM_ModOptSectionExists` (the ini of the mod, the parameter `-game`).
+- The x86 interpreter has the register of the floating point (`fstp`), so the functions of C that return a float work:
+  `sinf`, `acosf`, `atan2f` (LeGo `Sin`, `Acos`, `Atan2f`). `memset` (`MEM_Clear`), the swap of bytes (`MEM_SwapBytes`),
+  the box of the message (`MEM_MessageBox` goes to the log).
+
+- Characters and items have a pointer of their own (`MEM_InstToPtr`, `_@`, `InstanceHandles`): the pointer can be kept,
+  compared, put in a list and turned back (`MEM_PtrToInst`), the first word is `oCNpc_vtbl` or `oCItem_vtbl`. The members of
+  `oCNpc` and `oCItem` (`attribute`, `protection`, `aivar`, `value`, `description`, ...) are registered as the members of
+  `C_NPC` and `C_ITEM`, so a script that reads them through such an instance reads the real character. The members of the
+  engine that the VM does not have (`focus_vob`, the bitfields, the matrix of the vob) are not there: reading them raises
+  an exception of the script, which is in the log with the stack of the script.
+- `MEM_World.voblist_npcs` is the list of the characters of the world (made again every second).
+- The arguments of the engine functions that the scripts call (`Cpu32::callExternal`) are popped in the order of the
+  declaration. They were popped from the last to the first by GCC (the order of the evaluation of the arguments of a
+  function is not specified), so every handler with two or more arguments got them reversed: `zCParser::CreateInstance`
+  wrote the object over the parser, the views of LeGo got a pointer "2". Found with the log of CoM.
+- The elements of an array member of an instance that lives in the pretended memory (`memory_instance`) are read with the
+  size of the element (4 bytes, 20 for a string); the size of the class was used before.
+- Every exception of a script prints the stack of the script the first two times (log, red): it says who did it.
+- `HookEngine` places that are not answered are listed in the tab Debug, Ikarus, not in the log (the log has one line).
+
+## Not done (in the order that CoM needs)
+
+1. **The rest of `oCNpc`.** Raw reading of the memory of a character (`MEM_ReadInt(npc + 0x1B8)`), the members of the vob,
+   `oCNpc::PutInSlot`, `GetSlotItem`, `Equip`. `INIT_QUIVERS_ALWAYS` of CoM is still switched off.
+2. **`oCLogManager`** (the log of quests as lists in memory: `LOG_MOVETOTOP` of CoM). The engine has its own `QuestLog`; the
+   functions of CoM that reach into the list can be replaced by C++.
+3. **Hooks that are events:** the change of the level (`_LEGO_CHANGELEVELHOOKBEGIN/END`), the saving and the loading of a
+   game (`_BW_SAVEGAME`, `_BR_SETSELECTEDSLOT`), the dialog (`oCInfoManager`), the death of a character. `PermMem` of LeGo
+   needs the saving and the loading to keep its data in the saves.
+4. **`Trialoge`:** the dialogs of LeGo use `AI_Function` (works: events of the animation `CALL ...`) and the camera of a
+   dialog (`zCAICamera::StartDialogCam`, not answered).
+5. The drawing of LeGo (`View`, `Draw3D`, `Render`): bars, texts, sprites. Part of it is answered, `zCView__Render` and the
+   renderer are not.
+6. Windows: file functions, `KmLib.dll` of CoM (Steam achievements and the music, `LoadLibrary` is answered by a
+   pretended handle, the calls into it are dropped).
+
+## How to try CoM
+
+```
+Gothic2Notr.exe -g "C:/Program Files (x86)/Steam/steamapps/common/TheChroniclesOfMyrtana" -game:TheChroniclesOfMyrtana.ini
+```
+
+The messages of the libraries are in the log (`log.txt` next to the program): `mem_*: address translation failure`
+(a script reads a memory that is not mirrored), `not implemented call [...]` (an engine function or a hook that is not
+answered). They are the list of what to do next; `tools/ikarus/analyze.py` orders them by the use in the mod.
+
+The same log is in the game: F10 (on a phone the Mods button of the settings), tab *Debug*. The buttons `mem_` and
+`not implemented` of the log filter it to these lines, *Scripts* calls a function of the mod to try it (`MEM_SearchVobByName`
+users, `INIT_*`, a dialog function), *World* moves the player and opens movers (`EVT_*`), and *Ikarus* shows the report
+of the layer (the memory, the movers, the hooks that nobody answers).

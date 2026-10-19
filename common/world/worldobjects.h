@@ -3,6 +3,7 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <functional>
 
 #include <zenkit/vobs/Misc.hh>
 
@@ -71,6 +72,7 @@ class WorldObjects final {
 
     uint32_t       npcId(const Npc *ptr) const;
     Npc*           npcByUid(uint32_t uid);
+    void           forEachTrigger(const std::function<void(AbstractTrigger&)>& f);
     /// A character that another game has made: with its number (0 - a number of the mods), without the script of insert
     Npc*           addNpcRemote(size_t npcInstance, const Tempest::Vec3& pos, uint32_t uid, bool puppet);
 

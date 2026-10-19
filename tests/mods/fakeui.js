@@ -23,8 +23,9 @@ class FakeUi {
     textColored(c, ...a) { this.out.push(a.join(" ")); }
     bullet(...a) { this.out.push("* " + a.join(" ")); }
     button(label) {
-        this.out.push("[" + label + "]");
-        return this.pressed.delete(label);
+        const shown = String(label).split("##")[0];
+        this.out.push("[" + shown + "]");
+        return this.pressed.delete(shown);
     }
     checkbox(label, v) { this.out.push("(" + label + ")"); return v; }
     inputText(label, value) {
@@ -34,7 +35,11 @@ class FakeUi {
     sliderInt(l, v) { return v; }
     sliderFloat(l, v) { return v; }
     combo(l, i) { return i; }
-    selectable() { return false; }
+    selectable(label) {
+        const shown = String(label).split("##")[0];
+        this.out.push("{" + shown + "}");
+        return this.pressed.delete(shown);
+    }
     sameLine() {}
     separator() {}
     spacing() {}
@@ -46,6 +51,8 @@ class FakeUi {
     textWidth(t) { return String(t).length * 8; }
     anyActive() { return false; }
     child(id, w, h, fn) { fn(); }
+    clipped(count, fn) { for (let i = 0; i < count; ++i) fn(i); }
+    autoScroll() { this.scrolled = (this.scrolled ?? 0) + 1; }
     withId(id, fn) { fn(); }
     withColor(c, fn) { fn(); }
     withScale(s, fn) { fn(); }

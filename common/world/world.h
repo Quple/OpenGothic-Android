@@ -49,6 +49,8 @@ class World final {
     /// see Npc::uid
     Npc*                 npcByUid(uint32_t uid);
     uint32_t             nextNpcUid();
+    void                 forEachTrigger(const std::function<void(AbstractTrigger&)>& f) { wobj.forEachTrigger(f); }
+    void                 forEachPoint(const std::function<void(const WayPoint&)>& f) const;
     void                 setNpcUidMods(bool on);
     Npc*                 addNpcRemote(size_t npcInstance, const Tempest::Vec3& pos, uint32_t uid, bool puppet);
     auto                 takeShots() { return wobj.takeShots(); }

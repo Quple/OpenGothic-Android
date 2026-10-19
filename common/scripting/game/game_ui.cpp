@@ -274,6 +274,40 @@ JSValue child(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return ret;
   }
 
+/// clipped(count, fn): fn(i) is called only for the rows that are in view, so a list of thousands of rows is cheap.
+/// Every row has the same height (a line of text, a button).
+JSValue clipped(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  if(!drawing() || argc<2 || !JS_IsFunction(ctx,argv[1]))
+    return JS_UNDEFINED;
+  int32_t count = 0;
+  JS_ToInt32(ctx,&count,argv[0]);
+
+  JSValue ret = JS_UNDEFINED;
+  ImGuiListClipper clip;
+  clip.Begin(std::max(count,0));
+  while(JS_IsUndefined(ret) && clip.Step()) {
+    for(int i=clip.DisplayStart; i<clip.DisplayEnd; ++i) {
+      JSValue arg = JS_NewInt32(ctx,i);
+      JSValue r   = JS_Call(ctx,argv[1],JS_UNDEFINED,1,&arg);
+      JS_FreeValue(ctx,arg);
+      if(JS_IsException(r)) {
+        ret = r;
+        break;
+        }
+      JS_FreeValue(ctx,r);
+      }
+    }
+  clip.End();
+  return ret;
+  }
+
+/// autoScroll(): at the end of a region that grows (a log): it follows the end, unless the player has scrolled up
+JSValue autoScroll(JSContext*, JSValueConst, int, JSValueConst*) {
+  if(drawing() && ImGui::GetScrollY()>=ImGui::GetScrollMaxY()-ImGui::GetTextLineHeight()*2.f)
+    ImGui::SetScrollHereY(1.f);
+  return JS_UNDEFINED;
+  }
+
 /// withId(id, fn): the widgets of fn have the id, for the widgets that have the same label
 JSValue withId(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   if(!drawing() || argc<2 || !JS_IsFunction(ctx,argv[1]))
@@ -373,6 +407,8 @@ void game::installUi(JSContext* ctx) {
   js::fn(ctx,ui,"textWidth",  textWidth,1);
   js::fn(ctx,ui,"anyActive",  anyActive,0);
   js::fn(ctx,ui,"child",      child,4);
+  js::fn(ctx,ui,"clipped",    clipped,2);
+  js::fn(ctx,ui,"autoScroll", autoScroll,0);
   js::fn(ctx,ui,"withId",     withId,2);
   js::fn(ctx,ui,"withColor",  withColor,2);
   js::fn(ctx,ui,"withScale",  withScale,2);
