@@ -84,6 +84,8 @@ class Controller {
     bool  update(Tempest::Window& window, Mobile::Mode mode);
     void  paint(Tempest::PaintEvent& event);
     void  loadIcons(Tempest::TextureAtlas& atlas);
+    /// The sprites live in the atlas of the window: they are given back before the window starts to be destroyed
+    void  releaseIcons();
     void  cancel();
     void  inventoryLists(bool two) { controls.inventoryLists(two); }
     void  gui(float scale) { controls.gui(scale); }

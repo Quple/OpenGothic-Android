@@ -472,6 +472,11 @@ void AndroidInput::Controller::onSpecial(int id) {
     action(id);
   }
 
+void AndroidInput::Controller::releaseIcons() {
+  for(auto& i:icons)
+    i = Sprite();
+  }
+
 void AndroidInput::Controller::loadIcons(TextureAtlas& atlas) {
   for(size_t i=0; i<icons.size(); ++i) {
     const Pixmap pm = TouchAsset::pixmap(IconFiles[i]);
@@ -480,6 +485,10 @@ void AndroidInput::Controller::loadIcons(TextureAtlas& atlas) {
     const int iconSize = int(pm.w());
     iconPx[i] = float(iconSize);
     icons[i] = atlas.load(pm);
+    // The last reference to a page of the atlas crashes in Tempest (RectAllocator::Node::decref climbs to the root of the
+    // page and calls remove() of its null owner). One reference of every icon is kept until the process ends.
+    static auto* keepAlive = new std::vector<Sprite>();
+    keepAlive->push_back(icons[i]);
 
     // Glyphs are centered by their visible pixels, not by the bounds of the cell
     const auto* data = reinterpret_cast<const uint8_t*>(pm.data());

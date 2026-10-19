@@ -327,3 +327,16 @@ Wszystkie ścieżki poniżej względem `C:/Users/Ernest/Desktop/opengothic`:
 | Pakowanie modów do buildu | `cmake/embedmods.cmake`, `CMakeLists.txt`, wygenerowany `build-touch/builtin_mods.cpp` — nie edytować wygenerowanego pliku ręcznie |
 
 Następny agent powinien porównywać implementację z lokalnym DAT i kodem Ikarus/LeGo z dostarczonych materiałów. Nie rozszerzać zmiany na dowolne mechanizmy DLL/x86 bez związku z faktycznie używanymi ścieżkami Kronik.
+
+## 11. Postęp Claude, pakiet 1 (20.10.2026, bez commitu, bez testów w grze)
+
+Wykonane i zbudowane (touch + plain), czekają na ręczną weryfikację:
+
+1. **Wyjątek `BAR_DELETE` / `FREE`** — przyczyna: `free(h, inst)` z LeGo wywołuje `<klasa>_DELETE` z instancją na stosie, a `Bar_Delete(var int bar)` ma parametr `int`. Oryginalny silnik przekazuje wtedy indeks symbolu instancji; ZenKit rzucał wyjątek w `pop_int` (zdejmując ramkę). Poprawka lokalna w submodule: `DaedalusVm::pop_int` zwraca `symbol_index()` instancji (0 dla pustej). To zmiana w ZenKit (niecommitowana, razem z `invoke_function`).
+2. **Crash zamykania** (`AndroidInput::Controller::~Controller`) — nie znaleziono dowodu przyczyny (brak symboli). Wdrożone środki zapobiegawcze: `Controller::releaseIcons()` oraz oddanie kopii sprite'ów z `InventoryMenu` w `~MainWindow` przed niszczeniem pól (atlas żyje). Dodatkowo zlikwidowano realną korupcję sterty w `Mem32` (patrz 3). Jeżeli crash się powtórzy, potrzebny jest symbol z offsetem.
+3. **`Mem32::readInt/writeInt`** — odczyt/zapis 4 bajtów na końcu regionu wychodził poza bufor (korupcja sterty). Teraz granica jest sprawdzana, a dostęp przechodzący przez koniec bloku idzie bajt po bajcie (`readByte/writeByte`); porównania `address+size` w `deref` i `implTranslate` w 64 bitach.
+4. **`InstanceHandles`** — 8192 sloty zamiast 4096; wolny slot albo slot obiektu, który nikt już nie trzyma (`use_count()==1`), od najstarszego. Dopiero gdy wszystkie sloty należą do żywych obiektów, najstarszy jest nadpisywany (log błędu).
+5. **`OCNPC.FOCUS_VOB` / `INTERACTMOB`** — mają własne pola `compat_focus_vob` i `compat_interact_mob` w `zenkit::INpc` (ZenKit), więc nie nadpisują `VOICEPITCH`/`SPAWNDELAY`. `INTERACTMOB` gracza jest odświeżany co tick z rzeczywistego moba.
+6. **`OCNPC__EVDROPVOB_HOOK`** (0x7538C0) — `Npc::dropItem` gracza woła hook przed upuszczeniem; adres 0x763110 (`SetDeleted(1)` wiadomości) anuluje upuszczenie. Ważne przedmioty (flaga `ITEM_IMPORTANT`) nie wypadają, bohater gra „nie”.
+
+Dalej według sekcji 8: czas świata/waypointy, pozostałe hooki postępu (sprzedaż ważnych przedmiotów wymaga bytecode'u DAT — brak źródła `ITEMIMPORTANTFLAG_CHECKSELLINGITEMS`), sloty/ręce/kołczany.

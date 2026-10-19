@@ -162,6 +162,10 @@ void GameScript::dmaMobCanOpen(Interactive& mob) {
     dma->eventMobCanOpen(mob);
   }
 
+bool GameScript::dmaDropVob(Npc& npc, Item& item) {
+  return dma!=nullptr && dma->eventDropVob(npc,item);
+  }
+
 void GameScript::dmaCsCamera(bool trigger) {
   if(dma!=nullptr)
     dma->eventCsCamera(trigger);
@@ -2057,6 +2061,7 @@ void GameScript::mdl_applyoverlaymds(std::shared_ptr<zenkit::INpc> npcRef, std::
   if(npc!=nullptr) {
     auto skelet = Resources::loadSkeleton(overlayname);
     npc->addOverlay(skelet,0);
+    Log::d("Mdl_ApplyOverlayMds: ", overlayname, skelet==nullptr ? " (not found)" : "");
     }
   }
 
@@ -2073,6 +2078,7 @@ void GameScript::mdl_removeoverlaymds(std::shared_ptr<zenkit::INpc> npcRef, std:
   if(npc!=nullptr) {
     auto skelet = Resources::loadSkeleton(overlayname);
     npc->delOverlay(skelet);
+    Log::d("Mdl_RemoveOverlayMds: ", overlayname, skelet==nullptr ? " (not found)" : "");
   }
 }
 
