@@ -1,5 +1,7 @@
 #pragma once
 
+#include <bitset>
+
 #include "camera.h"
 #include "resources.h"
 
@@ -181,6 +183,7 @@ class MainWindow : public Tempest::Window {
     RuntimeMode               runtimeMode = R_Normal;
 
     Tempest::Widget*          uiKeyUp=nullptr;
+    std::bitset<256>          dmaKeysDown;
     Tempest::Point            dMouse;
     PlayerControl             player;
     uint64_t                  lastTick=0;

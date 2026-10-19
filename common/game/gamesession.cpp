@@ -165,6 +165,14 @@ GameSession::GameSession(Serialize &fin) {
   if(auto hero = wrld->player())
     vm->setInstanceNPC("HERO",*hero);
 
+  if(vm->hasDma()) {
+    // Ikarus and LeGo start again in a new process: the original engine calls the init functions of the scripts after
+    // the loading of a savegame, and LeGo reads its handles from the file that it has put into the savegame
+    initPerceptions(); // InitPerceptions of such mods starts Ikarus, which a loaded savegame skips in OpenGothic
+    vm->dmaLoad(fin);
+    initScripts(false,true);
+    }
+
   fin.setEntry("game/camera");
   cam->load(fin,wrld->player());
   Gothic::inst().setLoadingProgress(96);
@@ -223,6 +231,7 @@ void GameSession::save(Serialize &fout, std::string_view name, const Pixmap& scr
 
   fout.setEntry("game/daedalus");
   vm->saveVar(fout);
+  vm->dmaSave(fout);
   Gothic::inst().setLoadingProgress(80);
   }
 
@@ -373,6 +382,7 @@ auto GameSession::implChangeWorld(std::unique_ptr<GameSession>&& game,
   HeroStorage hdata;
   if(auto hero = wrld->player())
     hdata.save(*hero);
+  vm->dmaChangeLevel(true);
   clearWorld();
 
   vm->resetVarPointers();
@@ -405,6 +415,7 @@ auto GameSession::implChangeWorld(std::unique_ptr<GameSession>&& game,
 
   initScripts(wss.isEmpty());
   wrld->triggerOnStart(wss.isEmpty());
+  vm->dmaChangeLevel(false);
 
   for(auto& i:visitedWorlds)
     if(i.compareName(wrld->name())){
@@ -484,7 +495,7 @@ void GameSession::initPerceptions() {
     vm->getVm().call_function("initPerceptions");
   }
 
-void GameSession::initScripts(bool firstTime) {
+void GameSession::initScripts(bool firstTime, bool afterLoad) {
   auto wname = wrld->name();
   auto dot   = wname.rfind('.');
   auto name  = (dot==std::string::npos ? wname : wname.substr(0,dot));
@@ -505,5 +516,6 @@ void GameSession::initScripts(bool firstTime) {
   if(vm->hasSymbolName(init))
     vm->getVm().call_function(init);
 
-  wrld->resetPositionToTA();
+  if(!afterLoad)
+    wrld->resetPositionToTA();
   }

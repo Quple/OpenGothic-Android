@@ -1243,6 +1243,11 @@ void Npc::changeAttribute(Attribute a, int32_t val, bool allowUnconscious) {
   if(a>=ATR_MAX || val==0)
     return;
 
+  // Ikarus and LeGo mods hook oCNpc::ChangeAttribute and may change the value
+  val = owner.script().dmaChangeAttribute(*this,int(a),val);
+  if(val==0)
+    return;
+
   if(val<0 && a==ATR_HITPOINTS) {
     if(puppet && !puppetApply) {
       puppetDamage += -val;
@@ -2068,7 +2073,7 @@ void Npc::takeDamage(Npc& other, const Bullet* b, const CollideMask bMask, int32
   DamageCalculator::Damage dmg={};
   DamageCalculator::Val    hitResult;
   SpellCategory            splCat     = SpellCategory::SPELL_BAD;
-  const bool               dontKill   = ((b==nullptr && splId==0) || (bMask & COLL_DONTKILL)) && (!isSwim());
+  bool                     dontKill   = ((b==nullptr && splId==0) || (bMask & COLL_DONTKILL)) && (!isSwim());
   int32_t                  damageType = DamageCalculator::damageTypeMask(other);
 
   if(isSpell) {
@@ -2086,7 +2091,13 @@ void Npc::takeDamage(Npc& other, const Bullet* b, const CollideMask bMask, int32
     implFaiWait(0);
     }
 
+  // mods of Ikarus and LeGo hook oCNpc::OnDamage: they take the armor into account and may forbid to kill
+  auto dmaDamage = owner.script().dmaDamageBegin(*this,other,isSpell,splId,b!=nullptr && !isSpell,dontKill);
+  dontKill       = dmaDamage.dontKill;
   hitResult = DamageCalculator::damageValue(other,*this,b,isSpell,dmg,bMask);
+  owner.script().dmaDamageEnd(*this,dmaDamage);
+  if(hitResult.hasHit && dmaDamage.extra>0)
+    hitResult.value += dmaDamage.extra;
   if(!isSpell && !isDown() && hitResult.hasHit)
     owner.addWeaponHitEffect(other,b,*this).play();
 
@@ -2138,6 +2149,7 @@ void Npc::takeDamage(Npc& other, const Bullet* b, const CollideMask bMask, int32
   }
 
 void Npc::takeFallDamage(const Vec3& fallSpeed) {
+  owner.script().dmaFallDamage(*this);
   if(bodyStateMasked()==BS_FALL) {
     if(!isFallingDeep()) {
       // small fall
@@ -3646,11 +3658,21 @@ void Npc::resumeAiRoutine() {
   }
 
 Item* Npc::addItem(const size_t item, size_t count) {
-  return invent.addItem(item,count,owner);
+  Item* ret = invent.addItem(item,count,owner);
+  notifyItemTaken(ret);
+  return ret;
   }
 
 Item* Npc::addItem(std::unique_ptr<Item>&& i) {
-  return invent.addItem(std::move(i));
+  Item* ret = invent.addItem(std::move(i));
+  notifyItemTaken(ret);
+  return ret;
+  }
+
+/// Ikarus and LeGo mods hook oCNpcInventory::Insert, the quests of such mods wait for the items that the player takes
+void Npc::notifyItemTaken(Item* it) {
+  if(it!=nullptr && isPlayer())
+    owner.script().dmaItemTaken(*this,*it);
   }
 
 Item* Npc::takeItem(Item& item) {
@@ -3698,10 +3720,12 @@ void Npc::onWldItemRemoved(const Item& itm) {
 
 void Npc::addItem(size_t id, Interactive &chest, size_t count) {
   Inventory::transfer(invent,chest.inventory(),nullptr,id,count,owner);
+  notifyItemTaken(invent.getItem(id));
   }
 
 void Npc::addItem(size_t id, Npc &from, size_t count) {
   Inventory::transfer(invent,from.invent,&from,id,count,owner);
+  notifyItemTaken(invent.getItem(id));
   }
 
 void Npc::moveItem(size_t id, Interactive &to, size_t count) {
@@ -3730,6 +3754,7 @@ void Npc::buyItem(size_t id, Npc &from, size_t count) {
     }
 
   Inventory::transfer(invent,from.invent,nullptr,id,count,owner);
+  notifyItemTaken(invent.getItem(id));
   if(price>=0)
     invent.delItem(owner.script().goldId()->index(),size_t( price)*count,*this); else
     invent.addItem(owner.script().goldId()->index(),size_t(-price)*count,owner);

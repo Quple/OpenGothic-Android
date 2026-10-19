@@ -64,6 +64,19 @@ What it showed for CoM (scripts of CoM: about 5000 functions):
   wrote the object over the parser, the views of LeGo got a pointer "2". Found with the log of CoM.
 - The elements of an array member of an instance that lives in the pretended memory (`memory_instance`) are read with the
   size of the element (4 bytes, 20 for a string); the size of the class was used before.
+- **Hooks** (`HookEngineF`) are events of OpenGothic: the layer keeps the table address -> functions, and the game calls
+  `DirectMemory::fireHook` with the registers (`ECX`, `ESI`, ..., the variables of LeGo) and a stack in the pretended memory
+  that the functions read (`MEM_ReadInt(ESP+4)`) and may change; what they leave there goes back to the game. Addresses:
+  `hookaddresses.h`. The first call of every place is in the log (`DMA: the first call of the hook ...`). Answered:
+  change of the level (begin, end), saving and loading, `oCNpcInventory::Insert` (the player takes an item: the quests of CoM),
+  `oCNpc::ChangeAttribute` (the hook may change the value), `oCNpc::OnDamage` and the script of the damage (armor penetration,
+  the damage that must not kill: `oSDamageDescriptor` is filled), the fall damage, the keys of the game (`oCGame::HandleEvent`),
+  the change of the zone of the music (the places that CoM checks).
+- **Savegames.** LeGo writes the handles of PermMem to `SCRPTSAVE.SAV` through `CreateFileA`, `WriteFile`, `ReadFile`: these
+  functions work on files in memory, which go into the savegame of OpenGothic (the entry `game/dma`). After a load the
+  original engine calls `Init_Global` and `Init_<world>`, and the layer does the same (`GameSession`, only for such mods): LeGo
+  then reads its file. At a change of the level LeGo is told by the hooks, otherwise it takes the init for a load and loses
+  the handles.
 - Every exception of a script prints the stack of the script the first two times (log, red): it says who did it.
 - `HookEngine` places that are not answered are listed in the tab Debug, Ikarus, not in the log (the log has one line).
 
