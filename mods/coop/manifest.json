@@ -1,0 +1,9 @@
+{
+  "id": "coop",
+  "name": "Co-op",
+  "version": "0.1.0",
+  "author": "OpenGothic",
+  "description": "Play with friends: one player hosts, the others join. Players see each other and the characters of the world are the same for all of them.",
+  "main": "index.js",
+  "api": 1
+}

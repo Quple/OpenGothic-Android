@@ -29,6 +29,10 @@ namespace api {
   void installTimers (JSContext* ctx);                           // setTimeout, setInterval
   void installStorage(JSContext* ctx, Mod& mod);                 // storage
   void installRequire(JSContext* ctx);                           // require
+  void installNet    (JSContext* ctx);                           // net
+  /// Connections of the mod: events of the network are delivered, called every frame
+  void pollNet       (Mod& mod);
+  void releaseNet    (Mod& mod);
 
   /// require() of a file in the folder dir of the mod
   JSValue makeRequire(JSContext* ctx, const std::string& dir);

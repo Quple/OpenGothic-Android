@@ -42,6 +42,25 @@ class Pose final {
                                  uint8_t comb, BodyState bs,
                                  StartHint hint, uint64_t tickCount);
     bool               stopAnim(std::string_view name);
+
+    /// What plays now: the sequences with the time since they have started. Co-op sends it to the other games.
+    struct LayerInfo {
+      const Animation::Sequence* seq     = nullptr;
+      uint32_t                   elapsed = 0;
+      uint8_t                    comb    = 0;
+      BodyState                  bs      = BS_NONE;
+      };
+    void               layerInfo(std::vector<LayerInfo>& out, uint64_t tickCount) const;
+
+    /// What another game plays: the layers are made the same as they are, without the transitions between them.
+    /// A sequence that plays already is left alone if its time is near enough.
+    struct LayerSet {
+      const Animation::Sequence* seq   = nullptr;
+      uint64_t                   start = 0;
+      uint8_t                    comb  = 0;
+      BodyState                  bs    = BS_NONE;
+      };
+    void               setLayers(const std::vector<LayerSet>& layers, uint64_t tolerance);
     bool               stopWalkAnim();
     void               interrupt();
     void               stopAllAnim();

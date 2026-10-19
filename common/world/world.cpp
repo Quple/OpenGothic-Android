@@ -208,6 +208,22 @@ Npc *World::npcById(uint32_t id) {
   return nullptr;
   }
 
+Npc* World::npcByUid(uint32_t uid) {
+  return wobj.npcByUid(uid);
+  }
+
+uint32_t World::nextNpcUid() {
+  return wobj.nextNpcUid();
+  }
+
+Npc* World::addNpcRemote(size_t npcInstance, const Tempest::Vec3& pos, uint32_t uid, bool puppet) {
+  return wobj.addNpcRemote(npcInstance,pos,uid,puppet);
+  }
+
+void World::setNpcUidMods(bool on) {
+  wobj.setUidMods(on);
+  }
+
 uint32_t World::npcCount() const {
   return uint32_t(wobj.npcCount());
   }
@@ -701,6 +717,7 @@ Bullet& World::shootBullet(const Item &itm, const Npc &npc, const Npc *target, c
     }
 
   auto& b = wobj.shootBullet(itm, pos, dir, 0, DynamicWorld::bulletSpeed);
+  wobj.setLastShotOrigin(npc.isPlayer() ? 0xFFFFFFFEu : npc.uid());
   b.setTarget(target);
   return b;
   }

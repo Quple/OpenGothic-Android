@@ -225,8 +225,17 @@ void WorldObjects::tick(uint64_t dt, uint64_t dtPlayer) {
 
   auto cpos  = camera!=nullptr ? camera->originLwc() : Vec3();
   auto plPos = pl!=nullptr ? pl->position() : cpos;
+
+  // the players of the other games are in the world too: the characters near them are alive
+  std::vector<Npc*> remote;
+  for(auto& i:npcArr)
+    if(i->isRemotePlayer())
+      remote.push_back(i.get());
+
   for(auto& i:npcArr) {
     float dist = (i->position()-plPos).quadLength();
+    for(auto* r:remote)
+      dist = std::min(dist,(i->position()-r->position()).quadLength());
     if(dist<nearDist){
       npcNear.push_back(i.get());
       if(i.get()!=pl)
@@ -248,12 +257,18 @@ void WorldObjects::tick(uint64_t dt, uint64_t dtPlayer) {
 
   for(auto& ptr:npcNear) {
     Npc& i = *ptr;
-    if(i.isPlayer() || i.isDead())
+    if(i.isPlayer() || i.isDead() || i.isPuppet())
       continue;
 
     const uint64_t percNextTime = i.percNextTime();
     if(percNextTime<=owner.tickCount()) {
       i.perceptionProcess(*pl);
+      // the others notice the players of the other games like the player of this one
+      for(auto* r:remote) {
+        if(r==&i || r->isDead() || (i.position()-r->position()).quadLength()>=nearDist)
+          continue;
+        i.perceptionProcess(*r);
+        }
       }
 
     if(i.processPolicy()==NpcProcessPolicy::AiNormal) {
@@ -361,6 +376,71 @@ std::unique_ptr<Npc> WorldObjects::takeNpc(const Npc* ptr) {
       npcArr.erase(npcArr.begin() + int32_t(i));
       return ret;
       }
+    }
+  return nullptr;
+  }
+
+Npc* WorldObjects::addNpcRemote(size_t npcInstance, const Vec3& pos, uint32_t uid, bool puppet) {
+  auto point = owner.findWayPoint(pos);
+  if(point==nullptr)
+    point = owner.findFreePoint(pos, "");
+  auto pstr = point==nullptr ? "" : point->name;
+
+  // the number of the constructor is not used: the number is the one of the other game, or one of the mods
+  setUidMods(true);
+  Npc* npc = new Npc(owner,npcInstance,pstr);
+  setUidMods(false);
+  if(uid!=0) {
+    npc->setUid(uid);
+    if(uid<0x80000000u && uid>=npcUidCounter)
+      npcUidCounter = uid+1;
+    }
+  if(puppet)
+    npc->setPuppet(true);
+  npc->setPosition(pos.x,pos.y,pos.z);
+  npc->updateTransform();
+  // the script of insert starts the routine of the character, a puppet is driven from outside
+  if(!puppet)
+    owner.script().invokeRefreshAtInsert(*npc);
+
+  npcArr.emplace_back(npc);
+  return npc;
+  }
+
+std::vector<WorldObjects::ShotRecord> WorldObjects::takeShots() {
+  shotLogging = true;
+  std::vector<ShotRecord> ret;
+  ret.swap(shotLog);
+  return ret;
+  }
+
+void WorldObjects::setLastShotOrigin(uint32_t uid) {
+  if(!shotLog.empty() && shotLog.back().origin==0)
+    shotLog.back().origin = uid;
+  }
+
+Bullet* WorldObjects::shootRemote(const Item& itm, const Vec3& pos, const Vec3& vel) {
+  if(itm.isSpellOrRune())
+    return nullptr;   // spells have scripts, they are made only where they are cast
+  const float l = vel.length();
+  if(l<=0.f)
+    return nullptr;
+  shotReplay = true;
+  auto& b = shootBullet(itm,pos,vel,0,l);
+  shotReplay = false;
+  return &b;
+  }
+
+Npc* WorldObjects::npcByUid(uint32_t uid) {
+  auto h = npcUidHint.find(uid);
+  if(h!=npcUidHint.end() && h->second<npcArr.size() && npcArr[h->second]->uid()==uid)
+    return npcArr[h->second].get();
+
+  for(size_t i=0; i<npcArr.size(); ++i) {
+    if(npcArr[i]->uid()!=uid)
+      continue;
+    npcUidHint[uid] = i;
+    return npcArr[i].get();
     }
   return nullptr;
   }
@@ -639,6 +719,16 @@ Bullet& WorldObjects::shootBullet(const Item& itmId, const Vec3& pos, const Vec3
 
   const float rgnBias = 0.f;
   const float l = dir.length();
+  if(shotLogging && !shotReplay && !itmId.isSpellOrRune()) {
+    ShotRecord s;
+    s.item  = itmId.clsId();
+    s.pos   = pos;
+    s.vel   = dir*speed/l;
+    s.range = tgRange;
+    if(shotLog.size()>=256)
+      shotLog.erase(shotLog.begin());
+    shotLog.push_back(s);
+    }
   b.setDirection(dir*speed/l);
   b.setTargetRange(tgRange + rgnBias);
   return b;

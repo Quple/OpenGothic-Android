@@ -211,6 +211,60 @@ bool Pose::startAnim(const AnimationSolver& solver, const Animation::Sequence *s
   return true;
   }
 
+void Pose::layerInfo(std::vector<LayerInfo>& out, uint64_t tickCount) const {
+  out.clear();
+  for(auto& i:lay) {
+    LayerInfo l;
+    l.seq     = i.seq;
+    l.elapsed = uint32_t(tickCount>i.sAnim ? std::min<uint64_t>(tickCount-i.sAnim,0xFFFFFFFFu) : 0);
+    l.comb    = i.comb;
+    l.bs      = i.bs;
+    out.push_back(l);
+    }
+  }
+
+void Pose::setLayers(const std::vector<LayerSet>& layers, uint64_t tolerance) {
+  auto wanted = [&](const Layer& l) {
+    for(auto& w:layers)
+      if(w.seq==l.seq && w.comb==l.comb)
+        return true;
+    return false;
+    };
+
+  // what is not played any more is stopped
+  size_t ret = 0;
+  for(size_t i=0; i<lay.size(); ++i) {
+    if(wanted(lay[i])) {
+      if(ret!=i)
+        lay[ret] = lay[i];
+      ret++;
+      } else {
+      onRemoveLayer(lay[i]);
+      }
+    }
+  lay.resize(ret);
+
+  for(auto& w:layers) {
+    if(w.seq==nullptr)
+      continue;
+    bool found = false;
+    for(auto& i:lay) {
+      if(i.seq!=w.seq || i.comb!=w.comb)
+        continue;
+      found = true;
+      i.bs  = w.bs;
+      const uint64_t d = i.sAnim>w.start ? i.sAnim-w.start : w.start-i.sAnim;
+      if(d>tolerance) {
+        i.sAnim       = w.start;
+        needToUpdate  = true;
+        }
+      break;
+      }
+    if(!found)
+      addLayer(w.seq,w.bs,w.comb,w.start);
+    }
+  }
+
 bool Pose::stopAnim(std::string_view name) {
   bool done=false;
   size_t ret=0;

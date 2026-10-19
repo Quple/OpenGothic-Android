@@ -596,6 +596,25 @@ bool MdlVisual::hasAnim(AnimationSolver::Anim a, WeaponState st, WalkBit wlk) co
   return solver.solveAnim(a,st,wlk,*skInst)!=nullptr;
   }
 
+size_t MdlVisual::setRemoteLayers(const std::vector<RemoteLayer>& layers, uint64_t tickCount) {
+  std::vector<Pose::LayerSet> set;
+  for(auto& l:layers) {
+    auto sq = solver.solveFrm(l.name);
+    if(sq==nullptr)
+      continue;
+    Pose::LayerSet s;
+    s.seq   = sq;
+    s.start = tickCount>l.elapsed ? tickCount-l.elapsed : 0;
+    s.comb  = std::min<uint8_t>(l.comb,uint8_t(sq->comb.size()));
+    s.bs    = BodyState(l.bs);
+    set.push_back(s);
+    }
+  if(set.empty())
+    return 0;
+  skInst->setLayers(set,200);
+  return set.size();
+  }
+
 const Animation::Sequence* MdlVisual::startAnimAndGet(std::string_view name, uint64_t tickCount, bool forceAnim) {
   auto sq = solver.solveFrm(name);
   if(sq!=nullptr) {

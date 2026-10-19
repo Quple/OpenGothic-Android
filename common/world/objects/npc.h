@@ -114,6 +114,60 @@ class Npc final {
     auto       processPolicy() const -> NpcProcessPolicy { return aiPolicy; }
 
     bool       isPlayer() const;
+
+    /// Number of the character in the world: it is the same on every machine that has loaded the same world,
+    /// and does not change when the others are removed. Co-op mods tell the characters apart by it.
+    uint32_t   uid() const { return npcUid; }
+    void       setUid(uint32_t uid) { npcUid = uid; }
+
+    /// The overlays (mds of the animations) of the character and its armor, which a mod can tell to the other games
+    std::vector<std::string> overlayNames() const;
+    void       setPuppetOverlays(const std::vector<std::string>& names);
+    size_t     armorInstance();
+    void       setPuppetArmor(size_t item);
+
+    /// A puppet is moved from outside (by a mod): the script, the AI and the physics do not drive it.
+    /// The animation follows the movement.
+    void       setPuppet(bool on);
+    bool       isPuppet() const { return puppet; }
+
+    /// The character of a player of another game (co-op): the characters of the world notice it like the player
+    void       setRemotePlayer(bool on) { remotePlayer = on; }
+    bool       isRemotePlayer() const { return remotePlayer; }
+    /// Another game says that a character of this world has been hit by its player (the avatar is the attacker)
+    void       hurtBy(Npc& attacker, int32_t damage);
+    void       tickPuppet(uint64_t dt);
+
+    /// What the character plays and the weapon in its hand, to tell the other games
+    struct AnimLayer {
+      std::string name;
+      uint32_t    elapsed = 0;
+      uint8_t     comb    = 0;
+      uint32_t    bs      = 0;
+      };
+    std::vector<AnimLayer> animationLayers() const;
+    /// A puppet plays what its owner plays. An empty list gives the animation back to the walking by the movement.
+    size_t     setPuppetAnimation(const std::vector<AnimLayer>& layers);
+    /// A puppet holds the weapon that its owner holds (the item is the melee weapon of W1H and W2H)
+    void       setPuppetWeapon(WeaponState ws, size_t item);
+    size_t     meleeWeaponInstance();
+    size_t     rangedWeaponInstance();
+    /// A puppet carries the weapons that its owner carries, also when they are not drawn
+    void       setPuppetEquipment(size_t melee, size_t ranged);
+    /// A player has started to talk to the puppet or to do something else with it: the mod gives the character
+    /// back to the game for a while, because the script and the AI are needed for it
+    bool       takePuppetInteraction();
+    /// A player has finished off the puppet (it was unconscious): the mod tells the owner, who does it
+    bool       takePuppetFinish();
+    /// The owner finishes off an unconscious character
+    void       finishOff();
+    /// A puppet is unconscious when its owner is
+    void       setPuppetUnconscious(bool on);
+    /// The damage that a puppet has got is not taken, the mod learns about it and tells the owner of the character
+    int32_t    takePuppetDamage();
+    /// The owner of the puppet says how healthy it is
+    void       puppetSetHealth(int32_t hp);
+
     void       setWalkMode(WalkBit m);
     WalkBit    walkMode() const;
     void       tick(uint64_t dt);
@@ -630,6 +684,17 @@ class Npc final {
     MoveAlgo                       mvAlgo;
     FightAlgo                      fghAlgo;
     uint64_t                       lastEventTime=0;
+
+    uint32_t                       npcUid   = 0;
+    bool                           puppet   = false;
+    bool                           remotePlayer = false;
+    bool                           puppetApply = false;
+    bool                           puppetInteract = false;
+    bool                           puppetFinish = false;
+    bool                           puppetRemoteAnim = false;
+    int32_t                        puppetDamage = 0;
+    Tempest::Vec3                  puppetPrev = {};
+    float                          puppetSpeed = 0;
 
     float                          angleY   = 0.f;
     float                          runAng   = 0.f;

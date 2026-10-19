@@ -365,6 +365,9 @@ void ModHost::tick(uint64_t nowMs) {
   for(auto& m:list) {
     if(!m->isRunning())
       continue;
+    api::pollNet(*m);
+    if(!m->isRunning())
+      continue;
     runTimers(*m);
     if(m->isRunning() && m->storageDirty && now>m->storageSaved+30000)
       saveStorage(*m);
@@ -410,6 +413,7 @@ void ModHost::release(Mod& mod) {
   if(mod.ctx==nullptr)
     return;
 
+  api::releaseNet(mod);
   JSContext* ctx = mod.ctx;
   for(auto& e:mod.events) {
     for(auto& h:e.second)
@@ -512,6 +516,7 @@ bool ModHost::start(Mod& mod) {
   api::installTimers(mod.ctx);
   api::installStorage(mod.ctx,mod);
   api::installRequire(mod.ctx);
+  api::installNet(mod.ctx);
   loadStorage(mod);
   if(binder) {
     Mod* prev = running;

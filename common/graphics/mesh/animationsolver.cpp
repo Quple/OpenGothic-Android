@@ -67,6 +67,14 @@ void AnimationSolver::addOverlay(const Skeleton* sk, uint64_t time) {
   invalidateCache();
   }
 
+std::vector<std::string> AnimationSolver::overlayNames() const {
+  std::vector<std::string> ret;
+  for(auto& i:overlay)
+    if(i.skeleton!=nullptr)
+      ret.emplace_back(i.skeleton->name());
+  return ret;
+  }
+
 void AnimationSolver::delOverlay(std::string_view sk) {
   if(overlay.size()==0)
     return;

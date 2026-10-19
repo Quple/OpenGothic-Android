@@ -34,6 +34,9 @@ Npc*    resolveNpc(JSContext* ctx, JSValueConst obj);
 /// Index of the character in the world, -1 if it is not there
 int64_t npcIndex(World& world, const Npc& npc);
 
+/// What a character plays: [[sequence, ms since it has started, comb, body state], ...]
+JSValue animationOf(JSContext* ctx, Npc& npc);
+
 /// Name of a script symbol of an instance, "" if there is no such
 std::string instanceName(World& world, size_t symbol);
 /// Finds an item or a character instance by its name

@@ -2,6 +2,7 @@
 
 #include "game/gametime.h"
 #include "gothic.h"
+#include "world/objects/item.h"
 #include "world/objects/npc.h"
 #include "world/waypoint.h"
 #include "world/world.h"
@@ -56,6 +57,46 @@ JSValue waypoint(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return o;
   }
 
+/// world.takeShots(): the arrows and bolts that were shot since the last call (the first call starts to watch):
+/// [[item, x, y, z, vx, vy, vz, shooter], ...]
+JSValue takeShots(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  JSValue arr   = JS_NewArray(ctx);
+  auto*   world = Gothic::inst().world();
+  if(world==nullptr)
+    return arr;
+  uint32_t n = 0;
+  for(auto& s:world->takeShots()) {
+    JSValue e = JS_NewArray(ctx);
+    JS_SetPropertyUint32(ctx,e,0,JS_NewString(ctx,game::instanceName(*world,s.item).c_str()));
+    const double v[6] = {double(s.pos.x),double(s.pos.y),double(s.pos.z),double(s.vel.x),double(s.vel.y),double(s.vel.z)};
+    for(uint32_t i=0; i<6; ++i)
+      JS_SetPropertyUint32(ctx,e,i+1,JS_NewFloat64(ctx,v[i]));
+    JS_SetPropertyUint32(ctx,e,7,JS_NewUint32(ctx,s.origin));
+    JS_SetPropertyUint32(ctx,arr,n++,e);
+    }
+  return arr;
+  }
+
+/// world.shoot(item, x, y, z, vx, vy, vz): an arrow or a bolt that flies, as it was shot in another game. It makes
+/// no damage here: the one who has shot it takes care of that. Spells are not shot this way.
+JSValue shoot(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* world = Gothic::inst().world();
+  if(world==nullptr || argc<7)
+    return JS_FALSE;
+  const auto cls = game::findInstance(*world,js::str(ctx,argv[0]));
+  double v[6] = {};
+  for(int i=0; i<6; ++i)
+    if(JS_ToFloat64(ctx,&v[i],argv[i+1])<0)
+      return JS_FALSE;
+  if(cls==size_t(-1))
+    return JS_FALSE;
+
+  Item itm(*world,cls,Item::T_Inventory);
+  const auto* b = world->shootRemote(itm,Tempest::Vec3(float(v[0]),float(v[1]),float(v[2])),
+                                         Tempest::Vec3(float(v[3]),float(v[4]),float(v[5])));
+  return JS_NewBool(ctx,b!=nullptr);
+  }
+
 }
 
 /// world: the name of the world, the time, the way points
@@ -66,6 +107,8 @@ void game::installWorld(JSContext* ctx) {
   js::fn(ctx,world,"time",    time,0);
   js::fn(ctx,world,"setTime", setTime,2);
   js::fn(ctx,world,"waypoint",waypoint,1);
+  js::fn(ctx,world,"takeShots",takeShots,0);
+  js::fn(ctx,world,"shoot",   shoot,7);
   JS_SetPropertyStr(ctx,global,"world",world);
   JS_FreeValue(ctx,global);
   }

@@ -107,7 +107,7 @@ if(WIN32)
 endif()
 
 if(WIN32)
-  target_link_libraries(${PROJECT_NAME} shlwapi DbgHelp)
+  target_link_libraries(${PROJECT_NAME} shlwapi DbgHelp ws2_32)
 elseif(ANDROID)
   target_link_libraries(${PROJECT_NAME} dl)
 elseif(UNIX)
@@ -159,6 +159,13 @@ set(QJS_BUILD_CLI_STATIC OFF CACHE INTERNAL "")
 set(QJS_BUILD_LIBC       OFF CACHE INTERNAL "")
 add_subdirectory(lib/quickjs EXCLUDE_FROM_ALL)
 target_link_libraries(${PROJECT_NAME} qjs)
+
+# Dear ImGui for the menu of the mods, it is drawn with the painter of Tempest
+add_library(imgui STATIC EXCLUDE_FROM_ALL
+  lib/imgui/imgui.cpp lib/imgui/imgui_draw.cpp lib/imgui/imgui_tables.cpp lib/imgui/imgui_widgets.cpp)
+target_include_directories(imgui PUBLIC lib/imgui)
+target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
+target_link_libraries(${PROJECT_NAME} imgui)
 
 # bullet physics
 set(BULLET2_MULTITHREADING       ON  CACHE INTERNAL "")
@@ -233,6 +240,12 @@ target_link_libraries(Gothic2Notr PRIVATE OpenGothic)
 target_sources(Spacer PRIVATE ${SPACER_SOURCES} spacer/main.cpp)
 target_include_directories(Spacer PRIVATE "spacer")
 target_link_libraries(Spacer PRIVATE OpenGothic SpacerAssets)
+
+# the mods of the repository are next to the executable, so a build can be tried at once
+if(NOT ANDROID AND EXISTS "${CMAKE_SOURCE_DIR}/mods")
+  add_custom_command(TARGET Gothic2Notr POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/mods" "$<TARGET_FILE_DIR:Gothic2Notr>/mods")
+endif()
 
 if(ANDROID)
   add_android_apk(OpenGothic-apk

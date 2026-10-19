@@ -91,6 +91,7 @@ class Mod final {
     bool                                       storageDirty = false;
     uint64_t                                   storageSaved = 0;
     uint32_t                                   nextId       = 1;
+    std::shared_ptr<void>                      netState;    // connections of the mod, see api/api_net.cpp
   };
 
 class ModHost final {

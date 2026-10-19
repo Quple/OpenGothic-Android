@@ -1,31 +1,36 @@
 #pragma once
 
-#include <string>
-#include <vector>
+#include <memory>
 
+#include <Tempest/TextureAtlas>
 #include <Tempest/Widget>
 
-#include "scripting/modhost.h"
+#include "ui/imgui/imguibackend.h"
+#include "ui/modpanel.h"
 
-/// F10: the mods of the game and the console of them
+/// F10: the mods of the game and the console of them. The window is drawn by ImGui, see modpanel*.cpp.
 class ModMenu : public Tempest::Widget {
   public:
-    ModMenu();
+    explicit ModMenu(Tempest::TextureAtlas& atlas);
 
     bool isActive() const { return active; }
     void open();
     void close();
     void toggle();
 
-    /// Repaints when the console has something new. Called every frame.
+    /// Repaints every frame while the menu is open: ImGui animates and tracks the mouse. Called every frame.
     void refresh();
 
     void keyDownEvent  (Tempest::KeyEvent&   e) override;
     void keyRepeatEvent(Tempest::KeyEvent&   e) override;
-    void mouseDownEvent(Tempest::MouseEvent& e) override;
+    void keyUpEvent    (Tempest::KeyEvent&   e) override;
+    void mouseDownEvent (Tempest::MouseEvent& e) override;
+    void mouseUpEvent   (Tempest::MouseEvent& e) override;
+    void mouseMoveEvent (Tempest::MouseEvent& e) override;
+    void mouseDragEvent (Tempest::MouseEvent& e) override;
     void mouseWheelEvent(Tempest::MouseEvent& e) override;
 
-    // the touch screen: a tap and a finger that scrolls
+    // the touch screen: a tap is a click, a finger that moves scrolls
     void mobileTap(float x, float y);
     void mobileTouch(float x, float y, int phase);
 
@@ -33,42 +38,14 @@ class ModMenu : public Tempest::Widget {
     void paintEvent(Tempest::PaintEvent& e) override;
 
   private:
-    enum class Tab : uint8_t { Mods, Console };
+    float unit() const;
+    void  fit();
+    void  feedKey(const Tempest::KeyEvent& e, bool down);
 
-    enum class Action : uint8_t { None, Close, TabMods, TabConsole, Rescan, Toggle, Reset, Auto, Select };
+    ImGuiBackend backend;
+    ModPanel     panel;
 
-    struct Hit {
-      Action action = Action::None;
-      int    index  = -1;
-      };
-    struct Layout {
-      Tempest::Rect panel, tabMods, tabConsole, close, body, rescan, input;
-      int           rowH = 0;
-      };
-
-    void   fit();
-    Layout layout() const;
-    float  unit() const;
-    Hit    hitTest(int x, int y) const;
-    void   perform(const Hit& hit);
-    void   type(const Tempest::KeyEvent& e);
-    void   run();
-
-    int    modsContent(const Layout& l) const;
-    Tempest::Rect rowButton(const Layout& l, size_t row, int button, int scroll) const;
-
-    bool                      active = false;
-    bool                      paused = false;
-    Tab                       tab    = Tab::Mods;
-    int                       selected = 0;
-    float                     modsScroll = 0;
-    float                     logScroll  = 0;   // pixels from the newest line
-    uint64_t                  seen = 0;
-
-    std::string               input;
-    std::vector<std::string>  history;
-    size_t                    historyAt = 0;
-
-    int                       drag = 0;         // 1 - mods, 2 - console
-    float                     startY = 0, startScroll = 0;
+    bool  active  = false;
+    bool  paused  = false;
+    float touchY  = 0;
   };

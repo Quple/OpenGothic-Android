@@ -39,6 +39,7 @@ class MdlVisual final {
     std::string_view               visualSkeletonScheme() const;
 
     bool                           hasOverlay(const Skeleton*  sk) const;
+    std::vector<std::string>       overlayNames() const { return solver.overlayNames(); }
     void                           addOverlay(const Skeleton*  sk, uint64_t time);
     void                           delOverlay(std::string_view sk);
     void                           delOverlay(const Skeleton*  sk);
@@ -74,6 +75,16 @@ class MdlVisual final {
     bool                           isUsingTorch() const;
 
     const Pose&                    pose() const { return *skInst; }
+
+    /// An animation of another game: the sequences by their names, the time that has passed since each of them started.
+    /// Returns how many of them are known to this character.
+    struct RemoteLayer {
+      std::string name;
+      uint32_t    elapsed = 0;
+      uint8_t     comb    = 0;
+      uint32_t    bs      = 0;
+      };
+    size_t                         setRemoteLayers(const std::vector<RemoteLayer>& layers, uint64_t tickCount);
     bool                           updateAnimation(Npc* npc, Interactive* mobsi, World& world, uint64_t dt, bool force);
     void                           processLayers  (World& world);
     bool                           processEvents(World& world, uint64_t &barrier, Animation::EvCount &ev);

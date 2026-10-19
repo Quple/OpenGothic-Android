@@ -46,6 +46,13 @@ class World final {
 
     uint32_t             npcId(const Npc* ptr) const;
     Npc*                 npcById(uint32_t id);
+    /// see Npc::uid
+    Npc*                 npcByUid(uint32_t uid);
+    uint32_t             nextNpcUid();
+    void                 setNpcUidMods(bool on);
+    Npc*                 addNpcRemote(size_t npcInstance, const Tempest::Vec3& pos, uint32_t uid, bool puppet);
+    auto                 takeShots() { return wobj.takeShots(); }
+    Bullet*              shootRemote(const Item& itm, const Tempest::Vec3& pos, const Tempest::Vec3& vel) { return wobj.shootRemote(itm,pos,vel); }
     uint32_t             npcCount() const;
 
     uint32_t             mobsiId(const Interactive* ptr) const;

@@ -33,10 +33,11 @@
 using namespace Tempest;
 
 MainWindow::MainWindow(Device& device)
-  : Window(Maximized),device(device),swapchain(device,hwnd()),
+  : Window(CommandLine::inst().isWindowMode() ? Normal : Maximized),device(device),swapchain(device,hwnd()),
     atlas(device),rootMenu(keycodec),inventory(keycodec),
     dialogs(inventory),document(keycodec),
     console(*this),
+    modMenu(atlas),
 #if defined(__MOBILE_PLATFORM__) && !defined(OPENGOTHIC_TOUCH_UI)
     mobileUi(player),
 #endif
@@ -155,12 +156,11 @@ void MainWindow::setupUi() {
   addWidget(&inventory);
   addWidget(&chapter);
   addWidget(&video);
-  addWidget(&rootMenu);
-  addWidget(&modMenu);
 #if defined(__MOBILE_PLATFORM__) && !defined(OPENGOTHIC_TOUCH_UI)
   addWidget(&mobileUi);
 #endif
   addWidget(&rootMenu);
+  addWidget(&modMenu);
 
   rootMenu.setMainMenu();
 
@@ -561,7 +561,7 @@ void MainWindow::keyUpEvent(KeyEvent &event) {
   Scripting::game::keyEvent(event,false);
   if(uiKeyUp==&modMenu) {
     uiKeyUp = nullptr;
-    event.accept();
+    modMenu.keyUpEvent(event);
     return;
     }
   if(uiKeyUp==&video){

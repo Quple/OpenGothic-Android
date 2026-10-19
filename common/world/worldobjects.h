@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <unordered_map>
 #include <memory>
 
 #include <zenkit/vobs/Misc.hh>
@@ -69,6 +70,24 @@ class WorldObjects final {
     void           detectItem(const float x, const float y, const float z, const float r, const std::function<void(Item&)>& f);
 
     uint32_t       npcId(const Npc *ptr) const;
+    Npc*           npcByUid(uint32_t uid);
+    /// A character that another game has made: with its number (0 - a number of the mods), without the script of insert
+    Npc*           addNpcRemote(size_t npcInstance, const Tempest::Vec3& pos, uint32_t uid, bool puppet);
+
+    /// Shots of arrows and bolts, for the mods that tell them to the other games
+    struct ShotRecord {
+      size_t        item   = 0;
+      Tempest::Vec3 pos;
+      Tempest::Vec3 vel;
+      float         range  = 0;
+      uint32_t      origin = 0;
+      };
+    std::vector<ShotRecord> takeShots();
+    void           setLastShotOrigin(uint32_t uid);
+    Bullet*        shootRemote(const Item& itm, const Tempest::Vec3& pos, const Tempest::Vec3& vel);
+    uint32_t       nextNpcUid() { return uidMods ? uidModsCounter++ : npcUidCounter++; }
+    /// Characters that mods add get numbers of their own, so they do not shift the numbers of the others
+    void           setUidMods(bool on) { uidMods = on; }
     size_t         npcCount()    const { return npcArr.size(); }
     const Npc&     npc(size_t i) const { return *npcArr[i];    }
     Npc&           npc(size_t i)       { return *npcArr[i];    }
@@ -170,9 +189,16 @@ class WorldObjects final {
     std::list<MobStates>               routines;
 
     std::list<Bullet>                  bullets;
+    std::vector<ShotRecord>            shotLog;
+    bool                               shotLogging = false;
+    bool                               shotReplay  = false;
     std::vector<EffectState>           effects;
 
     std::vector<std::unique_ptr<Npc>>  npcArr;
+    uint32_t                           npcUidCounter = 1;
+    uint32_t                           uidModsCounter = 0x80000000u;
+    bool                               uidMods = false;
+    std::unordered_map<uint32_t,size_t> npcUidHint;   // where the character was last time
     std::vector<std::unique_ptr<Npc>>  npcInvalid; // dead or invalid TA
     std::vector<std::unique_ptr<Npc>>  npcRemoved; // removed, but may have a dangling references in game
     std::vector<Npc*>                  npcNear;

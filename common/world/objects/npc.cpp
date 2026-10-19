@@ -182,6 +182,7 @@ struct Npc::TransformBack {
 Npc::Npc(World &owner, size_t instance, std::string_view waypoint, NpcProcessPolicy aiPolicy)
   :owner(owner),aiPolicy(aiPolicy),mvAlgo(*this) {
   outputPipe     = owner.script().openAiOuput();
+  npcUid         = owner.nextNpcUid();
 
   hnpc           = std::make_shared<zenkit::INpc>();
   hnpc->user_ptr = this;
@@ -1243,6 +1244,10 @@ void Npc::changeAttribute(Attribute a, int32_t val, bool allowUnconscious) {
     return;
 
   if(val<0 && a==ATR_HITPOINTS) {
+    if(puppet && !puppetApply) {
+      puppetDamage += -val;
+      return;
+      }
     if(isPlayer() && Gothic::inst().isGodMode())
       return;
     if(isPlayer() && owner.currentCs()!=nullptr)
@@ -2316,6 +2321,252 @@ void Npc::tickRegen(int32_t& v, const int32_t max, const int32_t chg, const uint
     }
   }
 
+void Npc::setPuppet(bool on) {
+  if(puppet==on)
+    return;
+  puppet      = on;
+  puppetPrev  = position();
+  puppetRemoteAnim = false;
+  puppetSpeed = 0;
+  if(on) {
+    // what the character was doing is dropped
+    aiQueue.clear();
+    aiQueueOverlay.clear();
+    clearGoTo();
+    mvAlgo.clearSpeed();
+    }
+  }
+
+std::vector<Npc::AnimLayer> Npc::animationLayers() const {
+  std::vector<Pose::LayerInfo> info;
+  visual.pose().layerInfo(info,owner.tickCount());
+
+  std::vector<AnimLayer> ret;
+  for(auto& i:info) {
+    if(i.seq==nullptr)
+      continue;
+    AnimLayer l;
+    l.name    = i.seq->name;
+    l.elapsed = i.elapsed;
+    l.comb    = i.comb;
+    l.bs      = uint32_t(i.bs);
+    ret.push_back(std::move(l));
+    }
+  return ret;
+  }
+
+size_t Npc::setPuppetAnimation(const std::vector<AnimLayer>& layers) {
+  if(!puppet)
+    return 0;
+  std::vector<MdlVisual::RemoteLayer> set;
+  for(auto& l:layers) {
+    MdlVisual::RemoteLayer r;
+    r.name    = l.name;
+    r.elapsed = l.elapsed;
+    r.comb    = l.comb;
+    r.bs      = l.bs;
+    set.push_back(std::move(r));
+    }
+  const size_t n = set.empty() ? 0 : visual.setRemoteLayers(set,owner.tickCount());
+  puppetRemoteAnim = n>0;
+  return n;
+  }
+
+std::vector<std::string> Npc::overlayNames() const {
+  return visual.overlayNames();
+  }
+
+/// A puppet has the overlays of its owner: the missing ones are added, the others are taken off
+void Npc::setPuppetOverlays(const std::vector<std::string>& names) {
+  if(!puppet)
+    return;
+  const auto have = visual.overlayNames();
+  for(auto& h:have) {
+    if(std::find(names.begin(),names.end(),h)==names.end())
+      delOverlay(h);
+    }
+  for(auto& n:names) {
+    if(std::find(have.begin(),have.end(),n)==have.end())
+      addOverlay(n,0);
+    }
+  }
+
+size_t Npc::armorInstance() {
+  if(auto a = invent.currentArmor())
+    return a->clsId();
+  return size_t(-1);
+  }
+
+void Npc::setPuppetArmor(size_t item) {
+  if(!puppet || armorInstance()==item)
+    return;
+  if(item==size_t(-1)) {
+    invent.unequipArmor(owner.script(),*this);
+    return;
+    }
+  if(invent.itemCount(item)==0)
+    addItem(item,1);
+  invent.equipArmor(int32_t(item),*this);
+  }
+
+size_t Npc::meleeWeaponInstance() {
+  if(auto w = invent.currentMeleeWeapon())
+    return w->clsId();
+  return size_t(-1);
+  }
+
+void Npc::setPuppetWeapon(WeaponState ws, size_t item) {
+  if(!puppet || ws==visual.fightMode())
+    return;
+  switch(ws) {
+    case WeaponState::NoWeapon:
+      invent.switchActiveWeapon(*this,Item::NSLOT);
+      if(visual.setToFightMode(ws))
+        updateWeaponSkeleton();
+      break;
+    case WeaponState::Fist:
+      setToFistMode();
+      break;
+    case WeaponState::W1H:
+    case WeaponState::W2H:
+      if(item!=size_t(-1)) {
+        setToFightMode(item);
+        break;
+        }
+      if(visual.setToFightMode(ws))
+        updateWeaponSkeleton();
+      break;
+    default:
+      if(visual.setToFightMode(ws))
+        updateWeaponSkeleton();
+      break;
+    }
+  }
+
+void Npc::hurtBy(Npc& other, int32_t dmg) {
+  if(isDown() || dmg<=0 || puppet)
+    return;
+
+  // as the hit of a player: the character turns to the attacker, the script of it decides what to do, and it stumbles
+  const float a  = angleDir(other.x-x,other.z-z);
+  const float da = a-angle;
+  lastHitType = std::cos(da*M_PI/180.0)<0 ? 'A' : 'B';
+  lastHit     = &other;
+  if(!isPlayer())
+    setOther(&other);
+  owner.sendPassivePerc(*this,other,*this,PERC_ASSESSFIGHTSOUND);
+  perceptionProcess(other,this,0,PERC_ASSESSDAMAGE);
+  fghAlgo.onTakeHit();
+  implFaiWait(0);
+
+  const auto state = bodyStateMasked();
+  if(interactive()==nullptr && ((state&BS_FLAG_INTERRUPTABLE)!=BS_NONE || state==BS_RUN || state==BS_NONE)) {
+    visual.interrupt();
+    setAnimAngGet(lastHitType=='A' ? Anim::StumbleA : Anim::StumbleB);
+    }
+
+  currentOther = &other;
+  changeAttribute(ATR_HITPOINTS,-dmg,true);
+  }
+
+int32_t Npc::takePuppetDamage() {
+  const int32_t ret = puppetDamage;
+  puppetDamage = 0;
+  return ret;
+  }
+
+void Npc::puppetSetHealth(int32_t hp) {
+  const int32_t cur = attribute(ATR_HITPOINTS);
+  hp = std::max(0,std::min(hp,attribute(ATR_HITPOINTSMAX)));
+  if(hp==cur)
+    return;
+  const bool prev = puppetApply;
+  puppetApply = true;
+  // a character that is unconscious dies only if the unconscious are not spared
+  changeAttribute(ATR_HITPOINTS,hp-cur,hp>0);
+  puppetApply = prev;
+  }
+
+size_t Npc::rangedWeaponInstance() {
+  if(auto w = invent.currentRangedWeapon())
+    return w->clsId();
+  return size_t(-1);
+  }
+
+void Npc::setPuppetEquipment(size_t melee, size_t ranged) {
+  if(!puppet)
+    return;
+  for(size_t cls:{melee,ranged}) {
+    if(cls==size_t(-1))
+      continue;
+    if(invent.itemCount(cls)==0)
+      addItem(cls,1);
+    invent.equip(cls,*this,true);
+    }
+  updateWeaponSkeleton();
+  }
+
+bool Npc::takePuppetInteraction() {
+  const bool ret = puppetInteract;
+  puppetInteract = false;
+  return ret;
+  }
+
+bool Npc::takePuppetFinish() {
+  const bool ret = puppetFinish;
+  puppetFinish = false;
+  return ret;
+  }
+
+void Npc::finishOff() {
+  if(isDead())
+    return;
+  hnpc->attribute[ATR_HITPOINTS] = 0;
+  checkHealth(true,false);
+  }
+
+void Npc::setPuppetUnconscious(bool on) {
+  if(!puppet || isDead())
+    return;
+  if(on && !isUnconscious()) {
+    onNoHealth(false,HS_NoSound);
+    } else
+  if(!on && isUnconscious()) {
+    clearState(true);
+    }
+  }
+
+/// The mod moves the character, so the speed is taken from the movement and the animation follows it
+void Npc::tickPuppet(uint64_t dt) {
+  // perceptions can still push orders, nobody executes them. Not the ones of a talk that a player has started:
+  // the mod is about to give the character back to the game, and the talk is in the queue.
+  if(!puppetInteract) {
+    aiQueue.clear();
+    aiQueueOverlay.clear();
+    }
+
+  const auto  pos = position();
+  const float dx  = pos.x-puppetPrev.x;
+  const float dz  = pos.z-puppetPrev.z;
+  puppetPrev = pos;
+
+  const float speed = dt>0 ? std::sqrt(dx*dx+dz*dz)*1000.f/float(dt) : 0.f;
+  puppetSpeed = puppetSpeed*0.8f + speed*0.2f;
+  if(isDead() || isUnconscious())
+    return;
+
+  // the owner tells what to play, the movement is only for the characters that he has not told about
+  if(puppetRemoteAnim)
+    return;
+
+  if(puppetSpeed>40.f) {
+    setWalkMode(puppetSpeed>260.f ? WalkBit::WM_Run : WalkBit::WM_Walk);
+    setAnim(AnimationSolver::Move);
+    } else {
+    setAnim(AnimationSolver::Idle);
+    }
+  }
+
 void Npc::tickAnimationTags() {
   Animation::EvCount ev;
   const bool hasEvents = visual.processEvents(owner,lastEventTime,ev);
@@ -2346,6 +2597,11 @@ void Npc::tick(uint64_t dt) {
 
   if(!visual.pose().hasAnim())
     setAnim(AnimationSolver::Idle);
+
+  if(puppet) {
+    tickPuppet(dt);
+    return;
+    }
 
   if(isDive()) {
     uint32_t gl = guild();
@@ -3836,6 +4092,11 @@ bool Npc::finishingMove() {
     return false;
 
   if(doAttack(Anim::AttackFinish,BS_HIT)) {
+    if(currentTarget->isPuppet()) {
+      // the game of the owner finishes it off, see Npc::takePuppetFinish
+      currentTarget->puppetFinish = true;
+      return true;
+      }
     currentTarget->hnpc->attribute[ATR_HITPOINTS] = 0;
     currentTarget->checkHealth(true,false);
     owner.sendPassivePerc(*this,*this,*currentTarget,PERC_ASSESSMURDER);
@@ -4183,6 +4444,8 @@ void Npc::setPerceptionDisable(PercType t) {
 void Npc::startDialog(Npc& pl) {
   if(pl.isDown() || pl.isInAir() || isPlayer())
     return;
+  if(puppet)
+    puppetInteract = true;
   if(perceptionProcess(pl,nullptr,0,PERC_ASSESSTALK))
     setOther(&pl);
   }
