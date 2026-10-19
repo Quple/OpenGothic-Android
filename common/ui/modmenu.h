@@ -14,6 +14,8 @@ class ModMenu : public Tempest::Widget {
     explicit ModMenu(Tempest::TextureAtlas& atlas);
 
     bool isActive() const { return active; }
+    /// A field of text has the focus: the touch screen shows its keyboard
+    bool wantsText() const { return active && backend.wantsText(); }
     void open();
     void close();
     void toggle();

@@ -107,6 +107,15 @@ JSValue close(JSContext* ctx, JSValueConst, int, JSValueConst*) {
   return JS_UNDEFINED;
   }
 
+/// net.localAddresses(): the addresses of this computer in its networks, to tell another player where to join
+JSValue localAddresses(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  JSValue  arr = JS_NewArray(ctx);
+  uint32_t n   = 0;
+  for(auto& a:net::Hub::localAddresses())
+    JS_SetPropertyUint32(ctx,arr,n++,JS_NewString(ctx,a.c_str()));
+  return arr;
+  }
+
 JSValue address(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   if(argc<1)
     return JS_UNDEFINED;
@@ -149,6 +158,7 @@ void api::installNet(JSContext* ctx) {
   js::fn(ctx,obj,"disconnect",disconnect,1);
   js::fn(ctx,obj,"close",     close,0);
   js::fn(ctx,obj,"address",   address,1);
+  js::fn(ctx,obj,"localAddresses",localAddresses,0);
   defineGetter(ctx,obj,"listening",0);
   defineGetter(ctx,obj,"port",     1);
   defineGetter(ctx,obj,"peers",    2);

@@ -23,6 +23,7 @@ void installWorld (JSContext* ctx);   // world
 void installQuests(JSContext* ctx);   // quests
 void installScreen(JSContext* ctx);   // screen
 void installInput (JSContext* ctx);   // input
+void installUi    (JSContext* ctx);   // ui, the tabs of the menu of the mods, see game_ui.cpp
 
 // --- characters
 constexpr uint32_t PlayerId = 0xFFFFFFFEu;

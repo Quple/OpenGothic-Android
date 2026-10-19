@@ -87,6 +87,7 @@ class Controller {
     void  cancel();
     void  inventoryLists(bool two) { controls.inventoryLists(two); }
     void  gui(float scale) { controls.gui(scale); }
+    void  keyboard(bool on) { controls.showKeyboard(on); }
 
     /// Pointer input: touches on Android, the mouse on desktop builds.
     void  pointerDown(int id, float x, float y);

@@ -21,7 +21,17 @@ The mod `mods/coop` lets friends play one world together. It is a mod like any o
 | `coop name <name>` | your name (it stays) |
 | `coop avatar [instance]` | the instance that the other players look like in your game (by default their own character) |
 
-On Android the commands are typed in the console of the menu of the mods (the button in the settings of the touch UI).
+## On a phone
+
+The mod is a part of the program, there is nothing to install. Open the menu of the mods (the button **Mods** in the settings of the touch UI, F10 on a computer), the first tab is **Co-op**:
+
+1. Both players start a new game.
+2. The first one presses **Host**. The tab shows the address of the device, for example `192.168.0.12:7777`.
+3. The other one types the address into the field **Join a game** (the keyboard of the screen comes by itself) and presses **Join**. The games that were joined are offered again.
+
+The devices have to be in the same network (Wi-Fi), a hotspot of one of them is enough. The host waits on all the addresses of the device (0.0.0.0). On Windows the firewall asks once whether the game may use the network: allow it for private networks. Over the Internet the router of the host has to forward the port 7777 (TCP), or use a VPN with a virtual network (Radmin VPN, ZeroTier, Tailscale).
+
+The commands of the console do the same: `coop host`, `coop join <address>`.
 
 ## What is shared
 
@@ -41,6 +51,7 @@ Items on the ground, chests, doors, dialogs and quests are of each game alone; t
 ## How it works
 
 - `lib/protocol.js` - the messages (JSON, one line each). Every message that comes is checked; a bad one is dropped.
+- `lib/panel.js` - the tab **Co-op** of the menu of the mods, drawn with `ui` (see docs/MODS.md).
 - `lib/coop.js` - the session: the host accepts the guests, tells them who is in the game and relays the states of the players; a guest sends its own state 20 times a second.
 - `lib/visual.js` - the animation and the weapon: they are sent when they change, and the time of an animation again every 1.5 s, so the games do not drift apart.
 - `lib/npcsync.js` - the host looks at the characters near the players 10 times a second (`npcs.snapshot`) and sends the ones that have changed; a guest takes them as puppets (`npcs.byId`, `setPuppet`) and moves them smoothly.

@@ -49,6 +49,10 @@ class Hub final {
     std::vector<uint32_t> peers() const;
     std::string address(uint32_t peer) const;
 
+    /// The addresses of this computer in its networks (not the loopback), the first one is the one that reaches the others:
+    /// the address that another player types to join a game made here
+    static std::vector<std::string> localAddresses();
+
   private:
 #ifdef _WIN32
     using Socket = uintptr_t;

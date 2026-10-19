@@ -149,6 +149,8 @@ class Controls {
 
     Mode  mode() const { return current; }
     bool  typing() const { return keyboard; }
+    /// The keyboard of the screen, for a field of text that has the focus
+    void  showKeyboard(bool on);
     bool  settingsVisible() const { return settingsOpen; }
     bool  movementAvailable() const { return availableMovement; }
     bool  held(Key key) const { return refs[size_t(key)]>0; }

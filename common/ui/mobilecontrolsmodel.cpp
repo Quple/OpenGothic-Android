@@ -221,10 +221,10 @@ void Controls::buildSettings(const Anchor& a) {
   }
 
 void Controls::buildKeyboard(const Anchor& a) {
-  static const char* rows[] = {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"};
+  static const char* rows[] = {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm", "._-:/"};
   const float kw = std::min((width-2*a.l)/11.f,72.f*scale);
   const float kh = 52.f*scale;
-  float       y  = a.b-4*kh-10*scale;
+  float       y  = a.b-5*kh-10*scale;
   for(const char* row:rows) {
     const size_t n = std::string(row).size();
     float        x = (width-float(n)*kw)/2;
@@ -470,6 +470,14 @@ void Controls::cancelFinger(Finger& f) {
     joyActive = false;
     }
   f.blocked = true;
+  }
+
+void Controls::showKeyboard(bool on) {
+  if(keyboard==on)
+    return;
+  cancel();
+  keyboard = on;
+  rebuild();
   }
 
 void Controls::activate(Button button) {

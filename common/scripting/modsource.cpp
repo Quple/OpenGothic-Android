@@ -3,6 +3,7 @@
 
 #include <cctype>
 #include <cstring>
+#include <map>
 
 #include <miniz.h>
 
@@ -114,6 +115,33 @@ class ZipSource final : public ModSource {
     std::string prefix;
   };
 
+class MemorySource final : public ModSource {
+  public:
+    MemorySource(const BuiltinFile* files, size_t count) {
+      for(size_t i=0; i<count; ++i)
+        data[files[i].path].assign(reinterpret_cast<const char*>(files[i].data),files[i].size);
+      }
+
+    bool read(std::string_view path, std::string& out) const override {
+      std::string rel;
+      if(!normalizePath(path,rel))
+        return false;
+      auto it = data.find(rel);
+      if(it==data.end())
+        return false;
+      out = it->second;
+      return true;
+      }
+
+    bool exists(std::string_view path) const override {
+      std::string rel;
+      return normalizePath(path,rel) && data.find(rel)!=data.end();
+      }
+
+  private:
+    std::map<std::string,std::string> data;
+  };
+
 bool validId(const std::string& id) {
   if(id.empty() || id.size()>64)
     return false;
@@ -125,6 +153,10 @@ bool validId(const std::string& id) {
   }
 
 }
+
+std::shared_ptr<ModSource> ModSource::memory(const BuiltinFile* files, size_t count) {
+  return std::make_shared<MemorySource>(files,count);
+  }
 
 std::shared_ptr<ModSource> ModSource::open(const fs::path& path) {
   std::error_code ec;

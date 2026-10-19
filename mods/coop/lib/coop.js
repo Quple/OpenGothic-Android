@@ -79,7 +79,10 @@ function createCoop(env) {
         return [...players.values()].map(p => ({ id: p.id, name: p.name, instance: p.instance }));
     }
 
+    let lastMessage = "";   // the last thing that the player was told, for the menu
+
     function say(text) {
+        lastMessage = text;
         env.print(text);
         log("info", text);
     }
@@ -105,6 +108,7 @@ function createCoop(env) {
         hostPeer = net.connect(address, port);
         mode = "client";
         connected = false;
+        env.remember?.(address, port);
         say(`Co-op: connecting to ${address}:${port}`);
     }
 
@@ -417,8 +421,23 @@ function createCoop(env) {
         return lines.join("\n");
     }
 
+    /// The state for the menu of the game, see lib/panel.js
+    function info() {
+        return {
+            mode, connected, name: name(), message: lastMessage,
+            port: net.listening ? net.port : 0,
+            addresses: mode === "host" ? net.localAddresses() : [],
+            players: [...players.values()].map(p => ({ name: p.name, instance: p.instance, world: p.state ? p.state.w : "" })),
+            puppets: clientSync.count,
+            mismatch: clientSync.mismatch,
+            recent: env.recent?.() ?? [],
+        };
+    }
+
     return {
-        host, join, leave, status, chat, tick,
+        host, join, leave, status, chat, tick, info,
+        /// a line for the player, on the screen and in the menu
+        notify: say,
         setName(n) { myName = String(n).slice(0, 24); },
         onConnect, onMessage, onDisconnect, onError, onWorldChange,
         get mode() { return mode; },

@@ -989,6 +989,15 @@ uint64_t MainWindow::tick() {
   Scripting::game::tick();
   modMenu.refresh();
 #ifdef OPENGOTHIC_TOUCH_UI
+  {
+    // a field of text of the menu of the mods gets the keyboard of the screen when it gets the focus
+    static bool typing = false;
+    const bool  wants  = modMenu.wantsText();
+    if(wants!=typing) {
+      typing = wants;
+      androidControls.keyboard(wants);
+      }
+  }
   updateMobileControls();
 #endif
   auto time = Application::tickCount();

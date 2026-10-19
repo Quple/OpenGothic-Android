@@ -93,7 +93,10 @@ std::string gameMod(const std::string& role, int port) {
     if (ROLE === "client") { game.player.x = 5000; game.player.name = "Guest"; }
 
     let clock = 0;
+    let recentList = [];
     const env = {
+      recent: () => recentList,
+      remember: (a, p) => { recentList.unshift(a + ":" + p); },
       net, player: game.player, npcs: game.npcs,
       worldName: () => game.worldName || null,
       now: () => clock,
@@ -106,6 +109,12 @@ std::string gameMod(const std::string& role, int port) {
     const coop = createCoop(env);
     globalThis.game = game;
     globalThis.coop = coop;
+
+    // the tab of the menu, drawn on a pretended ui
+    const { FakeUi } = require("./fakeui.js");
+    const { createPanel } = require("./lib/panel.js");
+    globalThis.fakeUi = new FakeUi();
+    globalThis.panel = createPanel(globalThis.fakeUi, coop, {});
 
     events.on("net:connect", (e) => coop.onConnect(e));
     events.on("net:message", (e) => coop.onMessage(e));
@@ -124,6 +133,7 @@ void install(const fs::path& root, const fs::path& repo, const std::string& id, 
   fs::create_directories(dir/"lib");
   fs::copy(repo/"mods"/"coop"/"lib",dir/"lib",fs::copy_options::recursive|fs::copy_options::overwrite_existing);
   fs::copy_file(repo/"tests"/"mods"/"fakegame.js",dir/"fakegame.js",fs::copy_options::overwrite_existing);
+  fs::copy_file(repo/"tests"/"mods"/"fakeui.js",dir/"fakeui.js",fs::copy_options::overwrite_existing);
   }
 
 }
@@ -399,6 +409,38 @@ int main(int argc, char** argv) {
   CHECK(logged(host,"Cheater has joined"));
   CHECK(num(host,"hostgame","coop.players.size")==1);   // only the one that has said hello right
   CHECK(num(host,"hostgame","game.byUid.get(1).health")==100);   // and the hit of a stranger did nothing
+
+  // the tab of the menu of the mods: a game is hosted and joined with the buttons (this is how it is done on a phone)
+  eval(host,"hostgame","coop.leave(); 0");
+  eval(host,"clientgame","if (coop.mode !== 'off') coop.leave(); 0");
+  eval(host,"hostgame","fakeUi.typed['Port##host'] = '0'; fakeUi.press('Host'); panel.draw(); 0");
+  CHECK(eval(host,"hostgame","coop.mode")=="host");
+  eval(host,"hostgame","fakeUi.clear(); panel.draw(); 0");
+  CHECK(yes(host,"hostgame","fakeUi.has('Hosting on port')"));
+  CHECK(yes(host,"hostgame","fakeUi.has('The others join with') || fakeUi.has('not known')"));
+  CHECK(yes(host,"hostgame","fakeUi.has('[Stop the game]')"));
+  const int port3 = int(num(host,"hostgame","net.port"));
+
+  eval(host,"clientgame","fakeUi.clear(); panel.draw(); 0");
+  CHECK(yes(host,"clientgame","fakeUi.has('Host a game') && fakeUi.has('Join a game') && fakeUi.has('[Join]')"));
+  eval(host,"clientgame","fakeUi.typed['##coopaddr'] = '127.0.0.1'; fakeUi.typed['##coopport'] = '"+std::to_string(port3)+"'; fakeUi.press('Join'); panel.draw(); 0");
+  CHECK(eval(host,"clientgame","coop.mode")=="client");
+  frames(host,120);
+  eval(host,"clientgame","fakeUi.clear(); panel.draw(); 0");
+  CHECK(yes(host,"clientgame","fakeUi.has('You are in the game of the host')"));
+  CHECK(yes(host,"clientgame","fakeUi.has('[Leave]')"));
+  eval(host,"hostgame","fakeUi.clear(); panel.draw(); 0");
+  CHECK(yes(host,"hostgame","fakeUi.has('(you)')"));
+
+  // leave with the button: the game is offered again, and a bad address is told to the player
+  eval(host,"clientgame","fakeUi.press('Leave'); panel.draw(); 0");
+  CHECK(eval(host,"clientgame","coop.mode")=="off");
+  eval(host,"clientgame","fakeUi.clear(); panel.draw(); 0");
+  CHECK(yes(host,"clientgame","fakeUi.has('127.0.0.1:"+std::to_string(port3)+"')"));
+  eval(host,"clientgame","fakeUi.typed['##coopport'] = '0'; fakeUi.typed['##coopaddr'] = 'x'; fakeUi.press('Join'); panel.draw(); 0");
+  eval(host,"clientgame","fakeUi.clear(); panel.draw(); 0");
+  CHECK(eval(host,"clientgame","coop.mode")=="off");
+  CHECK(yes(host,"clientgame","coop.info().message.length > 0"));
 
   host.stopAll();
   std::printf("PASS\n");

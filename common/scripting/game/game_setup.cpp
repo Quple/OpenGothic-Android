@@ -57,8 +57,10 @@ void game::setup() {
     installQuests(ctx);
     installScreen(ctx);
     installInput(ctx);
+    installUi(ctx);
     };
 
+  registerBuiltinMods(host);
   host.scan();
   host.startEnabled();
   }

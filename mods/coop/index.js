@@ -8,6 +8,7 @@
 "use strict";
 
 const { createCoop } = require("./lib/coop.js");
+const { createPanel } = require("./lib/panel.js");
 
 const DefaultPort = 7777;
 
@@ -24,6 +25,13 @@ const env = {
     takeShots: () => world.takeShots(),
     shoot: (...shot) => world.shoot(...shot),
     log: (level, text) => (console[level] ?? console.log)(text),
+    // the games that the player has joined, for the menu
+    recent: () => storage.get("recent", []),
+    remember: (address, port) => {
+        const entry = `${address}:${port}`;
+        const list = [entry, ...storage.get("recent", []).filter(e => e !== entry)].slice(0, 5);
+        storage.set("recent", list);
+    },
     // the character of another player looks like his own, unless the instance is not known here
     avatarInstance: (instance) => storage.get("avatar", null) ?? instance,
 };
@@ -31,6 +39,10 @@ const env = {
 const coop = createCoop(env);
 const saved = storage.get("name", null);
 if (saved) coop.setName(saved);
+
+// the tab in the menu of the mods: on a phone this is how a game is started
+if (typeof ui !== "undefined")
+    ui.tab("Co-op", createPanel(ui, coop, { saveName: (n) => storage.set("name", n) }).draw);
 
 events.on("net:connect", (e) => coop.onConnect(e));
 events.on("net:message", (e) => coop.onMessage(e));

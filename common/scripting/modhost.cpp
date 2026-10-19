@@ -157,9 +157,10 @@ void ModHost::scan() {
     }
   std::sort(found.begin(),found.end());
 
-  // mods that are gone
+  // mods that are gone, the mods of the program stay
   for(size_t i=0; i<list.size(); ) {
-    const bool gone = std::find(found.begin(),found.end(),list[i]->path)==found.end();
+    const bool gone = list[i]->path.string().rfind("builtin:",0)!=0 &&
+                      std::find(found.begin(),found.end(),list[i]->path)==found.end();
     if(!gone) {
       ++i;
       continue;
@@ -191,9 +192,20 @@ void ModHost::scan() {
       log(LogLine::Warn,"mods",toUtf8(path.filename())+": "+error);
       continue;
       }
-    if(find(manifest.id)!=nullptr) {
-      log(LogLine::Warn,"mods",toUtf8(path.filename())+": the id '"+manifest.id+"' is used by another mod");
-      continue;
+    if(auto* other = find(manifest.id)) {
+      if(other->path.string().rfind("builtin:",0)==0) {
+        // a newer one is in the folder: it replaces the mod of the program
+        stop(*other);
+        for(size_t i=0; i<list.size(); ++i) {
+          if(list[i].get()==other) {
+            list.erase(list.begin()+std::ptrdiff_t(i));
+            break;
+            }
+          }
+        } else {
+        log(LogLine::Warn,"mods",toUtf8(path.filename())+": the id '"+manifest.id+"' is used by another mod");
+        continue;
+        }
       }
 
     auto mod = std::make_unique<Mod>();
@@ -204,6 +216,37 @@ void ModHost::scan() {
     mod->enabled  = st!=enabledState.end() ? st->second : enabledByDefault;
     list.push_back(std::move(mod));
     }
+
+  // a mod of the program that a file of the folders does not replace
+  for(auto& b:builtins) {
+    if(find(b.id)!=nullptr)
+      continue;   // already known, or replaced by a folder
+
+    std::string json, error;
+    Manifest manifest;
+    manifest.id = b.id;
+    if(!b.source->read("manifest.json",json) || !Manifest::parse(json,manifest,error)) {
+      log(LogLine::Warn,"mods","builtin "+b.id+": "+error);
+      continue;
+      }
+    manifest.id = b.id;
+
+    auto mod = std::make_unique<Mod>();
+    mod->manifest = manifest;
+    mod->path     = fs::path("builtin:"+b.id);
+    mod->source   = b.source;
+    // a mod of the program is on unless the player has turned it off: it waits quietly until it is used
+    auto st       = enabledState.find(manifest.id);
+    mod->enabled  = st!=enabledState.end() ? st->second : true;
+    list.push_back(std::move(mod));
+    }
+  }
+
+void ModHost::addBuiltin(std::string_view id, const BuiltinFile* files, size_t count) {
+  Builtin b;
+  b.id     = std::string(id);
+  b.source = ModSource::memory(files,count);
+  builtins.push_back(std::move(b));
   }
 
 void ModHost::setEnabled(Mod& mod, bool on) {
@@ -391,6 +434,21 @@ void ModHost::loadStorage(Mod& mod) {
   JS_FreeValue(mod.ctx,JS_GetException(mod.ctx));
   }
 
+void ModHost::drawTab(Mod& mod, size_t index) {
+  if(index>=mod.tabs.size() || !mod.isRunning() || mod.tabs[index].failed)
+    return;
+  JSValue fn    = JS_DupValue(mod.ctx,mod.tabs[index].fn);
+  const auto title = mod.tabs[index].title;
+  drawing = true;
+  JSValue r = invoke(mod,fn,JS_UNDEFINED,0,nullptr,"tab '"+title+"'");
+  drawing = false;
+  // an error is told once, not every frame
+  if(JS_IsException(r) && index<mod.tabs.size() && mod.tabs[index].title==title)
+    mod.tabs[index].failed = true;
+  JS_FreeValue(mod.ctx,r);
+  JS_FreeValue(mod.ctx,fn);
+  }
+
 void ModHost::saveStorage(Mod& mod) {
   mod.storageDirty = false;
   mod.storageSaved = now;
@@ -431,6 +489,10 @@ void ModHost::release(Mod& mod) {
   for(auto& c:mod.commands)
     JS_FreeValue(ctx,c.second.fn);
   mod.commands.clear();
+
+  for(auto& t:mod.tabs)
+    JS_FreeValue(ctx,t.fn);
+  mod.tabs.clear();
 
   for(auto& m:mod.modules)
     JS_FreeValue(ctx,m.second);

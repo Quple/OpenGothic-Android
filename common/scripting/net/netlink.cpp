@@ -7,6 +7,8 @@
 #  include <winsock2.h>
 #  include <ws2tcpip.h>
 #else
+#  include <ifaddrs.h>
+#  include <net/if.h>
 #  include <arpa/inet.h>
 #  include <errno.h>
 #  include <fcntl.h>
@@ -118,6 +120,71 @@ int connectState(Sock s, int& error) {
 
 }
 
+
+std::vector<std::string> Hub::localAddresses() {
+  std::vector<std::string> ret;
+  auto add = [&](const std::string& a) {
+    if(a.empty() || a.rfind("127.",0)==0 || a=="0.0.0.0" || a.rfind("169.254.",0)==0)
+      return;
+    if(std::find(ret.begin(),ret.end(),a)==ret.end())
+      ret.push_back(a);
+    };
+  if(!ensureStarted())
+    return ret;
+
+  // the address that the system would use to reach the Internet: nothing is sent, the socket only chooses the interface
+  {
+    Sock s = ::socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);
+    if(s!=Invalid) {
+      sockaddr_in to = {};
+      to.sin_family = AF_INET;
+      to.sin_port   = htons(53);
+      inet_pton(AF_INET,"8.8.8.8",&to.sin_addr);
+      if(::connect(s,reinterpret_cast<sockaddr*>(&to),sizeof(to))==0) {
+        sockaddr_in me  = {};
+        socklen_t   len = sizeof(me);
+        if(getsockname(s,reinterpret_cast<sockaddr*>(&me),&len)==0) {
+          char buf[64] = {};
+          inet_ntop(AF_INET,&me.sin_addr,buf,sizeof(buf));
+          add(buf);
+          }
+        }
+      closeSock(s);
+      }
+  }
+
+#ifdef _WIN32
+  char host[256] = {};
+  if(gethostname(host,sizeof(host))==0) {
+    addrinfo hints = {};
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* res = nullptr;
+    if(getaddrinfo(host,nullptr,&hints,&res)==0) {
+      for(addrinfo* a=res; a!=nullptr; a=a->ai_next) {
+        char buf[64] = {};
+        auto* in = reinterpret_cast<sockaddr_in*>(a->ai_addr);
+        inet_ntop(AF_INET,&in->sin_addr,buf,sizeof(buf));
+        add(buf);
+        }
+      freeaddrinfo(res);
+      }
+    }
+#else
+  ifaddrs* list = nullptr;
+  if(getifaddrs(&list)==0) {
+    for(ifaddrs* i=list; i!=nullptr; i=i->ifa_next) {
+      if(i->ifa_addr==nullptr || i->ifa_addr->sa_family!=AF_INET || !(i->ifa_flags&IFF_UP) || (i->ifa_flags&IFF_LOOPBACK))
+        continue;
+      char buf[64] = {};
+      inet_ntop(AF_INET,&reinterpret_cast<sockaddr_in*>(i->ifa_addr)->sin_addr,buf,sizeof(buf));
+      add(buf);
+      }
+    freeifaddrs(list);
+    }
+#endif
+  return ret;
+  }
 
 Hub::Hub() {
   ensureStarted();

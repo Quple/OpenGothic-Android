@@ -6,6 +6,7 @@
 
 struct ImGuiInputTextCallbackData;
 
+
 /// The window of the mods drawn with ImGui. One file draws one tab: modpanel_mods.cpp, modpanel_console.cpp, modpanel_about.cpp.
 class ModPanel final {
   public:

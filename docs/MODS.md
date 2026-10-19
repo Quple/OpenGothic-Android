@@ -103,7 +103,7 @@ A puppet can play what the owner of the character plays: `setAnimation(layers)` 
 ### `net`
 Connections with the games of other players (TCP). Nothing blocks, the answers come as events. A message is a text: a string is sent as it is, other values as JSON. Messages are whole (a big one, up to 4 MB, is not cut in pieces) and keep their order. Every mod has connections of its own, they are closed when the mod stops. On Android the game needs the network, the permission is in the manifest.
 
-`net.listen(port)` → the port (0 takes any free one), throws if the port is busy. `net.connect(host, port)` → the number of the peer, the answer is `net:connect` or `net:error`. `net.send(peer, data)` → `false` if there is no such peer, `net.broadcast(data, exceptPeer)`, `net.disconnect(peer)`, `net.close()`, `net.address(peer)`. `net.listening`, `net.port`, `net.peers` (numbers of the connected peers).
+`net.listen(port)` → the port (0 takes any free one), throws if the port is busy. `net.connect(host, port)` → the number of the peer, the answer is `net:connect` or `net:error`. `net.send(peer, data)` → `false` if there is no such peer, `net.broadcast(data, exceptPeer)`, `net.disconnect(peer)`, `net.close()`, `net.address(peer)`. `net.listening`, `net.port`, `net.peers` (numbers of the connected peers), `net.localAddresses()` (the addresses of this computer in its networks, the first is the one that reaches the others: what another player types to join a game made here). `net.listen` waits on all the addresses (0.0.0.0), so another device in the same network can join.
 
 | Event | Argument |
 |---|---|
@@ -116,6 +116,23 @@ A mod can talk to anybody that it connects to, so it should not take the command
 
 ### `world`
 `world.name()`, `world.time()` → `{day, hour, minute}`, `world.setTime(hour, minute)`, `world.waypoint(name)` → `{x, y, z}` or `null`. `world.takeShots()` → the arrows and bolts that were shot since the last call (the first call starts to watch): `[[item, x, y, z, vx, vy, vz, shooter], ...]`, where `shooter` is the number of the character, `0xFFFFFFFE` for the player. `world.shoot(item, x, y, z, vx, vy, vz)` makes an arrow or a bolt fly as it was shot in another game: it makes no damage here, the one who has shot it takes care of that (spells are not shot this way).
+
+### `ui`
+Tabs in the menu of the mods (F10, on a phone the Mods button of the settings), drawn with Dear ImGui. `ui.tab(title, fn)` makes a tab, the same title replaces it (`ui.removeTab(title)`). `fn` is called every frame while the tab is open, and the widgets that it calls are drawn at once: they are functions, a button returns `true` in the frame in which it is pressed and a field returns what is in it, so **the mod keeps the state itself**:
+
+```js
+let address = "";
+ui.tab("Hello", () => {
+    ui.text("Hello");
+    address = ui.inputText("Address", address);
+    if (ui.button("Join", -1, ui.fontSize() * 2.3)) join(address);
+});
+```
+
+Text: `text(...)`, `textWrapped`, `textDisabled`, `textColored(color, ...)`, `bullet`. Widgets: `button(label, width, height)` (a negative width goes to the right edge), `checkbox(label, value)` → the new value, `inputText(label, value, flags)` → the text (flags: `"decimal"`, `"password"`, `"enter"`, `"readonly"`), `sliderInt(label, value, min, max)`, `sliderFloat(...)`, `combo(label, index, items)` → the index, `selectable(label, selected)`. Layout: `sameLine`, `separator`, `spacing`, `indent`, `unindent`, `setNextWidth(width)` (negative: from the right edge), `fontSize()`, `width()`, `textWidth(text)`, `anyActive()` (a field has the focus). Groups with a function, so they always end: `child(id, width, height, fn)` (scrolls), `withId(id, fn)`, `withColor(color, fn)`, `withScale(factor, fn)`. Colors are `[r, g, b, a]` of 0 to 1 or `"#rrggbb"`. A label that begins with `##` is not shown, and two widgets with the same label need `withId`. The keyboard of the screen is shown by itself on a phone when a field has the focus. Outside of a tab the widgets do nothing; a tab that throws is not drawn again until the mod is reset.
+
+### Mods that come with the program
+`mods/coop` is a part of the program (`cmake/embedmods.cmake` puts the files of the folders that it is told about into the program): it is found on every platform, also on a phone, where there is no folder to put it in. A mod of the same id in the folder of the mods or in a zip file replaces it, so a newer version can be tried without building the program.
 
 ### `quests`
 The journal. `quests.create(id, title, section)` (section 0 mission, 1 note), `quests.addEntry(id, text)`, `quests.setStatus(id, status)` with `quests.status.RUNNING | SUCCESS | FAILED | OBSOLETE`.
