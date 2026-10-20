@@ -381,6 +381,25 @@ JSValue addItem(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) 
   return JS_TRUE;
   }
 
+/// npc.aiVar(index) / npc.setAiVar(index, value): the AIVAR of the script (AIV_PARTYMEMBER is 15)
+JSValue aiVar(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) {
+  Npc* npc = self(ctx,obj);
+  int32_t i = -1;
+  if(npc==nullptr || argc<1 || JS_ToInt32(ctx,&i,argv[0])!=0 || i<0 || i>=int32_t(zenkit::INpc::aivar_count))
+    return JS_UNDEFINED;
+  return JS_NewInt32(ctx,npc->handle().aivar[i]);
+  }
+
+JSValue setAiVar(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) {
+  Npc* npc = self(ctx,obj);
+  int32_t i = -1, v = 0;
+  if(npc==nullptr || argc<2 || JS_ToInt32(ctx,&i,argv[0])!=0 || JS_ToInt32(ctx,&v,argv[1])!=0 ||
+     i<0 || i>=int32_t(zenkit::INpc::aivar_count))
+    return JS_FALSE;
+  npc->handle().aivar[i] = v;
+  return JS_TRUE;
+  }
+
 /// npc.openTrade(trader): the trade window of the player with a character, no dialog is needed
 JSValue openTrade(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) {
   Npc* npc    = self(ctx,obj);
@@ -538,6 +557,8 @@ void game::installNpc(JSContext* ctx) {
   js::fn(ctx,proto,"addItem",   addItem,2);
   js::fn(ctx,proto,"removeItem",removeItem,2);
   js::fn(ctx,proto,"openTrade", openTrade,1);
+  js::fn(ctx,proto,"aiVar",     aiVar,1);
+  js::fn(ctx,proto,"setAiVar",  setAiVar,2);
   js::fn(ctx,proto,"itemCount", itemCount,1);
   js::fn(ctx,proto,"hasItem",   hasItem,1);
 

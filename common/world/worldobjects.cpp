@@ -1143,6 +1143,17 @@ static bool checkFlag(Interactive& i,WorldObjects::SearchFlg f){
   return true;
   }
 
+/// CoM (HIDEFOCUSFORPARTYMEMBERS): the companions (AIV_PARTYMEMBER=15) are not in the focus of a player with a weapon
+template<class T>
+static bool checkParty(T&, const Npc&, World&) { return true; }
+
+static bool checkParty(Npc& n, const Npc& pl, World& w) {
+  constexpr size_t AIV_PARTYMEMBER = 15;
+  if(pl.weaponState()==WeaponState::NoWeapon || n.handle().aivar[AIV_PARTYMEMBER]==0)
+    return true;
+  return !w.script().dmaHidesPartyFocus();
+  }
+
 template<class T>
 static bool checkTargetType(T&, TargetType) { return true; }
 
@@ -1203,6 +1214,8 @@ bool WorldObjects::testObj(T &src, const Npc &pl, const WorldObjects::SearchOpt 
     return false;
 
   if(!checkFlag(npc,opt.flags))
+    return false;
+  if(!checkParty(npc,pl,owner))
     return false;
   if(!checkTargetType(npc,opt.collectType))
     return false;

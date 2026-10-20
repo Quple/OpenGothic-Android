@@ -9,6 +9,8 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
     let previousGod = null;
     let lastShot = null;
     let timeCheck = null;
+    let partyNpc = null;
+    let partyStrength = false;
 
     function call(name, args, context) {
         const result = debug.call(name, args, context);
@@ -221,6 +223,34 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                         "The important item must not be sold (the hero shakes his head), the apples can.");
                     break;
                 }
+                case "party": {
+                    // HIDEFOCUSFORPARTYMEMBERS of CoM: a companion (AIVAR[15]) is not in the focus of a player with a weapon
+                    if (args[1] === "off") {
+                        if (!partyNpc || !partyNpc.valid) throw new Error("First run comcheck party.");
+                        partyNpc.setAiVar(15, 0);
+                        console.log("The check NPC is a normal character again: with the weapon in the hand he can be targeted.");
+                        break;
+                    }
+                    const name = "BAU_719_BAKER";
+                    id(name);
+                    const p = player.position;
+                    const a = player.rotation * Math.PI / 180;
+                    if (partyNpc && partyNpc.valid) partyNpc.remove();
+                    partyNpc = npcs.spawn(name, p.x + Math.cos(a) * 300, p.y, p.z + Math.sin(a) * 300, player.rotation + 180);
+                    if (!partyNpc || !partyNpc.valid) throw new Error("Cannot spawn the check NPC. Stand on open, level ground.");
+                    if (!debug.parkNpc(partyNpc)) throw new Error("Cannot disable the NPC's routine.");
+                    partyNpc.setAiVar(15, 1);
+                    // a weapon and the strength to use it
+                    const sword = "ITMW_1H_MIL_SWORD";
+                    if (!player.hasItem(sword)) player.addItem(sword, 1);
+                    call("EQUIPITEM", [player, id(sword)]);
+                    if (!partyStrength) {
+                        call("NPC_CHANGEATTRIBUTE", [player, debug.symbol("ATR_STRENGTH").value, 100]);
+                        partyStrength = true;
+                    }
+                    console.log("You got the sword ITMW_1H_MIL_SWORD (equipped) and +100 strength. The baker with AIVAR[15]=1 stands in front of you. Close F10. Without a weapon he is in the focus (his name). Draw a weapon: the name must disappear and he must not be targeted. comcheck party off makes him a normal character.");
+                    break;
+                }
                 case "inventory": {
                     // LOCKINVENTORY of CoM: with the flag the inventory closes itself right after it was opened
                     const on = args[1] !== "off";
@@ -259,7 +289,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     smokersScene();
                     break;
                 default:
-                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
+                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
             }
