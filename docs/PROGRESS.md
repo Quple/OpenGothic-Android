@@ -5,7 +5,7 @@ Stan z 20.10.2026. Cel: Kroniki Myrtany w pełni grywalne w OpenGothic, przy zac
 Legenda:
 
 - `[x]` zrobione
-- `[x]` + *(niepotwierdzone)* zrobione i zbudowane, czeka na ręczną próbę użytkownika
+- `[x]` + *(potwierdzone)* zrobione i zbudowane, czeka na ręczną próbę użytkownika
 - `[ ]` do zrobienia
 
 Zasada zgodności: wszystko, co dotyczy Ikarus/LeGo/CoM, działa tylko w grach, które mają warstwę Ikarus/LeGo (`GameScript::hasDma()`) albo zarejestrowany hook. Czyste G1 i G2 zachowują dawne zachowanie.
@@ -90,10 +90,11 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [ ] `OCNPC__GETNEXTENEMY_REPLACEHOOK`: celowo niewdrożone (poprawka błędu oryginalnego silnika, własny wybór wroga OpenGothic działa inaczej); do ponownej oceny, jeśli pojawią się objawy
 - [ ] `OCNPC__DROPUNCONSCIOUS_HOOK` (Q205, Q306: broń gracza po utracie przytomności); wymaga emulacji slotów rąk i `RemoveFromSlot`/`EquipWeapon`
 - [ ] `OCNPCSTATES_CHANGEROUTINE_HOOK`, odświeżanie NPC po zmianie rutyny
-- [ ] `OCAIHUMAN__PC_DIVING_HOOK` (zbieranie pod wodą)
-- [ ] `SETDIALOGUETOLDPROPERTY`, zamknięcie inwentarza i stan zakończonej rozmowy
-- [ ] `HANDLE_SETPROPERPICKLOCKSTRLEN` (długość kombinacji wytrycha zależna od talentu)
-- [ ] `SPELL_PICKLOCK_FOCUS` i `ClearKeyBuffer` (czar otwierania zamków: focus jest wdrożony, hooki nie)
+- [ ] `OCAIHUMAN__PC_DIVING_HOOK` (zbieranie pod wodą): OpenGothic już pozwala podnosić przedmioty w `BS_DIVE` (`Npc::takeItem`); sprawdzić w grze, czy hook jest potrzebny
+- [x] `SETDIALOGUETOLDPROPERTY` (`oCInfoManager::GetInformation` + `OCINFO.TOLD`): skrypt może oznaczyć dialog jako opowiedziany lub pozwolić go powtórzyć *(potwierdzone)*
+- [x] `HANDLE_SETPROPERPICKLOCKSTRLEN`: długość kombinacji wytrycha skracana przez talent i bonus (`GETPICKLOCKSTRLEN`) *(potwierdzone)*
+- [x] `SPELL_PICKLOCK_FOCUS` pokryty natywnym focusem czaru (`eventSpellFocus`), `ClearKeyBuffer` nie jest potrzebny
+- [x] Zwój czaru otwierania zamków (`SPL_PICKLOCK`) jest zużywany tylko, gdy czar otworzył zamek; przy zbyt krótkim przytrzymaniu postęp zostaje w zamku, zwój zostaje *(potwierdzone)*
 - [ ] `_FIXEQUIPBESTWEAPONS`, `TORCHLOADFIX_CHECKTORCH`
 - [ ] `_EVT_QUIVER_EQUIP`/`_EVT_QUIVER_UNEQUIP` (kołczany)
 - [ ] `CATINV_*` (kategorie ekwipunku: ok. 25 hooków)
@@ -198,7 +199,9 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] Logi nakładek animacji (`Mdl_ApplyOverlayMds`/`RemoveOverlayMds`), kolejki AI dla animacji `T_PET*`, `T_NO`, `CALL ...`
 - [x] Disasembler `tools/ikarus/disasm.py` do funkcji `GOTHIC.DAT`, których nie ma w dekompilacji
 - [x] Analizator `tools/ikarus/analyze.py` (statyczny, częściowo nieaktualny)
-- [ ] Wyjątki VM bez stosu pojawiające się między próbami: ustalić źródło
+- [x] Ostrzeżenia ZenKit "Accessing member ... without an instance set" zawierają teraz nazwę funkcji skryptu (patch w `patches/`)
+- [ ] Ustalić źródło 12 ostrzeżeń na starcie świata (`C_ITEM.HP` x4, `C_NPC.AIVAR` x8) z nowego logu
+- [ ] `ApplyHouseWallTexture: Null ptr` na starcie świata (tekstura ścian domu gracza)
 - [ ] Symbole i offset w `crash.log` (dziś tylko nazwy funkcji)
 - [ ] Przejrzeć 10-sekundowy limit oczekiwania dialogu na kolejki (arbitralny)
 
@@ -208,7 +211,7 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] `comcheck ranged [bow|crossbow|aim|shoot|stop|status|clear]`
 - [x] `comcheck scene smokers`
 - [x] `comcheck time [stop]`, `comcheck inventory [off]`
-- [x] `comcheck trader`, `comcheck party [off]`, `comcheck finish [flag]`
+- [x] `comcheck trader`, `comcheck party [off]`, `comcheck finish [flag]`, `comcheck lock [kod|off|items|talent N|bonus N]` (skrzynie, talent i bonus wytrycha, zwoje)
 - [x] API modów JS: `debug.call`, `debug.setSymbol`, `debug.parkNpc`, `debug.placeOnGround`, `debug.setInfoKnown`, `npc.openTrade`, `npc.aiVar`/`setAiVar`, `npc.flags`/`setFlags`, `npc.rangedShots`
 - [x] Spawn postaci i dodawanie przedmiotów w zakładce Debug (F10)
 - [ ] Komendy przygotowujące sceny dla kolejnych zadań (Q204, Q205, Q304, Q306, Q406, Q602) bez zapisów odbiorowych

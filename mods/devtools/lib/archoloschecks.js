@@ -224,6 +224,54 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                         "The important item must not be sold (the hero shakes his head), the apples can.");
                     break;
                 }
+                case "lock": {
+                    // locks: the code of the nearest chest, the talent and the bonus of picking locks (HANDLE_SETPROPERPICKLOCKSTRLEN)
+                    const sub = args[1];
+                    const talent = () => call("NPC_GETTALENTSKILL", [player, 5]);
+                    const bonus = () => debug.symbol("PICKLOCKBONUS").value;
+                    const expected = code => call("GETPICKLOCKSTRLEN", [code]);
+                    if (sub === "talent") {
+                        const level = Number(args[2]);
+                        if (!Number.isInteger(level) || level < 0 || level > 3) throw new Error("Usage: comcheck lock talent <0-3>");
+                        call("NPC_SETTALENTSKILL", [player, 5, level]);
+                        console.log(`Talent of picking locks: ${talent()}. A chest with a code of 8 characters needs ${expected("LRLRLRLR")} of them.`);
+                        break;
+                    }
+                    if (sub === "bonus") {
+                        const n = Number(args[2]);
+                        if (!Number.isInteger(n) || n < 0 || n > 20) throw new Error("Usage: comcheck lock bonus <0-20>");
+                        debug.setSymbol("PICKLOCKBONUS", n);
+                        console.log(`PICKLOCKBONUS=${n}. A chest with a code of 8 characters needs ${expected("LRLRLRLR")} of them (talent ${talent()}).`);
+                        break;
+                    }
+                    if (sub === "items") {
+                        player.addItem("ITKE_LOCKPICK", 10);
+                        player.addItem("ITSC_PICKLOCK", 5);
+                        player.addItem("ITRU_PICKLOCK", 1);
+                        // the spell takes the mana: with the maximum of 50 and a full bar
+                        call("NPC_CHANGEATTRIBUTE", [player, debug.symbol("ATR_MANA_MAX").value, 50]);
+                        call("NPC_CHANGEATTRIBUTE", [player, debug.symbol("ATR_MANA").value, 100]);
+                        console.log("You got 10 lockpicks (ITKE_LOCKPICK), 5 scrolls of the lock picking spell (ITSC_PICKLOCK), the rune (ITRU_PICKLOCK) and mana.");
+                        break;
+                    }
+                    if (sub === "off") {
+                        const r = debug.setLock("", "");
+                        if (!r) throw new Error("No chest nearby. Stand within a few metres of one.");
+                        console.log(`${r.tag}: the lock is off.`);
+                        break;
+                    }
+                    // comcheck lock [code]: the nearest chest gets a code and is locked again
+                    let code = args[1];
+                    if (!code) {
+                        code = "";
+                        for (let i = 0; i < 8; i++) code += Math.random() < 0.5 ? "L" : "R";
+                    }
+                    if (!/^[LRlr]+$/.test(code)) throw new Error("The code has only L and R, for example comcheck lock LRLLRLRR");
+                    const r = debug.setLock("", code.toUpperCase());
+                    if (!r) throw new Error("No chest nearby. Stand within a few metres of one.");
+                    console.log(`Chest ${r.tag}: locked, code ${r.code} (${r.code.length} characters). Talent ${talent()}, bonus ${bonus()}: the player has to enter ${expected(r.code)} of them. Close F10 and open it with a lockpick or the spell. comcheck lock items gives the items.`);
+                    break;
+                }
                 case "finish": {
                     // EV_FINISHINGMOVE_HOOK of CoM: finishing off an unconscious NPC_FLAG_IMPORTANT character.
                     // The flag 8 is NPC_FLAG_PROTECTED of the engine: the character is not hurt, so it is set after he is down.
@@ -319,7 +367,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     smokersScene();
                     break;
                 default:
-                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
+                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
             }

@@ -3538,7 +3538,8 @@ void Npc::commitSpell() {
       }
     }
 
-  if(active->isSpell()) {
+  // CoM: the scroll of the lock picking spell stays when the lock is not opened
+  if(active->isSpell() && !owner.script().dmaSpellKeepsItem(splId)) {
     size_t cnt = active->count();
     invent.delItem(active->clsId(),1,*this);
     if(cnt<=1) {
@@ -4263,6 +4264,7 @@ Npc::BeginCastResult Npc::beginCastSpell() {
     }
 
   // castLevel        = CS_Invest_0;
+  owner.script().dmaSpellBegin();
   currentSpellCast = active->clsId();
   castNextTime     = owner.tickCount();
   hnpc->aivar[88]  = 0; // HACK: clear AIV_SpellLevel

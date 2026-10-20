@@ -485,6 +485,39 @@ JSValue containers(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return result;
   }
 
+/// debug.setLock(tag, code) -> {code, cracked} | null: the container gets the code of a lock (L and R) and is locked again,
+/// an empty code takes the lock off. Without the tag it is the nearest container.
+JSValue setLock(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* w = world();
+  auto* player = Gothic::inst().player();
+  if(w==nullptr || player==nullptr)
+    return JS_NULL;
+  const std::string tag  = argc>0 && JS_IsString(argv[0]) ? js::str(ctx,argv[0]) : std::string();
+  const std::string code = argc>1 ? js::str(ctx,argv[1]) : std::string();
+  Interactive* best = nullptr;
+  float        dist = 0;
+  for(uint32_t i=0; auto* mob = w->mobsiById(i); ++i) {
+    if(!mob->isContainer())
+      continue;
+    if(!tag.empty() && !(mob->tag()==tag))
+      continue;
+    const float d = (mob->position()-player->position()).quadLength();
+    if(best==nullptr || d<dist) {
+      best = mob;
+      dist = d;
+      }
+    }
+  if(best==nullptr)
+    return JS_NULL;
+  best->setPickLockCode(code);
+  best->setAsCracked(code.empty());
+  JSValue o = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx,o,"tag",    JS_NewString(ctx,std::string(best->tag()).c_str()));
+  JS_SetPropertyStr(ctx,o,"code",   JS_NewString(ctx,std::string(best->pickLockCode()).c_str()));
+  JS_SetPropertyStr(ctx,o,"cracked",JS_NewBool(ctx,best->isCracked()));
+  return o;
+  }
+
 JSValue god(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   if(argc>0)
     Gothic::inst().setGodMode(JS_ToBool(ctx,argv[0])>0);
@@ -517,6 +550,7 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"parkNpc",   parkNpc,1);
   js::fn(ctx,dbg,"placeOnGround",placeOnGround,4);
   js::fn(ctx,dbg,"setInfoKnown",setInfoKnown,2);
+  js::fn(ctx,dbg,"setLock",   setLock,2);
   js::fn(ctx,dbg,"god",       god,1);
   js::fn(ctx,dbg,"marvin",    marvin,1);
   JS_SetPropertyStr(ctx,global,"debug",dbg);
