@@ -429,6 +429,43 @@ JSValue queues(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return arr;
   }
 
+/// debug.findNpc(name) -> ["name (distance) x y z: state ..."]: the characters of the world whose name contains the text (also those that
+/// are far from the player: a scene that has to move them somewhere)
+JSValue findNpc(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  JSValue arr = JS_NewArray(ctx);
+  auto*   w   = world();
+  auto*   pl  = Gothic::inst().player();
+  if(w==nullptr || pl==nullptr || argc<1)
+    return arr;
+  const char* q = JS_ToCString(ctx,argv[0]);
+  if(q==nullptr)
+    return arr;
+  std::string key = q;
+  JS_FreeCString(ctx,q);
+  for(auto& c:key)
+    c = char(std::tolower(static_cast<unsigned char>(c)));
+
+  uint32_t n = 0;
+  for(uint32_t i=0, c=w->npcCount(); i<c && n<20; ++i) {
+    auto* npc = w->npcById(i);
+    if(npc==nullptr)
+      continue;
+    std::string name = std::string(npc->displayName());
+    std::string low  = name;
+    for(auto& ch:low)
+      ch = char(std::tolower(static_cast<unsigned char>(ch)));
+    if(low.find(key)==std::string::npos)
+      continue;
+    auto p = npc->position();
+    std::string line = name + " #" + std::to_string(i) + " (" + std::to_string(int((p-pl->position()).length())) + ") at " +
+                       std::to_string(int(p.x)) + " " + std::to_string(int(p.y)) + " " + std::to_string(int(p.z)) + ": " + npc->debugAiQueue();
+    if(auto* wp = npc->currentWayPoint())
+      line += ", way point " + wp->name;
+    JS_SetPropertyUint32(ctx,arr,n++,JS_NewString(ctx,line.c_str()));
+    }
+  return arr;
+  }
+
 /// debug.faint(npc, on): knocks the character out (the same path as a blow of a human: the weapon drop, ZS_Unconscious) or
 /// wakes him up
 JSValue faint(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
@@ -608,6 +645,7 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"parkNpc",   parkNpc,1);
   js::fn(ctx,dbg,"faint",     faint,2);
   js::fn(ctx,dbg,"queues",    queues,1);
+  js::fn(ctx,dbg,"findNpc",   findNpc,1);
   js::fn(ctx,dbg,"vobVisual", vobVisual,3);
   js::fn(ctx,dbg,"placeOnGround",placeOnGround,4);
   js::fn(ctx,dbg,"setInfoKnown",setInfoKnown,2);

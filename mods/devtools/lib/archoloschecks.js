@@ -413,6 +413,15 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     for (const l of list) console.log("  " + l);
                     break;
                 }
+                case "npc": {
+                    // where a character is, also one that is far away: for the scenes that move the characters (Ezekiel on the beach of Q101)
+                    const name = args[1];
+                    if (!name) throw new Error("Usage: comcheck npc <name part> [go]: lists the characters of the world with the name, go teleports you to the first one. Example: comcheck npc Ezekiel");
+                    const list = debug.findNpc(name);
+                    if (!list.length) { console.log("No character with '" + name + "' in " + world.name() + "."); break; }
+                    for (const l of list) console.log("  " + l);
+                    break;
+                }
                 case "vob": {
                     // CHANGEVOBCOLLISION of CoM: the scripts hide and show the decorations of the quests and switch their collision
                     const name = args[1];
