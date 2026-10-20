@@ -14,6 +14,18 @@ Szczegóły techniczne: [IKARUS.md](IKARUS.md), [ARCHOLOS_AUDIT.md](ARCHOLOS_AUD
 
 ---
 
+## Priorytety do grywalnych Kronik (stan 20.10.2026)
+
+1. **Zapisy i wczytywanie** (najważniejsze, bo psuje wszystko po wczytaniu): naprawione dwa błędy rdzenia (argumenty rekurencji `locals()` w ZenKit, tablice zmiennych skryptu w pamięci). Do sprawdzenia przez grę: wielokrotne wczytania w jednej sesji, wczytanie po zmianie świata i powrót, quicksave, zapis w trakcie sceny.
+2. **Sceny fabularne** z listy odbiorów: Q204, Q205 (omdlenie bohatera), Q304, Q306 (turniej), Q406, Q602/GQ001. Każda przejść z logiem; błędy skryptów i `not implemented` w logu wskazują brakujące elementy.
+3. **Vobowie szukani po nazwie** (`MEM_SearchVobByName`, 583 wywołania): warstwa zna tylko movery. Raport w zakładce Debug, Ikarus (`vob names searched by the scripts ... not found`) pokazuje nazwy bez odpowiednika w świecie; to są dekoracje i skrzynie przełączane przez skrypty (`KM_*`, `KQ406_CRATE_*`).
+4. **Sloty ekwipunku silnika** (`GetSlotItem` zwraca 0, `PutInSlot`/`RemoveFromSlot` tylko dla kołczanów): potrzebne przy scenach z bronią w rękach i sprzedaży.
+5. **Towarzysze w walce** (`OCNPC__GETNEXTENEMY_REPLACEHOOK`, wybór wroga): wpływ na walki z drużyną.
+6. **Crafting**: podgląd receptur w oknie (`CRAFTINGVIEW_UPDATE`, `OCITEMCONTAINER__DRAWITEMINFO_HOOK`); dziś receptury działają jako zwykłe wybory dialogu.
+7. Polskie znaki w polu tekstowym, tekstura ścian domu, muzyka i osiągnięcia (`KmLib`): kosmetyka, na końcu.
+
+---
+
 ## 1. Rdzeń warstwy zgodności (`common/game/compatibility`)
 
 - [x] Interpreter x86 `Cpu32` (wywołania `thiscall`/`cdecl`/`stdcall`, stos, rejestry) dla kodu Ikarusa
