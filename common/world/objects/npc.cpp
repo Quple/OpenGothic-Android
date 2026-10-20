@@ -2561,6 +2561,21 @@ void Npc::setPuppetUnconscious(bool on) {
     }
   }
 
+/// The developer tools: knock out any character (the player too) as a hit of a human would, and wake him up
+void Npc::debugUnconscious(bool on) {
+  if(isDead())
+    return;
+  if(on && !isUnconscious()) {
+    onNoHealth(false,HS_NoSound);
+    } else
+  if(!on) {
+    // the character stays lying after the state is gone: the queue gets him up
+    clearState(true);
+    clearAiQueue();
+    aiPush(AiQueue::aiStandupQuick());
+    }
+  }
+
 /// The mod moves the character, so the speed is taken from the movement and the animation follows it
 void Npc::tickPuppet(uint64_t dt) {
   // perceptions can still push orders, nobody executes them. Not the ones of a talk that a player has started:

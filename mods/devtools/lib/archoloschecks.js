@@ -404,6 +404,38 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     console.log("The baker stands in front of you; you have the sword and +100 strength. Close F10 and hit him with the fists (no weapon in the hand) until he is unconscious. Then open F10 and enter comcheck finish flag.");
                     break;
                 }
+                case "faint": {
+                    // OCNPC__DROPUNCONSCIOUS_HOOK of CoM: in the fights of the arena (AIVAR[45] = AF_RUNNING), in Q205 and in Q306
+                    // the hero keeps the weapon when he falls unconscious, otherwise it falls out of his hand
+                    if (args[1] === "wake") {
+                        debug.faint(player, false);
+                        console.log("The hero gets up.");
+                        break;
+                    }
+                    if (args[1] === "go") {
+                        if (!player.weaponItem) throw new Error("The weapon is not in the hand: first run comcheck faint keep or comcheck faint drop and wait 2 seconds with F10 closed.");
+                        const kept = player.aiVar(45) === 1;
+                        debug.faint(player, true);
+                        console.log(kept
+                            ? "The hero is unconscious with AIVAR[45]=1. EXPECTED: the sword does NOT lie on the ground, it stays in the inventory (check the inventory after comcheck faint wake)."
+                            : "The hero is unconscious with AIVAR[45]=0. EXPECTED: the sword falls to the ground next to him (the normal behaviour of the game). Then comcheck faint wake.");
+                        break;
+                    }
+                    const keep = args[1] !== "drop";
+                    const sword = "ITMW_1H_MIL_SWORD";
+                    if (!player.hasItem(sword)) player.addItem(sword, 1);
+                    call("EQUIPITEM", [player, id(sword)]);
+                    if (!partyStrength) {
+                        call("NPC_CHANGEATTRIBUTE", [player, debug.symbol("ATR_STRENGTH").value, 100]);
+                        partyStrength = true;
+                    }
+                    player.setAiVar(45, keep ? 1 : 0);
+                    call("AI_READYMELEEWEAPON", [player]);
+                    console.log(keep
+                        ? "Mode KEEP: AIVAR[45]=1 (the fight of the arena). Close F10 for 2 seconds (the sword is drawn), open F10 and run comcheck faint go."
+                        : "Mode DROP: AIVAR[45]=0 (an ordinary fight). Close F10 for 2 seconds (the sword is drawn), open F10 and run comcheck faint go.");
+                    break;
+                }
                 case "party": {
                     // HIDEFOCUSFORPARTYMEMBERS of CoM: a companion (AIVAR[15]) is not in the focus of a player with a weapon
                     if (args[1] === "off") {
@@ -471,7 +503,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     break;
                 default:
                     console.log("Tools for saves: state | scale [instance] [factor] | item <NAME> [n] | clock <h> [m] | world [list|<name> [waypoint]] | wp [part] | tp <waypoint> | heal | god [off] | xp <n> | attr <strength|dexterity|health|mana> <n>.");
-                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
+                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | faint [keep|drop|go|wake] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
             }

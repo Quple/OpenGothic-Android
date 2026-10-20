@@ -402,6 +402,16 @@ JSValue parkNpc(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return JS_TRUE;
   }
 
+/// debug.faint(npc, on): knocks the character out (the same path as a blow of a human: the weapon drop, ZS_Unconscious) or
+/// wakes him up
+JSValue faint(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* npc = argc>0 ? game::resolveNpc(ctx,argv[0]) : nullptr;
+  if(npc==nullptr)
+    return JS_FALSE;
+  npc->debugUnconscious(argc<2 || JS_ToBool(ctx,argv[1])>0);
+  return JS_TRUE;
+  }
+
 /// debug.setInfoKnown(info, known): reset/prepare the player's dialog history.
 JSValue setInfoKnown(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   auto* pl = Gothic::inst().player();
@@ -548,6 +558,7 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"points",    points,2);
   js::fn(ctx,dbg,"containers",containers,1);
   js::fn(ctx,dbg,"parkNpc",   parkNpc,1);
+  js::fn(ctx,dbg,"faint",     faint,2);
   js::fn(ctx,dbg,"placeOnGround",placeOnGround,4);
   js::fn(ctx,dbg,"setInfoKnown",setInfoKnown,2);
   js::fn(ctx,dbg,"setLock",   setLock,2);

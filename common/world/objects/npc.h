@@ -163,6 +163,7 @@ class Npc final {
     void       finishOff();
     /// A puppet is unconscious when its owner is
     void       setPuppetUnconscious(bool on);
+    void       debugUnconscious(bool on);
     /// The damage that a puppet has got is not taken, the mod learns about it and tells the owner of the character
     int32_t    takePuppetDamage();
     /// The owner of the puppet says how healthy it is
