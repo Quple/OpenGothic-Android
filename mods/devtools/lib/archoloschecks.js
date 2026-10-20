@@ -10,6 +10,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
     let lastShot = null;
     let timeCheck = null;
     let partyNpc = null;
+    let finishNpc = null;
     let partyStrength = false;
 
     function call(name, args, context) {
@@ -223,6 +224,35 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                         "The important item must not be sold (the hero shakes his head), the apples can.");
                     break;
                 }
+                case "finish": {
+                    // EV_FINISHINGMOVE_HOOK of CoM: finishing off an unconscious NPC_FLAG_IMPORTANT character.
+                    // The flag 8 is NPC_FLAG_PROTECTED of the engine: the character is not hurt, so it is set after he is down.
+                    if (args[1] === "flag") {
+                        if (!finishNpc || !finishNpc.valid) throw new Error("First run comcheck finish.");
+                        finishNpc.setFlags(8);   // NPC_FLAG_IMPORTANT
+                        console.log("NPC_FLAG_IMPORTANT is set. Close F10, draw the sword, stand next to him and use the key of the finishing move.");
+                        break;
+                    }
+                    const name = "BAU_719_BAKER";
+                    id(name);
+                    const p = player.position;
+                    const a = player.rotation * Math.PI / 180;
+                    if (finishNpc && finishNpc.valid) finishNpc.remove();
+                    finishNpc = npcs.spawn(name, p.x + Math.cos(a) * 250, p.y, p.z + Math.sin(a) * 250, player.rotation + 180);
+                    if (!finishNpc || !finishNpc.valid) throw new Error("Cannot spawn the check NPC. Stand on open, level ground.");
+                    if (!debug.parkNpc(finishNpc)) throw new Error("Cannot disable the NPC's routine.");
+                    // the baker of the game is NPC_FLAG_IMMORTAL (FLAGS = 2): he would not be hurt
+                    finishNpc.setFlags(0);
+                    const sword = "ITMW_1H_MIL_SWORD";
+                    if (!player.hasItem(sword)) player.addItem(sword, 1);
+                    call("EQUIPITEM", [player, id(sword)]);
+                    if (!partyStrength) {
+                        call("NPC_CHANGEATTRIBUTE", [player, debug.symbol("ATR_STRENGTH").value, 100]);
+                        partyStrength = true;
+                    }
+                    console.log("The baker stands in front of you; you have the sword and +100 strength. Close F10 and hit him with the fists (no weapon in the hand) until he is unconscious. Then open F10 and enter comcheck finish flag.");
+                    break;
+                }
                 case "party": {
                     // HIDEFOCUSFORPARTYMEMBERS of CoM: a companion (AIVAR[15]) is not in the focus of a player with a weapon
                     if (args[1] === "off") {
@@ -289,7 +319,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     smokersScene();
                     break;
                 default:
-                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
+                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
             }

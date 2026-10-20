@@ -400,6 +400,21 @@ JSValue setAiVar(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv)
   return JS_TRUE;
   }
 
+/// npc.flags() / npc.setFlags(value): NPC_FLAG_* of the script (FRIEND 1, IMMORTAL 2, GHOST 4, PROTECTED 8, ...)
+JSValue flags(JSContext* ctx, JSValueConst obj, int, JSValueConst*) {
+  Npc* npc = self(ctx,obj);
+  return npc==nullptr ? JS_UNDEFINED : JS_NewInt32(ctx,int32_t(npc->handle().flags));
+  }
+
+JSValue setFlags(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) {
+  Npc* npc = self(ctx,obj);
+  int32_t v = 0;
+  if(npc==nullptr || argc<1 || JS_ToInt32(ctx,&v,argv[0])!=0)
+    return JS_FALSE;
+  npc->handle().flags = zenkit::NpcFlag(v);
+  return JS_TRUE;
+  }
+
 /// npc.openTrade(trader): the trade window of the player with a character, no dialog is needed
 JSValue openTrade(JSContext* ctx, JSValueConst obj, int argc, JSValueConst* argv) {
   Npc* npc    = self(ctx,obj);
@@ -557,6 +572,8 @@ void game::installNpc(JSContext* ctx) {
   js::fn(ctx,proto,"addItem",   addItem,2);
   js::fn(ctx,proto,"removeItem",removeItem,2);
   js::fn(ctx,proto,"openTrade", openTrade,1);
+  js::fn(ctx,proto,"flags",     flags,0);
+  js::fn(ctx,proto,"setFlags",  setFlags,1);
   js::fn(ctx,proto,"aiVar",     aiVar,1);
   js::fn(ctx,proto,"setAiVar",  setAiVar,2);
   js::fn(ctx,proto,"itemCount", itemCount,1);
