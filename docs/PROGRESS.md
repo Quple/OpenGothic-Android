@@ -102,7 +102,7 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] Kategorie ekwipunku w zwykłej wersji jak w Kronikach: nazwa kategorii (z `TXT_INV_CAT` ze skryptów) w skrzynce na lewo od złota, Shift+→/← i Shift+D/A zmieniają kategorię bez zawijania, tylko gdy skrypty mają `TXT_INV_CAT`; interfejs dotykowy bez zmian (przyciski kategorii) *(potwierdzone)*. Hooki `CATINV_*` (ok. 25) nie są emulowane
 - [ ] `CRAFTINGVIEW_UPDATE`, `OCINFORMATIONMANAGER__UPDATE_HOOK`, `ZCVIEWDIALOGCHOICE__HANDLEEVENT_HOOK`, `OCITEMCONTAINER__DRAWITEMINFO_HOOK`
 - [x] `OCAIHUMAN__MOVING_REPLACECHECKINGGLOBALCUTSCENE`: gracz nie porusza się podczas końcowych plansz (`ISINFINALBOARDS`); kamery scen (`ISINCAMERA`) blokuje sam OpenGothic *(niepotwierdzone)*
-- [ ] `ZCVIEW__DIALOGMESSAGECXY_HOOK` (kolor i nazwa w tekstach dialogu podczas scen), `OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE` (HUD podczas scen), `CGAMEMANAGER__MENUENABLED_REPLACECHECKINGGLOBALCUTSCENE` (menu w scenach)
+- [ ] Kosmetyka scen CoM, odczytana z DAT, bez wpływu na fabułę: `ZCVIEW__DIALOGMESSAGECXY_HOOK` (napisy w scenach z kamerą idą do zwykłego widoku ekranu zamiast okna dialogu, żółte dla postaci z imieniem, białe bez imienia; na końcowych planszach żółte i bez tekstu), `OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE` (HUD ukryty w scenach), `CGAMEMANAGER__MENUENABLED_REPLACECHECKINGGLOBALCUTSCENE` (menu wyłączone w scenach)
 - [ ] `INVTRANSPARENCYHACK_HOOK`, `APPLYSOMESETTINGS_HOOK`, `APPLYSOMESETTINGSEND_HOOK`, `UPDATELOADINGTEXTURE`
 - [ ] `PATCHSAVEGAMEVERSION_HOOK`, `PATCHSAVEGAMEWORLD_HOOK`: tylko wpisują wersję gry i nazwę świata do slotu zapisu w menu oryginalnego silnika (kosmetyka listy zapisów), OpenGothic ma własną listę zapisów
 - [ ] `TELEMETRY_ONTRADELEFTHOOK`, `TELEMETRY_ONTRADERIGHTHOOK`, `ZERROR_SETTARGET_HOOK`, `HANDLERESULTSTRING_MARVINMODE_REPLACEHOOK`
@@ -225,7 +225,7 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] Hooki gry (upuszczanie, sprzedaż, ekwipunek, focus kompanów, dobijanie, czas świata) tylko po zarejestrowaniu hooka przez mod
 - [x] Zmiany ZenKit trzymane jako patch w `patches/zenkit-opengothic.patch` (submoduł jest upstreamowy, brak forka): `invoke_function`, `pop_int` instancji, pola `compat_*` w `INpc`
 - [x] Zapisy w wersji 56, nowe akcje AI dopisane na końcu (stare numery zachowane)
-- [x] Patch ZenKit nakładany automatycznie przez CMake (`cmake/zenkitpatch.cmake`): czysty klon, build na Androida i CI nie wymagają ręcznych kroków *(niepotwierdzone na czystym klonie)*
+- [x] Patch ZenKit nakładany automatycznie przez CMake (`cmake/zenkitpatch.cmake`): czysty klon, build na Androida i CI nie wymagają ręcznych kroków (sprawdzone na czystej kopii źródeł ZenKit: pierwsza konfiguracja nakłada, druga nic nie robi; pełna konfiguracja czystego klona z podmodułami nie była robiona)
 - [ ] Fork ZenKit z tymi zmianami (żeby submoduł wskazywał na commit dostępny w sieci); patch przestaje być potrzebny
 - [ ] Przegląd zgodności zapisów G1/G2 po zmianach serializacji (nowe pola tylko z wersjonowaniem)
 - [ ] Ręczna regresja czystego G1 i G2 (dialogi, handel, ekwipunek, walka)
