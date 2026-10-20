@@ -86,6 +86,7 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] `ITEMIMPORTANTFLAG_CHECKSELLINGITEMS`: ważnych przedmiotów nie da się sprzedać handlarzowi *(potwierdzone)*
 - [x] `HIDEFOCUSFORPARTYMEMBERS_*`: towarzysze (`AIVAR[15]`) poza focusem gracza z bronią i bez paska HP *(potwierdzone próbą `comcheck party`)*
 - [x] `EV_FINISHINGMOVE_HOOK`: dobijanie ważnej postaci; zdrowie zostaje na 1 przez hook `ChangeAttribute` (postać nie ginie) *(potwierdzone)*
+- [x] Zabójca dobitej postaci (`OTHER` w `ZS_DEAD`, doświadczenie gracza) jest ustawiany także przy dobijaniu *(niepotwierdzone)*
 - [x] Dobijanie ważnej postaci gra tylko `T_NO` bez animacji dobijania; naprawiony `ANIISACTIVE` (`zCModel::IsAnimationActive`) *(potwierdzone)*
 - [ ] `OCNPC__GETNEXTENEMY_REPLACEHOOK`: celowo niewdrożone (poprawka błędu oryginalnego silnika, własny wybór wroga OpenGothic działa inaczej); do ponownej oceny, jeśli pojawią się objawy
 - [ ] `OCNPC__DROPUNCONSCIOUS_HOOK` (Q205, Q306: broń gracza po utracie przytomności); wymaga emulacji slotów rąk i `RemoveFromSlot`/`EquipWeapon`
@@ -99,9 +100,10 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [ ] `_EVT_QUIVER_EQUIP`/`_EVT_QUIVER_UNEQUIP` (kołczany)
 - [ ] `CATINV_*` (kategorie ekwipunku: ok. 25 hooków)
 - [ ] `CRAFTINGVIEW_UPDATE`, `OCINFORMATIONMANAGER__UPDATE_HOOK`, `ZCVIEWDIALOGCHOICE__HANDLEEVENT_HOOK`, `OCITEMCONTAINER__DRAWITEMINFO_HOOK`
-- [ ] `ZCVIEW__DIALOGMESSAGECXY_HOOK`, `OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE`, `CGAMEMANAGER__MENUENABLED_REPLACECHECKINGGLOBALCUTSCENE`, `OCAIHUMAN__MOVING_REPLACECHECKINGGLOBALCUTSCENE`
+- [x] `OCAIHUMAN__MOVING_REPLACECHECKINGGLOBALCUTSCENE`: gracz nie porusza się podczas końcowych plansz (`ISINFINALBOARDS`); kamery scen (`ISINCAMERA`) blokuje sam OpenGothic *(niepotwierdzone)*
+- [ ] `ZCVIEW__DIALOGMESSAGECXY_HOOK` (kolor i nazwa w tekstach dialogu podczas scen), `OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE` (HUD podczas scen), `CGAMEMANAGER__MENUENABLED_REPLACECHECKINGGLOBALCUTSCENE` (menu w scenach)
 - [ ] `INVTRANSPARENCYHACK_HOOK`, `APPLYSOMESETTINGS_HOOK`, `APPLYSOMESETTINGSEND_HOOK`, `UPDATELOADINGTEXTURE`
-- [ ] `PATCHSAVEGAMEVERSION_HOOK`, `PATCHSAVEGAMEWORLD_HOOK`
+- [ ] `PATCHSAVEGAMEVERSION_HOOK`, `PATCHSAVEGAMEWORLD_HOOK`: tylko wpisują wersję gry i nazwę świata do slotu zapisu w menu oryginalnego silnika (kosmetyka listy zapisów), OpenGothic ma własną listę zapisów
 - [ ] `TELEMETRY_ONTRADELEFTHOOK`, `TELEMETRY_ONTRADERIGHTHOOK`, `ZERROR_SETTARGET_HOOK`, `HANDLERESULTSTRING_MARVINMODE_REPLACEHOOK`
 - [ ] `_CC_HOOK` (konsola CC), `_SPRITE_DORENDER`
 
@@ -200,8 +202,8 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] Disasembler `tools/ikarus/disasm.py` do funkcji `GOTHIC.DAT`, których nie ma w dekompilacji
 - [x] Analizator `tools/ikarus/analyze.py` (statyczny, częściowo nieaktualny)
 - [x] Ostrzeżenia ZenKit "Accessing member ... without an instance set" zawierają teraz nazwę funkcji skryptu (patch w `patches/`)
-- [ ] Ustalić źródło 12 ostrzeżeń na starcie świata (`C_ITEM.HP` x4, `C_NPC.AIVAR` x8) z nowego logu
-- [ ] `ApplyHouseWallTexture: Null ptr` na starcie świata (tekstura ścian domu gracza)
+- [x] Źródło ostrzeżeń na starcie świata ustalone z logu i uznane za nieszkodliwe: `RESTORENPCNAMES` czyta `AIVAR[79]` postaci, których nie ma jeszcze w świecie (0, tak jak w oryginale), `INIT_ITEMGROUPS_MEAT` zapisuje `HP` w instancjach grup przedmiotów (konstruktor instancji i tak ustawia to pole), `SPELL_TELEKINESIS_FOCUS_REMOVER` odpala się przed pojawieniem się bohatera
+- [ ] `ApplyHouseWallTexture: Null ptr` na starcie świata: zmiana tekstury ścian domu gracza wymaga wymiany tekstury materiału w rendererze (`zCTexture::Load` i ponowne wczytanie danych); kosmetyka, bez wpływu na fabułę
 - [ ] Symbole i offset w `crash.log` (dziś tylko nazwy funkcji)
 - [ ] Przejrzeć 10-sekundowy limit oczekiwania dialogu na kolejki (arbitralny)
 

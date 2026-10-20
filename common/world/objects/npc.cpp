@@ -4201,6 +4201,7 @@ bool Npc::finishingMove() {
       currentTarget->puppetFinish = true;
       return true;
       }
+    currentTarget->lastHit = this;   // the killer: OTHER of ZS_DEAD (the experience of the player)
     if(owner.script().hasDma()) {
       // the mods of Ikarus and LeGo hook ChangeAttribute (CoM keeps its important characters alive, hit points stay 1)
       currentTarget->changeAttribute(ATR_HITPOINTS,-currentTarget->hnpc->attribute[ATR_HITPOINTS],false);
