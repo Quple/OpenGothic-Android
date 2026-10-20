@@ -98,7 +98,7 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] Zwój czaru otwierania zamków (`SPL_PICKLOCK`) jest zużywany tylko, gdy czar otworzył zamek; przy zbyt krótkim przytrzymaniu postęp zostaje w zamku, zwój zostaje *(potwierdzone)*
 - [ ] `_FIXEQUIPBESTWEAPONS` (po jakimś zdarzeniu wołane `oCNpc::EquipBestWeapon` dla broni białej i dystansowej postaci nieimmortalnych): sprawdzić w grze, czy NPC mają dobrą broń
 - [ ] Pochodnie CoM: skrypty mają własny system pod klawiszem `keyTorch` (`TORCH_KEYEVENT`: `GetSlotItem(ZS_LEFTHAND)`, `TORCH_EQUIP` = `CreateInvItem` + `oCNpc::Equip`, `TORCHLOADFIX_CHECKTORCH`), a OpenGothic ma natywne pochodnie; `GetSlotItem` zwraca 0, więc oba systemy mogą się dublować. Wymaga próby w grze: co robi klawisz pochodni z pochodnią w ekwipunku
-- [ ] `_EVT_QUIVER_EQUIP`/`_EVT_QUIVER_UNEQUIP` (kołczany)
+- [x] `_EVT_QUIVER_EQUIP`/`_EVT_QUIVER_UNEQUIP` (kołczany): hooki `oCNpc::EquipItem`/`UnequipItem` z `Inventory::setSlot` dla broni dystansowej *(czeka na próbę: `comcheck ranged bow`)*
 - [x] Kategorie ekwipunku w zwykłej wersji jak w Kronikach: nazwa kategorii (z `TXT_INV_CAT` ze skryptów) w skrzynce na lewo od złota, Shift+→/← i Shift+D/A zmieniają kategorię bez zawijania, tylko gdy skrypty mają `TXT_INV_CAT`; interfejs dotykowy bez zmian (przyciski kategorii) *(potwierdzone)*. Hooki `CATINV_*` (ok. 25) nie są emulowane
 - [ ] `CRAFTINGVIEW_UPDATE`, `OCINFORMATIONMANAGER__UPDATE_HOOK`, `ZCVIEWDIALOGCHOICE__HANDLEEVENT_HOOK`, `OCITEMCONTAINER__DRAWITEMINFO_HOOK`
 - [x] `OCAIHUMAN__MOVING_REPLACECHECKINGGLOBALCUTSCENE`: gracz nie porusza się podczas końcowych plansz (`ISINFINALBOARDS`); kamery scen (`ISINCAMERA`) blokuje sam OpenGothic *(niepotwierdzone)*
@@ -145,7 +145,7 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 
 - [ ] Sloty: `PutInSlot`, `RemoveFromSlot`, `DropFromSlot`, `GetSlotItem` (pochodnia)
 - [ ] Pochodnie: zajętość rąk, odtworzenie po wczytaniu
-- [ ] Kołczany (`INIT_QUIVERS_ALWAYS` świadomie wyłączone) i hooki equip/unequip
+- [x] Kołczany: `MEM_InsertVob`/`MEM_DeleteVob`/`OCNPC_PutInSlot`/`OCNPC_RemoveFromSlot` jako dekoracja modelu (`MdlVisual::setDecor`, nie znika po trafieniu), `INIT_QUIVERS_ALWAYS` obejście po załadowaniu NPC, odświeżanie liczby strzał przez `QUIVERS_FF` skryptu *(czeka na próbę)*
 - [ ] Wybór najlepszej broni, rzeczy po utracie przytomności
 - [ ] Zajętość rąk przy sprzedaży, upuszczeniu, magii
 

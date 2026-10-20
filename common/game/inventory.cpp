@@ -414,6 +414,7 @@ bool Inventory::setSlot(Item *&slot, Item* next, Npc& owner, bool force) {
     auto& itData   = slot->handle();
     auto  mainFlag = ItmFlags(itData.main_flag);
     auto  flag     = ItmFlags(itData.flags);
+    Item* old      = slot;
 
     applyArmor(*slot,owner,-1);
     if(slot->isEquipped())
@@ -433,6 +434,7 @@ bool Inventory::setSlot(Item *&slot, Item* next, Npc& owner, bool force) {
       }
     else if(mainFlag & ITM_CAT_FF){
       owner.setRangedWeapon(MeshObjects::Mesh());
+      vm.dmaEquipItem(owner,*old,false);
       }
     vm.invokeItem(&owner,uint32_t(itData.on_unequip));
     }
@@ -455,6 +457,8 @@ bool Inventory::setSlot(Item *&slot, Item* next, Npc& owner, bool force) {
     applyWeaponStats(owner,*slot,1);
     }
   vm.invokeItem(&owner,uint32_t(itData.on_equip));
+  if(ItmFlags(itData.main_flag) & ITM_CAT_FF)
+    vm.dmaEquipItem(owner,*next,true);
   return true;
   }
 
