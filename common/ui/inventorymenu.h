@@ -59,6 +59,14 @@ class InventoryMenu : public Tempest::Widget {
       };
 
     void  setCategory(int category);
+#ifndef OPENGOTHIC_TOUCH_UI
+    /// The desktop UI of CoM: the category is shifted with Shift+Left and Shift+Right (Shift+A, Shift+D), its name is a
+    /// box next to the gold. The names are in the scripts of the mod (TXT_INV_CAT), without them there are no categories.
+    bool  hasCategories() const;
+    int   categoryKeyDir(const Tempest::KeyEvent& e) const;
+    void  shiftCategory(int dir);
+    void  drawCategoryTitle(Tempest::Painter& p, int goldX, int y);
+#endif
     int   category() const;
     bool  hasSelectedItem();
     void  mobileScroll(float dy);

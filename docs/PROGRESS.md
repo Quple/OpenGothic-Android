@@ -96,9 +96,10 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] `HANDLE_SETPROPERPICKLOCKSTRLEN`: długość kombinacji wytrycha skracana przez talent i bonus (`GETPICKLOCKSTRLEN`) *(potwierdzone)*
 - [x] `SPELL_PICKLOCK_FOCUS` pokryty natywnym focusem czaru (`eventSpellFocus`), `ClearKeyBuffer` nie jest potrzebny
 - [x] Zwój czaru otwierania zamków (`SPL_PICKLOCK`) jest zużywany tylko, gdy czar otworzył zamek; przy zbyt krótkim przytrzymaniu postęp zostaje w zamku, zwój zostaje *(potwierdzone)*
-- [ ] `_FIXEQUIPBESTWEAPONS`, `TORCHLOADFIX_CHECKTORCH`
+- [ ] `_FIXEQUIPBESTWEAPONS` (po jakimś zdarzeniu wołane `oCNpc::EquipBestWeapon` dla broni białej i dystansowej postaci nieimmortalnych): sprawdzić w grze, czy NPC mają dobrą broń
+- [ ] Pochodnie CoM: skrypty mają własny system pod klawiszem `keyTorch` (`TORCH_KEYEVENT`: `GetSlotItem(ZS_LEFTHAND)`, `TORCH_EQUIP` = `CreateInvItem` + `oCNpc::Equip`, `TORCHLOADFIX_CHECKTORCH`), a OpenGothic ma natywne pochodnie; `GetSlotItem` zwraca 0, więc oba systemy mogą się dublować. Wymaga próby w grze: co robi klawisz pochodni z pochodnią w ekwipunku
 - [ ] `_EVT_QUIVER_EQUIP`/`_EVT_QUIVER_UNEQUIP` (kołczany)
-- [ ] `CATINV_*` (kategorie ekwipunku: ok. 25 hooków)
+- [x] Kategorie ekwipunku w zwykłej wersji jak w Kronikach: nazwa kategorii (z `TXT_INV_CAT` ze skryptów) w skrzynce na lewo od złota, Shift+→/← i Shift+D/A zmieniają kategorię bez zawijania, tylko gdy skrypty mają `TXT_INV_CAT`; interfejs dotykowy bez zmian (przyciski kategorii) *(potwierdzone)*. Hooki `CATINV_*` (ok. 25) nie są emulowane
 - [ ] `CRAFTINGVIEW_UPDATE`, `OCINFORMATIONMANAGER__UPDATE_HOOK`, `ZCVIEWDIALOGCHOICE__HANDLEEVENT_HOOK`, `OCITEMCONTAINER__DRAWITEMINFO_HOOK`
 - [x] `OCAIHUMAN__MOVING_REPLACECHECKINGGLOBALCUTSCENE`: gracz nie porusza się podczas końcowych plansz (`ISINFINALBOARDS`); kamery scen (`ISINCAMERA`) blokuje sam OpenGothic *(niepotwierdzone)*
 - [ ] `ZCVIEW__DIALOGMESSAGECXY_HOOK` (kolor i nazwa w tekstach dialogu podczas scen), `OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE` (HUD podczas scen), `CGAMEMANAGER__MENUENABLED_REPLACECHECKINGGLOBALCUTSCENE` (menu w scenach)
@@ -224,7 +225,8 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] Hooki gry (upuszczanie, sprzedaż, ekwipunek, focus kompanów, dobijanie, czas świata) tylko po zarejestrowaniu hooka przez mod
 - [x] Zmiany ZenKit trzymane jako patch w `patches/zenkit-opengothic.patch` (submoduł jest upstreamowy, brak forka): `invoke_function`, `pop_int` instancji, pola `compat_*` w `INpc`
 - [x] Zapisy w wersji 56, nowe akcje AI dopisane na końcu (stare numery zachowane)
-- [ ] Fork ZenKit z tymi zmianami (żeby submoduł wskazywał na commit dostępny w sieci)
+- [x] Patch ZenKit nakładany automatycznie przez CMake (`cmake/zenkitpatch.cmake`): czysty klon, build na Androida i CI nie wymagają ręcznych kroków *(niepotwierdzone na czystym klonie)*
+- [ ] Fork ZenKit z tymi zmianami (żeby submoduł wskazywał na commit dostępny w sieci); patch przestaje być potrzebny
 - [ ] Przegląd zgodności zapisów G1/G2 po zmianach serializacji (nowe pola tylko z wersjonowaniem)
 - [ ] Ręczna regresja czystego G1 i G2 (dialogi, handel, ekwipunek, walka)
 

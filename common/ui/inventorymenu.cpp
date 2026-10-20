@@ -123,6 +123,7 @@ InventoryMenu::InventoryMenu(const KeyCodec& key)
   selU = Resources::loadTexture("INV_SLOT_EQUIPPED.TGA");
   tex  = Resources::loadTexture("INV_BACK.TGA"); // INV_TITEL.TGA
 
+
   int invMaxColumns = Gothic::settingsGetI("GAME","invMaxColumns");
   if(invMaxColumns>0)
     columsCount = size_t(invMaxColumns); else
@@ -348,6 +349,15 @@ void InventoryMenu::keyDownEvent(KeyEvent &e) {
     return;
     }
 
+#ifndef OPENGOTHIC_TOUCH_UI
+  if(int dir = categoryKeyDir(e)) {
+    shiftCategory(dir);
+    adjustScroll();
+    update();
+    return;
+    }
+#endif
+
   processMove(e);
 
   if(keycodec.tr(e)==KeyCodec::Jump) {
@@ -390,6 +400,10 @@ void InventoryMenu::keyDownEvent(KeyEvent &e) {
 void InventoryMenu::keyRepeatEvent(KeyEvent& e) {
   if(state==State::LockPicking || state==State::Closed)
     return;
+#ifndef OPENGOTHIC_TOUCH_UI
+  if(categoryKeyDir(e)!=0)
+    return;
+#endif
   processMove(e);
   adjustScroll();
   update();
@@ -669,6 +683,8 @@ void InventoryMenu::drawAll(Painter &p, Npc &player, DrawPass pass) {
     if(pass==DrawPass::Back)
       drawGold (p,player,w()-padd-goldW,headerY);
     drawItems(p,pass,*pagePl,pageLocal[1],w()-padd-wcount*slotSize().w,iy,wcount,hcount);
+    if(pass==DrawPass::Back)
+      drawCategoryTitle(p,w()-padd-goldW,headerY);
     }
 
   if(pass==DrawPass::Back)
@@ -1175,6 +1191,64 @@ void InventoryMenu::mobileScroll(float dy) {
 bool InventoryMenu::hasSelectedItem() {
   return player!=nullptr && state!=State::Closed && activePageSel().sel<activePage().size();
   }
+
+#ifndef OPENGOTHIC_TOUCH_UI
+/// The order of the categories of CoM (TXT_INV_CAT): all, weapons, armor, magic, artifacts, food, potions, writings, others
+static const InventoryMenu::Category CategoryOrder[InventoryMenu::CatCount] = {
+  InventoryMenu::CatAll,     InventoryMenu::CatWeapons, InventoryMenu::CatArmor,     InventoryMenu::CatMagic,
+  InventoryMenu::CatJewelry, InventoryMenu::CatFood,    InventoryMenu::CatPotion,    InventoryMenu::CatDocuments,
+  InventoryMenu::CatMisc
+  };
+
+bool InventoryMenu::hasCategories() const {
+  return player!=nullptr && player->world().script().inventoryCategoryNames().size()>=size_t(CatCount);
+  }
+
+/// Shift with the arrows or with A and D: -1 and 1, 0 for the other keys (and for the games without the categories)
+int InventoryMenu::categoryKeyDir(const KeyEvent& e) const {
+  if((e.modifier&Event::M_Shift)==0 || state==State::Closed || state==State::LockPicking || !hasCategories())
+    return 0;
+  if(e.key==KeyEvent::K_Right || e.key==KeyEvent::K_D)
+    return 1;
+  if(e.key==KeyEvent::K_Left || e.key==KeyEvent::K_A)
+    return -1;
+  return 0;
+  }
+
+/// The category does not wrap, as CATINV_SETCATEGORY of the mod: the first and the last stay
+void InventoryMenu::shiftCategory(int dir) {
+  int now = 0;
+  for(int i=0; i<int(CatCount); ++i)
+    if(CategoryOrder[i]==category())
+      now = i;
+  const int next = std::clamp(now+dir,0,int(CatCount)-1);
+  if(next==now)
+    return;
+  setCategory(CategoryOrder[next]);
+  Gothic::inst().emitGlobalSound("INV_CHANGE");
+  }
+
+/// The name of the category is a box on the left of the gold, as in CoM
+void InventoryMenu::drawCategoryTitle(Painter& p, int goldX, int y) {
+  if(!hasCategories() || category()==CatAll)
+    return;
+  int index = 0;
+  for(int i=0; i<int(CatCount); ++i)
+    if(CategoryOrder[i]==category())
+      index = i;
+  const auto& names = player->world().script().inventoryCategoryNames();
+  if(index>=int(names.size()) || names[size_t(index)].empty())
+    return;
+
+  const float scale = Gothic::interfaceScale(this);
+  auto&       fnt   = Resources::font(scale);
+  const auto& title = names[size_t(index)];
+  const int   tw    = fnt.textSize(title).w;
+  const int   padd  = int(8*scale);
+  const int   dw    = std::max(slotSize().w*2, tw+padd*2);
+  drawHeader(p,title,goldX-dw-int(4*scale),y);
+  }
+#endif
 
 void InventoryMenu::setCategory(int category) {
   takeTimer.stop();
