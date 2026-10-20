@@ -224,6 +224,27 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                         "The important item must not be sold (the hero shakes his head), the apples can.");
                     break;
                 }
+                case "scale": {
+                    // the collision follows the scale of the model (Mdl_SetModelScale): the giant rats of CoM are scaled down
+                    const instance = (args[1] || "GIANT_RAT").toUpperCase();
+                    const factor = Number(args[2] || 0.4);
+                    if (!(factor > 0.05 && factor < 10)) throw new Error("Usage: comcheck scale [instance] [factor 0.1-5], for example comcheck scale GIANT_RAT 0.4");
+                    id(instance);
+                    const p = player.position;
+                    const a = player.rotation * Math.PI / 180;
+                    const left = a + Math.PI / 2;
+                    const make = (offset) => npcs.spawn(instance, p.x + Math.cos(a) * 350 + Math.cos(left) * offset, p.y,
+                        p.z + Math.sin(a) * 350 + Math.sin(left) * offset, player.rotation + 180);
+                    const normal = make(-120);
+                    const scaled = make(120);
+                    if (!normal || !normal.valid || !scaled || !scaled.valid) throw new Error("Cannot spawn. Stand on open, level ground.");
+                    debug.parkNpc(normal);
+                    debug.parkNpc(scaled);
+                    call("MDL_SETMODELSCALE", [scaled, factor, factor, factor]);
+                    call("MDL_SETMODELSCALE", [normal, 1, 1, 1]);
+                    console.log(`Two ${instance} stand in front of you: on the left of the screen the normal one, on the right the one at the scale ${factor}. Walk into both: the small one has to be stopped by its small body, not by the body of the normal one.`);
+                    break;
+                }
                 case "state": {
                     // a snapshot to compare before a save and after a load
                     const t = world.time();
@@ -449,7 +470,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     smokersScene();
                     break;
                 default:
-                    console.log("Tools for saves: state | item <NAME> [n] | clock <h> [m] | world [list|<name> [waypoint]] | wp [part] | tp <waypoint> | heal | god [off] | xp <n> | attr <strength|dexterity|health|mana> <n>.");
+                    console.log("Tools for saves: state | scale [instance] [factor] | item <NAME> [n] | clock <h> [m] | world [list|<name> [waypoint]] | wp [part] | tp <waypoint> | heal | god [off] | xp <n> | attr <strength|dexterity|health|mana> <n>.");
                     console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
