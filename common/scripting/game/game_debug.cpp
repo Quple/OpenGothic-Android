@@ -461,9 +461,103 @@ JSValue findNpc(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
                        std::to_string(int(p.x)) + " " + std::to_string(int(p.y)) + " " + std::to_string(int(p.z)) + ": " + npc->debugAiQueue();
     if(auto* wp = npc->currentWayPoint())
       line += ", way point " + wp->name;
+    {
+    // what the character stands on: the first surface under a point 100 above him and the first under the point of his routine
+    auto r0 = w->physic()->landRay(p+Tempest::Vec3(0,100,0));
+    line += r0.hasCol ? ", ground y " + std::to_string(int(r0.v.y)) : std::string(", no ground");
+    if(auto* wp0 = npc->currentWayPoint())
+      line += " (way point y " + std::to_string(int(wp0->position().y)) + ", ground of it " + std::to_string(int(wp0->groundPos.y)) + ")";
+    }
+    {
+    // C_NPC.WP, the point of the routine that the conditions of the dialogs compare with (Npc_GetDistToWP)
+    const std::string rtn = std::string(npc->handle().wp);
+    line += ", C_NPC.WP '" + rtn + "'";
+    if(auto* rwp = w->findWayPoint(rtn))
+      line += " (" + std::to_string(int(std::sqrt(npc->qDistTo(rwp)))) + ")"; else
+      line += " (not a way point)";
+    }
     JS_SetPropertyUint32(ctx,arr,n++,JS_NewString(ctx,line.c_str()));
     }
   return arr;
+  }
+
+/// debug.moveNpc(name, mode) -> text or null: "home" puts the first character with the name at the point of its routine (C_NPC.WP), "here"
+/// next to the player, "go" the player next to the character. For the characters that are stuck.
+JSValue moveNpc(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* w  = world();
+  auto* pl = Gothic::inst().player();
+  if(w==nullptr || pl==nullptr || argc<2)
+    return JS_NULL;
+  std::string key = js::str(ctx,argv[0]);
+  const std::string mode = js::str(ctx,argv[1]);
+  for(auto& c:key)
+    c = char(std::tolower(static_cast<unsigned char>(c)));
+  for(uint32_t i=0, c=w->npcCount(); i<c; ++i) {
+    auto* n = w->npcById(i);
+    if(n==nullptr)
+      continue;
+    std::string name = std::string(n->displayName());
+    for(auto& ch:name)
+      ch = char(std::tolower(static_cast<unsigned char>(ch)));
+    if(name.find(key)==std::string::npos)
+      continue;
+    if(mode=="home") {
+      auto* wp = w->findWayPoint(std::string(n->handle().wp));
+      if(wp==nullptr)
+        return JS_NewString(ctx,"the character has no way point of the routine");
+      n->clearGoTo();
+      n->setPosition(wp->position());
+      return JS_NewString(ctx,("placed at "+wp->name).c_str());
+      }
+    if(mode=="here") {
+      auto p = pl->position() + Tempest::Vec3(150,0,0);
+      n->clearGoTo();
+      n->setPosition(p);
+      return JS_NewString(ctx,"placed next to you");
+      }
+    if(mode=="go") {
+      auto p = n->position() + Tempest::Vec3(150,50,0);
+      pl->setPosition(p);
+      return JS_NewString(ctx,"you are next to the character");
+      }
+    return JS_NULL;
+    }
+  return JS_NULL;
+  }
+
+/// debug.infoCondition(npcName, infoName) -> [condition, known] or null: why a dialog does not appear (condition of the info and
+/// whether the player has had it already)
+JSValue infoCondition(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* w  = world();
+  auto* pl = Gothic::inst().player();
+  if(w==nullptr || pl==nullptr || argc<2)
+    return JS_NULL;
+  std::string key = js::str(ctx,argv[0]);
+  for(auto& c:key)
+    c = char(std::tolower(static_cast<unsigned char>(c)));
+  Npc* npc = nullptr;
+  for(uint32_t i=0, c=w->npcCount(); i<c && npc==nullptr; ++i) {
+    auto* n = w->npcById(i);
+    if(n==nullptr)
+      continue;
+    std::string name = std::string(n->displayName());
+    for(auto& ch:name)
+      ch = char(std::tolower(static_cast<unsigned char>(ch)));
+    if(name.find(key)!=std::string::npos)
+      npc = n;
+    }
+  if(npc==nullptr)
+    return JS_NULL;
+  bool        known = false;
+  std::string detail;
+  int  r     = w->script().debugInfoCondition(*npc,*pl,js::str(ctx,argv[1]),known,detail);
+  if(r<0)
+    return JS_NULL;
+  JSValue e = JS_NewArray(ctx);
+  JS_SetPropertyUint32(ctx,e,0,JS_NewInt32(ctx,r));
+  JS_SetPropertyUint32(ctx,e,1,JS_NewBool(ctx,known));
+  JS_SetPropertyUint32(ctx,e,2,JS_NewString(ctx,detail.c_str()));
+  return e;
   }
 
 /// debug.faint(npc, on): knocks the character out (the same path as a blow of a human: the weapon drop, ZS_Unconscious) or
@@ -646,6 +740,8 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"faint",     faint,2);
   js::fn(ctx,dbg,"queues",    queues,1);
   js::fn(ctx,dbg,"findNpc",   findNpc,1);
+  js::fn(ctx,dbg,"moveNpc",   moveNpc,2);
+  js::fn(ctx,dbg,"infoCondition",infoCondition,2);
   js::fn(ctx,dbg,"vobVisual", vobVisual,3);
   js::fn(ctx,dbg,"placeOnGround",placeOnGround,4);
   js::fn(ctx,dbg,"setInfoKnown",setInfoKnown,2);

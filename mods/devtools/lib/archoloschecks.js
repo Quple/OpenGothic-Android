@@ -413,10 +413,25 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     for (const l of list) console.log("  " + l);
                     break;
                 }
+                case "info": {
+                    // why a dialog does not appear: comcheck info Viktor DIA_VIKTOR_MARTHATRIALOG
+                    if (!args[1] || !args[2]) throw new Error("Usage: comcheck info <npc name part> <INFO_NAME>, for example comcheck info Viktor DIA_VIKTOR_MARTHATRIALOG");
+                    const r = debug.infoCondition(args[1], args[2]);
+                    if (!r) throw new Error("No such character or info (the condition function is <INFO_NAME>_CONDITION).");
+                    console.log(`${args[2]}: condition ${r[0] ? "TRUE" : "FALSE"}, ${r[1] ? "already known" : "not known yet"}. Variables of the condition: ${r[2] || "-"}`);
+                    break;
+                }
                 case "npc": {
                     // where a character is, also one that is far away: for the scenes that move the characters (Ezekiel on the beach of Q101)
                     const name = args[1];
-                    if (!name) throw new Error("Usage: comcheck npc <name part> [go]: lists the characters of the world with the name, go teleports you to the first one. Example: comcheck npc Ezekiel");
+                    if (!name) throw new Error("Usage: comcheck npc <name part> [home|here|go]: lists the characters of the world with the name; home puts the first one at the point of his routine, here next to you, go you next to him. Example: comcheck npc Ezekiel");
+                    if (args[2]) {
+                        // comcheck npc Martha home | here | go: home puts him at the point of his routine, here next to you, go you next to him
+                        const r = debug.moveNpc(name, args[2]);
+                        if (!r) throw new Error("No such character or mode (home, here, go).");
+                        console.log(r);
+                        break;
+                    }
                     const list = debug.findNpc(name);
                     if (!list.length) { console.log("No character with '" + name + "' in " + world.name() + "."); break; }
                     for (const l of list) console.log("  " + l);
