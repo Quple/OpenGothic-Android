@@ -170,6 +170,7 @@ void MainWindow::setupUi() {
   rootMenu.setMainMenu();
 
   Gothic::inst().onDialogPipe  .bind(&dialogs,&DialogMenu::openPipe);
+  Gothic::inst().onDialogGuest .bind(&dialogs,&DialogMenu::addGuest);
   Gothic::inst().onOpenTrade   .bind(&inventory,&InventoryMenu::trade);
   Gothic::inst().isNpcInDialogFn = std::bind(&DialogMenu::isNpcInDialog, &dialogs, std::placeholders::_1);
 
@@ -245,14 +246,17 @@ void MainWindow::paintEvent(PaintEvent& event) {
       auto focus = world->validateFocus(player.focus());
       if(auto* pl = Gothic::inst().player())
         world->script().dmaFocus(*pl,focus);
-      paintFocus(p,focus,vp);
+      // CoM hides the status of the player in a camera of a cutscene (OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE)
+      const bool inCamera = world->script().dmaInCamera();
+      if(!inCamera)
+        paintFocus(p,focus,vp);
 
 #ifdef OPENGOTHIC_TOUCH_UI
       constexpr bool screenBars = false;
 #else
       const bool     screenBars = !Gothic::inst().isDesktop();
 #endif
-      if(auto pl = Gothic::inst().player()){
+      if(auto pl = Gothic::inst().player(); pl!=nullptr && !inCamera){
 #ifdef OPENGOTHIC_TOUCH_UI
         drawTouchBars(p,*pl);
 #endif
@@ -634,6 +638,11 @@ void MainWindow::keyUpEvent(KeyEvent &event) {
 
   auto act     = keycodec.tr(event);
   auto mapping = keycodec.mapping(event);
+
+  if(sceneLocksUi() && (act==KeyCodec::Escape || act==KeyCodec::Log || act==KeyCodec::Status || act==KeyCodec::Inventory)) {
+    clearInput();
+    return;
+    }
 
   std::string_view menuEv;
   if(act==KeyCodec::Escape)
@@ -1157,7 +1166,19 @@ void MainWindow::updateAnimation(uint64_t dt) {
   Gothic::inst().updateAnimation(dt);
   }
 
+/// The inventory, the menu, the log: a scene of a mod without a dialog does not let the player open them (for at most two minutes,
+/// so that a scene that has hung does not hold him for ever)
+bool MainWindow::sceneLocksUi() const {
+  return sceneLockTime>0 && sceneLockTime<120000;
+  }
+
 void MainWindow::tickCamera(uint64_t dt) {
+  {
+  auto* w = Gothic::inst().world();
+  if(w!=nullptr && w->script().hasDma() && w->isCutsceneLock() && !dialogs.isActive())
+    sceneLockTime += dt; else
+    sceneLockTime = 0;
+  }
   auto pcamera = Gothic::inst().camera();
   auto pl      = Gothic::inst().player();
   if(pcamera==nullptr)
@@ -1211,8 +1232,12 @@ Camera::Mode MainWindow::solveCameraMode() const {
   if(camera!=nullptr && camera->isFree())
     return Camera::Normal;
 
-  if(dialogs.isActive())
-    return Camera::Dialog;
+  if(dialogs.isActive()) {
+    // CoM turns the camera of the dialog off in the scenes with cameras of their own
+    auto* w = Gothic::inst().world();
+    if(w==nullptr || !w->script().dmaDialogCameraOff())
+      return Camera::Dialog;
+    }
 
   if(camera!=nullptr && camera->isFirstPerson())
     return Camera::FirstPerson;
@@ -1294,6 +1319,11 @@ void MainWindow::saveGame(std::string_view slot, std::string_view name) {
     return;
   if(auto w = Gothic::inst().world(); w!=nullptr && w->currentCs()!=nullptr)
     return;
+  if(auto w = Gothic::inst().world(); w!=nullptr && w->script().dmaSaveDisabled()) {
+    // CoM does not let the player save in its scenes
+    Log::i("The scripts of the mod do not allow saving now (ENABLESAVEGAME)");
+    return;
+    }
 
   auto tex  = renderer.screenshoot(cmdId, Size(int(swapchain.w()),int(swapchain.h())));
   auto lres = Attachment();

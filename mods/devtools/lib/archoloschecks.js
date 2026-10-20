@@ -404,6 +404,35 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     console.log("The baker stands in front of you; you have the sword and +100 strength. Close F10 and hit him with the fists (no weapon in the hand) until he is unconscious. Then open F10 and enter comcheck finish flag.");
                     break;
                 }
+                case "queue": {
+                    // a scene that does not go on: the characters near you with a queue of commands, who waits for whom
+                    const radius = args[1] ? Number(args[1]) : 6000;
+                    const list = debug.queues(radius);
+                    if (!list.length) { console.log("No character within " + radius + " has a queue of commands."); break; }
+                    console.log(`Characters with commands within ${radius}: ${list.length}`);
+                    for (const l of list) console.log("  " + l);
+                    break;
+                }
+                case "vob": {
+                    // CHANGEVOBCOLLISION of CoM: the scripts hide and show the decorations of the quests and switch their collision
+                    const name = args[1];
+                    if (!name) throw new Error("Usage: comcheck vob <NAME> [go|hide|show|ghost|solid]: go teleports you next to the vob, hide: no visual and no collision, show: both, ghost: visible but walk through, solid: collision only. Example: comcheck vob WOODCUTTERS_VOB_06");
+                    const mode = args[2] || "go";
+                    let r;
+                    if (mode === "hide") r = debug.vobVisual(name, false, false);
+                    else if (mode === "show") r = debug.vobVisual(name, true, true);
+                    else if (mode === "ghost") r = debug.vobVisual(name, true, false);
+                    else if (mode === "solid") r = debug.vobVisual(name, false, true);
+                    else r = debug.vobVisual(name);
+                    if (!r) throw new Error(`There is no vob ${name} in ${world.name()}.`);
+                    if (mode === "go") {
+                        player.setPosition(r[1] + 200, r[2] + 100, r[3]);
+                        console.log(`Teleported next to ${name} (${r[1].toFixed(0)}, ${r[2].toFixed(0)}, ${r[3].toFixed(0)}). Then: comcheck vob ${name} hide | show | ghost | solid.`);
+                    } else {
+                        console.log(`${name}: ${mode} applied to ${r[0]} vob(s).`);
+                    }
+                    break;
+                }
                 case "faint": {
                     // OCNPC__DROPUNCONSCIOUS_HOOK of CoM: in the fights of the arena (AIVAR[45] = AF_RUNNING), in Q205 and in Q306
                     // the hero keeps the weapon when he falls unconscious, otherwise it falls out of his hand
@@ -503,7 +532,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     break;
                 default:
                     console.log("Tools for saves: state | scale [instance] [factor] | item <NAME> [n] | clock <h> [m] | world [list|<name> [waypoint]] | wp [part] | tp <waypoint> | heal | god [off] | xp <n> | attr <strength|dexterity|health|mana> <n>.");
-                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | faint [keep|drop|go|wake] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
+                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | faint [keep|drop|go|wake] | vob <NAME> [go|hide|show|ghost|solid] | queue [radius] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
             }

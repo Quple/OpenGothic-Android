@@ -5,6 +5,7 @@
 #include <Tempest/Matrix4x4>
 #include <string>
 #include <functional>
+#include <unordered_map>
 
 #include <zenkit/World.hh>
 
@@ -27,6 +28,7 @@ class ParticleFx;
 class Interactive;
 class VersionInfo;
 class GlobalFx;
+class Vob;
 
 class World final {
   public:
@@ -201,10 +203,17 @@ class World final {
 
     void                 invalidateVobIndex();
 
+    /// the vobs of the world by name (upper case): a script of a mod shows, hides or changes the collision of them
+    void                 registerVob  (std::string_view name, Vob* vob);
+    void                 unregisterVob(std::string_view name, Vob* vob);
+    size_t               setVobVisual (std::string_view name, bool show, bool collide);
+    bool                 vobPosition  (std::string_view name, Tempest::Vec3& pos) const;
+
   private:
     const zenkit::IFocus& searchPolicy(const Npc& pl, TargetCollect& collAlgo, TargetType& collType, WorldObjects::SearchFlg& opt) const;
     std::string                           wname;
     GameSession&                          game;
+    std::unordered_multimap<std::string,Vob*> vobNames;   // declared before the objects: they unregister while they are destroyed
 
     std::unique_ptr<WayMatrix>            wmatrix;
 

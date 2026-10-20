@@ -24,6 +24,8 @@ Szczegóły techniczne: [IKARUS.md](IKARUS.md), [ARCHOLOS_AUDIT.md](ARCHOLOS_AUD
 6. **Crafting**: podgląd receptur w oknie (`CRAFTINGVIEW_UPDATE`, `OCITEMCONTAINER__DRAWITEMINFO_HOOK`); dziś receptury działają jako zwykłe wybory dialogu.
 7. Polskie znaki w polu tekstowym, tekstura ścian domu, muzyka i osiągnięcia (`KmLib`): kosmetyka, na końcu.
 
+Zrobione 20.10.2026 (czeka na ręczną próbę): **Trialoge LeGo natywnie** (`TRIA_NEXT` i pochodne: dialogi trzech i więcej postaci; LeGo zamieniał surową pamięć obiektów NPC, więc `TRIA_Next` rzucał wyjątek i dialog stał; teraz polecenia dla `self` idą do mówiącego, a menu dialogu przyjmuje jego kwestie i czeka na nie), `CHANGEVOBCOLLISION` (widoczność i kolizja nazwanych vobów: zwykłe vob, movery, moby; stan zapisywany w `game/dmavobs` i przywracany po wczytaniu i zmianie świata), skrzynie z listą zawartości ze spacjami po przecinku (brakowało wszystkiego poza pierwszym przedmiotem), `DIACAM_DISABLE/ENABLE` (kamera dialogu wyłączona w scenach z własnymi kamerami), `ENABLESAVEGAME/ENABLELOADSAVEGAME` (zapis zablokowany w scenach), gracz stoi w miejscu przez cały `ISINCAMERA` (nie tylko gdy kamera ma flagę), pominięcie linii dialogu w kamerze nie ucina dźwięku (`OCNPC__STOPRUNNINGOU_REPLACEKILLOUSOUND`), limit 30 s dla `AI_WaitTillEnd` (scena nie wisi, gdy postać utknie; wpis w logu), `LOG_MOVETOTOP`, polskie znaki w polu tekstowym, komendy `comcheck vob`, `comcheck queue`, `comcheck faint`.
+
 ---
 
 ## 1. Rdzeń warstwy zgodności (`common/game/compatibility`)

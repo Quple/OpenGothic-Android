@@ -402,6 +402,33 @@ JSValue parkNpc(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return JS_TRUE;
   }
 
+/// debug.queues(radius) -> ["name (distance): state ..., queue: ..."]: the characters near the player that are busy with a queue of
+/// commands. For a scene that does not go on: who waits for whom.
+JSValue queues(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  JSValue arr = JS_NewArray(ctx);
+  auto*   w   = world();
+  auto*   pl  = Gothic::inst().player();
+  if(w==nullptr || pl==nullptr)
+    return arr;
+  double radius = 6000;
+  if(argc>0)
+    JS_ToFloat64(ctx,&radius,argv[0]);
+  uint32_t n = 0;
+  for(uint32_t i=0, c=w->npcCount(); i<c && n<60; ++i) {
+    auto* npc = w->npcById(i);
+    if(npc==nullptr)
+      continue;
+    const float dist = (npc->position()-pl->position()).length();
+    if(double(dist)>radius || (npc->isAiQueueEmpty() && !npc->isPlayer() && npc->weaponState()==WeaponState::NoWeapon))
+      continue;
+    if(npc->isAiQueueEmpty() && !npc->isPlayer())
+      continue;
+    std::string line = std::string(npc->displayName()) + " (" + std::to_string(int(dist)) + "): " + npc->debugAiQueue();
+    JS_SetPropertyUint32(ctx,arr,n++,JS_NewString(ctx,line.c_str()));
+    }
+  return arr;
+  }
+
 /// debug.faint(npc, on): knocks the character out (the same path as a blow of a human: the weapon drop, ZS_Unconscious) or
 /// wakes him up
 JSValue faint(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
@@ -410,6 +437,27 @@ JSValue faint(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
     return JS_FALSE;
   npc->debugUnconscious(argc<2 || JS_ToBool(ctx,argv[1])>0);
   return JS_TRUE;
+  }
+
+/// debug.vobVisual(name, show, collide) -> [count, x, y, z] or null: what CHANGEVOBCOLLISION of the scripts does to the vobs of
+/// the name; without the arguments the vob is only looked up
+JSValue vobVisual(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* w = world();
+  if(w==nullptr || argc<1)
+    return JS_NULL;
+  const std::string name = js::str(ctx,argv[0]);
+  Tempest::Vec3 pos;
+  if(!w->vobPosition(name,pos))
+    return JS_NULL;
+  size_t count = 1;
+  if(argc>=3)
+    count = w->setVobVisual(name,JS_ToBool(ctx,argv[1])>0,JS_ToBool(ctx,argv[2])>0);
+  JSValue ret = JS_NewArray(ctx);
+  JS_SetPropertyUint32(ctx,ret,0,JS_NewInt32(ctx,int32_t(count)));
+  JS_SetPropertyUint32(ctx,ret,1,JS_NewFloat64(ctx,double(pos.x)));
+  JS_SetPropertyUint32(ctx,ret,2,JS_NewFloat64(ctx,double(pos.y)));
+  JS_SetPropertyUint32(ctx,ret,3,JS_NewFloat64(ctx,double(pos.z)));
+  return ret;
   }
 
 /// debug.setInfoKnown(info, known): reset/prepare the player's dialog history.
@@ -559,6 +607,8 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"containers",containers,1);
   js::fn(ctx,dbg,"parkNpc",   parkNpc,1);
   js::fn(ctx,dbg,"faint",     faint,2);
+  js::fn(ctx,dbg,"queues",    queues,1);
+  js::fn(ctx,dbg,"vobVisual", vobVisual,3);
   js::fn(ctx,dbg,"placeOnGround",placeOnGround,4);
   js::fn(ctx,dbg,"setInfoKnown",setInfoKnown,2);
   js::fn(ctx,dbg,"setLock",   setLock,2);
