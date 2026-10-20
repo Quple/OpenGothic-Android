@@ -40,6 +40,19 @@ JSValue setTime(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return JS_UNDEFINED;
   }
 
+/// world.changeLevel("ARCHOLOS_SEWERS.ZEN", "WAYPOINT"): the player goes to another world (as a trigger of a change of the level)
+JSValue changeLevel(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* world = Gothic::inst().world();
+  if(world==nullptr || argc<1)
+    return JS_FALSE;
+  const auto name  = js::str(ctx,argv[0]);
+  const auto point = argc>1 ? js::str(ctx,argv[1]) : std::string();
+  if(name.empty())
+    return JS_FALSE;
+  world->triggerChangeWorld(name,point);
+  return JS_TRUE;
+  }
+
 /// world.waypoint("OC2"): {x, y, z} or null
 JSValue waypoint(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   auto* world = Gothic::inst().world();
@@ -107,6 +120,7 @@ void game::installWorld(JSContext* ctx) {
   js::fn(ctx,world,"time",    time,0);
   js::fn(ctx,world,"setTime", setTime,2);
   js::fn(ctx,world,"waypoint",waypoint,1);
+  js::fn(ctx,world,"changeLevel",changeLevel,2);
   js::fn(ctx,world,"takeShots",takeShots,0);
   js::fn(ctx,world,"shoot",   shoot,7);
   JS_SetPropertyStr(ctx,global,"world",world);

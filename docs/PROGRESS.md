@@ -120,7 +120,7 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [ ] `GetSlotItem` (zwraca 0), `EquipWeapon` (nop), `PutInSlot`, `RemoveFromSlot`, `DropFromSlot`, `Equip`, `UnequipItem`, `EquipBestWeapon`, `DropAllInHand`
 - [ ] `OCNPC_ISSPELLACTIVE`, `SPELL_CAST_SLOWDOWN`
 - [ ] `STOPALLACTIVESOUNDS`, `STOPALLSOUNDS`
-- [ ] `0x688a70` (Q204 `ARAXOSJOINTEST_COLLISION`, Q304 `TRAPCUTSCENE_SETCHASMDETECTION`): ustalić semantykę natywną
+- [x] `0x688a70` (Q204 `ARAXOSJOINTEST_COLLISION`, Q304 `TRAPCUTSCENE_SETCHASMDETECTION_ONFRAME`): wołane z `this` = postać i parametrem FALSE, wyłącza "wykrywanie przepaści" (oryginalny silnik zatrzymuje postać na krawędzi); OpenGothic nie ma takiego wykrywania, więc jawny pusty handler, bez efektu. Do potwierdzenia w scenie Q304 (czy strażnicy wpadają w pułapkę) i Q204 *(niepotwierdzone)*
 - [ ] `zCVob::SetColl` (`ZCVOB_SETCOLL`)
 - [ ] `GETPARMVALUE`, `DIACAM_UPDATE`, `ZCVISUAL_LOADVISUAL`
 - [ ] `CLOSEINVENTORY` jako pełna operacja silnika (dziś tylko sygnał zamknięcia menu)
@@ -203,6 +203,9 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] Disasembler `tools/ikarus/disasm.py` do funkcji `GOTHIC.DAT`, których nie ma w dekompilacji
 - [x] Analizator `tools/ikarus/analyze.py` (statyczny, częściowo nieaktualny)
 - [x] Ostrzeżenia ZenKit "Accessing member ... without an instance set" zawierają teraz nazwę funkcji skryptu (patch w `patches/`)
+- [x] Zapis widoków LeGo: `zCFont::GetFontName` i `CALL_RetValAszString` (tekst `zSTRING` zwrócony przez wywołanie silnika, wcześniej zawsze pusty przez łatanie kodu parsera w `MEMINT_StrAssign`) działają natywnie; zniknęły wyjątki `OCNPC.ENEMY` i `STR_SubStr` przy zapisie i wczytaniu *(potwierdzone)*
+- [x] Zapis do pozycji stosu poza kodem skryptu nie wywala gry (log `DMA: the write to the position of the stack outside the code`) *(potwierdzone: crash przy wczytaniu zniknął)*
+- [ ] Przy wczytaniu `PermMem` zostają ostrzeżenia `FIXME: unsafe jump ... _PM_SAVESTRUCTTOINST` i `address translation failure` (obiekty `GCPRINTS`: teksty na ekranie z wskaźnikami do widoków); callback zapisu do `zCParser` traktuje każdy zapis w regionie jak skok skryptu, ustalić, które pola `zCParser` są naprawdę zapisywane
 - [x] Źródło ostrzeżeń na starcie świata ustalone z logu i uznane za nieszkodliwe: `RESTORENPCNAMES` czyta `AIVAR[79]` postaci, których nie ma jeszcze w świecie (0, tak jak w oryginale), `INIT_ITEMGROUPS_MEAT` zapisuje `HP` w instancjach grup przedmiotów (konstruktor instancji i tak ustawia to pole), `SPELL_TELEKINESIS_FOCUS_REMOVER` odpala się przed pojawieniem się bohatera
 - [ ] `ApplyHouseWallTexture: Null ptr` na starcie świata: zmiana tekstury ścian domu gracza wymaga wymiany tekstury materiału w rendererze (`zCTexture::Load` i ponowne wczytanie danych); kosmetyka, bez wpływu na fabułę
 - [ ] Symbole i offset w `crash.log` (dziś tylko nazwy funkcji)
@@ -216,6 +219,7 @@ Emitowane i odebrane przez hooki Kronik/LeGo:
 - [x] `comcheck time [stop]`, `comcheck inventory [off]`
 - [x] `comcheck trader`, `comcheck party [off]`, `comcheck finish [flag]`, `comcheck lock [kod|off|items|talent N|bonus N]` (skrzynie, talent i bonus wytrycha, zwoje)
 - [x] API modów JS: `debug.call`, `debug.setSymbol`, `debug.parkNpc`, `debug.placeOnGround`, `debug.setInfoKnown`, `npc.openTrade`, `npc.aiVar`/`setAiVar`, `npc.flags`/`setFlags`, `npc.rangedShots`
+- [x] Narzędzia do prób zapisów: `comcheck state` (migawka do porównania przed zapisem i po wczytaniu), `item`, `clock`, `world`, `wp`, `tp`, `heal`, `god`, `xp`, `attr`; API `world.changeLevel(zen, waypoint)`
 - [x] Spawn postaci i dodawanie przedmiotów w zakładce Debug (F10)
 - [ ] Komendy przygotowujące sceny dla kolejnych zadań (Q204, Q205, Q304, Q306, Q406, Q602) bez zapisów odbiorowych
 

@@ -224,6 +224,88 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                         "The important item must not be sold (the hero shakes his head), the apples can.");
                     break;
                 }
+                case "state": {
+                    // a snapshot to compare before a save and after a load
+                    const t = world.time();
+                    const p = player.position;
+                    const items = ["ITFO_APPLE", "ITMI_GOLD", "ITKE_LOCKPICK", "ITSC_PICKLOCK", "ITMIS_Q505_RUPERT"];
+                    const counts = items.map(n => `${n}=${player.itemCount(n)}`).join(" ");
+                    console.log(`World ${world.name()}, day ${t.day} ${t.hour}:${String(t.minute).padStart(2, "0")}, position ${Math.round(p.x)}/${Math.round(p.y)}/${Math.round(p.z)}, ` +
+                        `health ${player.health}/${player.maxHealth}, mana ${player.mana}/${player.maxMana}, level ${player.level}, xp ${player.experience}, ` +
+                        `strength ${player.strength}, dexterity ${player.dexterity}, ${counts}.`);
+                    break;
+                }
+                case "item": {
+                    const name = (args[1] || "").toUpperCase();
+                    const count = Number(args[2] || 1);
+                    if (!name || !Number.isInteger(count) || count <= 0) throw new Error("Usage: comcheck item <INSTANCE> [count], for example comcheck item ITFO_APPLE 5");
+                    id(name);
+                    if (!player.addItem(name, count)) throw new Error(`Cannot add ${name}`);
+                    console.log(`Added ${count} x ${name}. You have ${player.itemCount(name)}.`);
+                    break;
+                }
+                case "clock": {
+                    const h = Number(args[1]);
+                    const m = Number(args[2] || 0);
+                    if (!Number.isInteger(h) || h < 0 || h > 23 || !Number.isInteger(m) || m < 0 || m > 59)
+                        throw new Error("Usage: comcheck clock <hour 0-23> [minute 0-59]");
+                    world.setTime(h, m);
+                    const t = world.time();
+                    console.log(`Time set: day ${t.day} ${t.hour}:${String(t.minute).padStart(2, "0")}.`);
+                    break;
+                }
+                case "world": {
+                    const worlds = ["ARCHOLOS_MAINLAND", "ARCHOLOS_SEWERS", "ARCHOLOS_SILVERMINE", "ARCHOLOS_VOLFZACKE", "ARCHOLOS_ENDGAME"];
+                    if (!args[1] || args[1] === "list") {
+                        console.log(`You are in ${world.name()}. Worlds: ${worlds.join(", ")}. comcheck world <name> [waypoint] (comcheck wp <part of the name> shows the waypoints of the world you are in).`);
+                        break;
+                    }
+                    const zen = args[1].toUpperCase().replace(/\.ZEN$/, "") + ".ZEN";
+                    if (!worlds.includes(zen.replace(/\.ZEN$/, ""))) throw new Error(`Unknown world, try: ${worlds.join(", ")}`);
+                    if (!world.changeLevel(zen, args[2] || "")) throw new Error("Cannot change the world.");
+                    console.log(`Going to ${zen}${args[2] ? " at " + args[2] : ""}. Wait for the loading.`);
+                    break;
+                }
+                case "wp": {
+                    const found = debug.points(args[1] || "", 25);
+                    console.log(found.length ? `Waypoints: ${found.join(", ")}` : "No waypoint found. Give a part of the name, for example comcheck wp PART");
+                    break;
+                }
+                case "tp": {
+                    if (!args[1]) throw new Error("Usage: comcheck tp <waypoint>, comcheck wp <part of the name> lists them");
+                    if (!world.waypoint(args[1])) throw new Error(`There is no waypoint ${args[1]} in ${world.name()}.`);
+                    if (!player.teleport(args[1])) throw new Error("Cannot teleport.");
+                    console.log(`Teleported to ${args[1]}.`);
+                    break;
+                }
+                case "heal": {
+                    player.heal(9999);
+                    call("NPC_CHANGEATTRIBUTE", [player, debug.symbol("ATR_MANA").value, 999]);
+                    console.log(`Health ${player.health}/${player.maxHealth}, mana ${player.mana}/${player.maxMana}.`);
+                    break;
+                }
+                case "god": {
+                    const on = args[1] ? args[1] !== "off" : !debug.god();
+                    debug.god(on);
+                    console.log(`God mode: ${debug.god() ? "on" : "off"}.`);
+                    break;
+                }
+                case "xp": {
+                    const n = Number(args[1]);
+                    if (!Number.isInteger(n) || n <= 0) throw new Error("Usage: comcheck xp <points>");
+                    call("B_GIVEPLAYERXP", [n]);
+                    console.log(`Level ${player.level}, experience ${player.experience}.`);
+                    break;
+                }
+                case "attr": {
+                    const names = { strength: "ATR_STRENGTH", dexterity: "ATR_DEXTERITY", health: "ATR_HITPOINTS_MAX", mana: "ATR_MANA_MAX" };
+                    const sym = names[(args[1] || "").toLowerCase()];
+                    const n = Number(args[2]);
+                    if (!sym || !Number.isInteger(n)) throw new Error("Usage: comcheck attr <strength|dexterity|health|mana> <change>, for example comcheck attr strength 50");
+                    call("NPC_CHANGEATTRIBUTE", [player, debug.symbol(sym).value, n]);
+                    console.log(`${args[1]} changed by ${n}: strength ${player.strength}, dexterity ${player.dexterity}, health ${player.health}/${player.maxHealth}, mana ${player.mana}/${player.maxMana}.`);
+                    break;
+                }
                 case "lock": {
                     // locks: the code of the nearest chest, the talent and the bonus of picking locks (HANDLE_SETPROPERPICKLOCKSTRLEN)
                     const sub = args[1];
@@ -367,6 +449,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     smokersScene();
                     break;
                 default:
+                    console.log("Tools for saves: state | item <NAME> [n] | clock <h> [m] | world [list|<name> [waypoint]] | wp [part] | tp <waypoint> | heal | god [off] | xp <n> | attr <strength|dexterity|health|mana> <n>.");
                     console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
