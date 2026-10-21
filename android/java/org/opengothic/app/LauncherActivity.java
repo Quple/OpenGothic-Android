@@ -108,6 +108,8 @@ public final class LauncherActivity extends Activity {
     private SteamStore.Session session;
     private Set<Integer> owned;           // null: not known
     private TextView accountButton;
+    private TextView updateButton;
+    private boolean updateAvailable;
 
     private File external;
     private int lastPlayed = 1;
@@ -132,7 +134,34 @@ public final class LauncherActivity extends Activity {
         setContentView(buildUi());
         reloadSession();
         refresh();
+        checkUpdate();
         ui.postDelayed(this::tick, 600);
+    }
+
+    /** Asks GitHub once at the start, a failure (no connection) only means that nothing is shown. */
+    private void checkUpdate() {
+        final String mine = version();
+        new Thread(() -> {
+            try {
+                final boolean newer = UpdateCheck.newer(UpdateCheck.latest(), mine);
+                runOnUiThread(() -> {
+                    updateAvailable = newer;
+                    if (updateButton != null)
+                        updateButton.setVisibility(newer ? View.VISIBLE : View.GONE);
+                });
+            } catch (IOException ignored) {
+                // no connection or no answer: no label
+            }
+        }, "update-check").start();
+    }
+
+    private String version() {
+        try {
+            String name = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            return name != null ? name : "";
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            return "";
+        }
     }
 
     @Override
@@ -258,9 +287,19 @@ public final class LauncherActivity extends Activity {
         names.addView(title);
         names.addView(text(Texts.t("Your library", "Twoja biblioteka"), 14, GREY));
 
+        // a newer version of the application is published: the page of it opens
+        updateButton = chip(Texts.t("Update available", "Dostępna aktualizacja"));
+        updateButton.setTextColor(GOLD);
+        updateButton.setBackground(round(0x33c9a24a, 0xff8a7640, dp(1), dp(20)));
+        updateButton.setVisibility(View.GONE);
+        updateButton.setOnClickListener(v -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UpdateCheck.PAGE))));
+        header.addView(updateButton);
+
         TextView mods = chip(Texts.t("Mods", "Mody"));
         mods.setOnClickListener(v -> startActivity(new Intent(this, ModsActivity.class)));
-        header.addView(mods);
+        LinearLayout.LayoutParams mp0 = new LinearLayout.LayoutParams(-2, -2);
+        mp0.setMargins(dp(10), 0, 0, 0);
+        header.addView(mods, mp0);
         accountButton = chip("");
         accountButton.setOnClickListener(v -> accountMenu());
         LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, -2);

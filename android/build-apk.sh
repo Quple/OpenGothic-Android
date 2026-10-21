@@ -40,7 +40,7 @@ mkdir -p "$package_dir/classes" "$package_dir/dex" "$package_dir/lib/arm64-v8a"
 
 # Package, version and sdk levels are normally supplied by Gradle
 python3 - "$repo_dir/android/AndroidManifest.xml" "$package_dir/AndroidManifest.xml" \
-  "$package_name" "${VERSION_CODE:-8}" "${VERSION_NAME:-0.8}" <<'PY'
+  "$package_name" "${VERSION_CODE:-73}" "${VERSION_NAME:-0.7.3}" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 

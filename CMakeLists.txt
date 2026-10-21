@@ -256,6 +256,9 @@ endif()
 if(ANDROID)
   add_android_apk(OpenGothic-apk
     PACKAGE_NAME org.opengothic.mobile
+    # The version that the launcher compares with the release of the repository (UpdateCheck.java); the code grows with every release
+    VERSION_CODE 73
+    VERSION_NAME "0.7.3"
     CODE Gothic2Notr
     MANIFEST android/AndroidManifest.xml
     JAVA_DIRS android/java

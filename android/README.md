@@ -23,6 +23,8 @@ APK: `build/android/OpenGothic-apk/build/outputs/apk/release/OpenGothic-apk-rele
 
 The first screen is the login to Steam (`SteamLoginActivity`) when nobody is signed in; "Continue without an account" goes to the library and the games are imported from a ZIP then. The library (`LauncherActivity`) has a card for Gothic, Gothic II and The Chronicles of Myrtana: **Play** when the game is installed, **Download** when the account owns it, **Import** otherwise. The games live next to each other (`Gothic1`, `Gothic2`, `Myrtana` in the files of the application), the one that is played is written to `game.txt` for the engine. The covers are in `android/launcher-assets/covers` (assets of the APK).
 
+The launcher asks GitHub for the release of the repository at the start (`UpdateCheck.java`): when the version in the name of the release is higher than the `VERSION_NAME` of the application (`add_android_apk` in `CMakeLists.txt`), "Update available" shows in the header and opens the page of the release. Raise the version there with every release.
+
 ## Steam
 
 The login is the one of the client of Steam, with the library [JavaSteam](https://github.com/Longi94/JavaSteam) (MIT); `SteamSession.java` is the only place that uses it, the launcher reaches it by names (`SteamBridge`). The password goes to Steam only (the library encrypts it) and is not kept. The session is a refresh token, kept encrypted with a key of the Android Keystore (`SteamStore`); signing out deletes it. A download asks for the language of the game, then it is a foreground service with a notification (`SteamDownloadService`); it takes the Windows files of that language into `<folder>.download` and moves them when the game is whole, and it goes on from what is on the disk after an interruption.
