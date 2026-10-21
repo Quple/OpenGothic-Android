@@ -396,6 +396,7 @@ public final class SteamActivity extends Activity {
             SteamSession.Login result = null;
             Set<Integer> have = null;
             String error = null;
+            boolean kept = false;
             try {
                 steam = new SteamSession();
                 login = steam;
@@ -412,7 +413,7 @@ public final class SteamActivity extends Activity {
                         runUi(mine, () -> showBusy("Approve the login in the Steam app on your phone."));
                     }
                 });
-                store.save(new SteamStore.Session(result.steamId, result.account, result.refreshToken));
+                kept = store.save(new SteamStore.Session(result.steamId, result.account, result.refreshToken));
                 have = steam.owned(appIds());
             } catch (SteamSession.Failure e) {
                 error = e.getMessage();
@@ -426,6 +427,7 @@ public final class SteamActivity extends Activity {
             final SteamSession.Login done = result;
             final Set<Integer> games = have;
             final String failed = error;
+            final boolean saved = kept;
             runUi(mine, () -> {
                 if (done == null) {
                     showLogin(failed != null ? failed : "The login failed.");
@@ -435,6 +437,8 @@ public final class SteamActivity extends Activity {
                 showAccount(done.account);
                 if (failed != null)
                     setMessage(failed, RED);
+                else if (!saved)
+                    setMessage("The session cannot be kept on this phone, you will sign in again next time.", RED);
                 showOwned();
             });
         }, "steam-login").start();

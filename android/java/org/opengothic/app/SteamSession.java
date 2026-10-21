@@ -26,8 +26,14 @@ import in.dragonbra.javasteam.steam.steamclient.callbacks.DisconnectedCallback;
 import in.dragonbra.javasteam.steam.steamclient.configuration.SteamConfiguration;
 import in.dragonbra.javasteam.types.KeyValue;
 
+import android.util.Log;
+
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+
 import java.io.Closeable;
 import java.io.IOException;
+import java.security.SecureRandom;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -47,6 +53,15 @@ import java.util.concurrent.TimeoutException;
  * The library is JavaSteam (MIT), it needs Android 8 (java.time).
  */
 final class SteamSession implements Closeable {
+    private static final String TAG = "OpenGothic/Steam";
+
+    static {
+        // JavaSteam asks for the provider "BC" by name (SHA-1, AES of the content). Android has a "BC" of its own with the
+        // algorithms taken out and a provider of a name that is taken is not added, so the old one has to go first.
+        Security.removeProvider("BC");
+        Security.insertProviderAt(new BouncyCastleProvider(), 1);
+    }
+
     /** What the player has to be asked for. The answers are given from any thread. */
     interface Prompt {
         /** The code of Steam Guard from the app of Steam or from the e-mail. Complete it with null to give up. */
@@ -105,7 +120,14 @@ final class SteamSession implements Closeable {
         subscriptions.add(manager.subscribe(ConnectedCallback.class, c -> connected.complete(null)));
         subscriptions.add(manager.subscribe(DisconnectedCallback.class, this::onDisconnected));
         subscriptions.add(manager.subscribe(LoggedOnCallback.class, c -> loggedOn.complete(c)));
-        subscriptions.add(manager.subscribe(LoggedOffCallback.class, c -> failAll(new Failure("Steam has ended the session.", true))));
+        subscriptions.add(manager.subscribe(LoggedOffCallback.class, c -> {
+            // only a token that is no good means a new login; being replaced by another session of the account is not that
+            EResult r = c.getResult();
+            boolean again = r == EResult.AccessDenied || r == EResult.InvalidPassword || r == EResult.Expired
+                    || r == EResult.InvalidLoginAuthCode || r == EResult.AccountDisabled;
+            Log.w(TAG, "logged off: " + r);
+            failAll(new Failure(again ? "The session has ended, sign in again." : "Steam has ended the session: " + r + ".", again));
+        }));
         subscriptions.add(manager.subscribe(LicenseListCallback.class, c -> {
             if (c.getResult() == EResult.OK)
                 licenses.complete(c.getLicenseList());
@@ -200,9 +222,12 @@ final class SteamSession implements Closeable {
         details.setUsername(account);
         details.setAccessToken(refreshToken);
         details.setShouldRememberPassword(true);
+        // every session has a number of its own, so the screen and a download can be signed in at the same time
+        details.setLoginID(new SecureRandom().nextInt(Integer.MAX_VALUE - 1) + 1);
         user.logOn(details);
 
         LoggedOnCallback r = await(loggedOn, 30, "Steam did not answer the login.");
+        Log.i(TAG, "logon: " + r.getResult());
         if (r.getResult() != EResult.OK) {
             boolean again = r.getResult() == EResult.AccessDenied || r.getResult() == EResult.InvalidPassword
                     || r.getResult() == EResult.Expired || r.getResult() == EResult.InvalidLoginAuthCode;
