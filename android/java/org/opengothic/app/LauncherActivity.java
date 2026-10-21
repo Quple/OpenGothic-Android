@@ -281,11 +281,16 @@ public final class LauncherActivity extends Activity {
 
         LinearLayout names = new LinearLayout(this);
         names.setOrientation(LinearLayout.VERTICAL);
-        header.addView(names, new LinearLayout.LayoutParams(0, -2, 1.f));
+        header.addView(names, new LinearLayout.LayoutParams(-2, -2));
         TextView title = text("OpenGothic", 32, CREAM);
         title.setTypeface(Typeface.create("serif", Typeface.NORMAL));
         names.addView(title);
         names.addView(text(Texts.t("Your library", "Twoja biblioteka"), 14, GREY));
+
+        // the game of the author: a small banner between the name and the buttons
+        LinearLayout.LayoutParams promoParams = new LinearLayout.LayoutParams(0, dp(60), 1.f);
+        promoParams.setMargins(dp(16), 0, dp(6), 0);
+        header.addView(buildPromo(), promoParams);
 
         // a newer version of the application is published: the page of it opens
         updateButton = chip(Texts.t("Update available", "Dostępna aktualizacja"));
@@ -320,6 +325,92 @@ public final class LauncherActivity extends Activity {
             row.addView(c.root, lp);
         }
         return page;
+    }
+
+    /** Summer Hideout: the picture, the logo, two lines about the game and the way to its Discord. */
+    private View buildPromo() {
+        final int radius = dp(16);
+        FrameLayout box = new FrameLayout(this);
+        box.setClipToOutline(true);
+        box.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+            }
+        });
+        box.setBackgroundColor(0xff0b1823);
+        box.setOnClickListener(v -> openDiscord());
+
+        ImageView bg = new ImageView(this);
+        bg.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        Bitmap picture = loadCover("promo/summerhideout-bg.webp");
+        if (picture != null)
+            bg.setImageBitmap(picture);
+        box.addView(bg, new FrameLayout.LayoutParams(-1, -1));
+
+        // the picture is darker where the text is
+        View shade = new View(this);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[] {0x33050b12, 0xb3050b12, 0xe6050b12}));
+        box.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(4), dp(8), dp(4));
+        box.addView(row, new FrameLayout.LayoutParams(-1, -1));
+
+        ImageView logo = new ImageView(this);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        Bitmap mark = loadCover("promo/summerhideout-logo.webp");
+        if (mark != null)
+            logo.setImageBitmap(mark);
+        row.addView(logo, new LinearLayout.LayoutParams(dp(84), -1));
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, -2, 1.f);
+        tp.setMargins(dp(10), 0, dp(8), 0);
+        row.addView(texts, tp);
+
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setGravity(Gravity.BOTTOM);
+        TextView name = text("Summer Hideout", 14, CREAM);
+        name.setTypeface(Typeface.create("serif", Typeface.NORMAL));
+        titleRow.addView(name);
+        TextView author = text(Texts.t("From the developer", "Od twórcy"), 10, GREY);
+        author.setPadding(dp(8), 0, 0, dp(2));
+        titleRow.addView(author);
+        texts.addView(titleRow);
+
+        TextView about = text(Texts.t(
+                "Live the summer of 2005 in a Polish village, rebuild a car and uncover the dark secrets of Racibórz-Zdrój.",
+                "Przeżyj lato 2005 na polskiej wsi, odbuduj samochód i odkryj mroczne tajemnice Racibórz-Zdroju."), 10, 0xffd3dde3);
+        about.setMaxLines(3);
+        about.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        texts.addView(about);
+
+        TextView discord = text("Discord  \u203a", 13, GOLD);
+        discord.setGravity(Gravity.CENTER);
+        discord.setPadding(dp(14), dp(6), dp(14), dp(6));
+        discord.setBackground(round(0x33c9a24a, GOLD, dp(1), dp(18)));
+        discord.setOnClickListener(v -> openDiscord());
+        row.addView(discord);
+
+        GradientDrawable border = new GradientDrawable();
+        border.setColor(0);
+        border.setCornerRadius(radius);
+        border.setStroke(dp(1), 0xff2c4658);
+        box.setForeground(border);
+        return box;
+    }
+
+    private void openDiscord() {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/summer-hideout")));
+        } catch (android.content.ActivityNotFoundException ignored) {
+            // no browser on the phone
+        }
     }
 
     private Card buildCard(final int index) {
