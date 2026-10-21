@@ -49,7 +49,7 @@ static int intArg(std::string_view v) {
 
 #if defined(__ANDROID__)
 /// A phone has no command line, so the mod of the installation is chosen here as -game: does on a computer.
-/// It is the ini in System that names its own game (or VDFs), for example TheChroniclesOfMyrtana.ini; none means the plain Gothic.
+/// It is the ini in System that names its own world, game or VDFs, for example TheChroniclesOfMyrtana.ini; none means the plain Gothic.
 static std::string detectModIni(const std::u16string& root) {
   const auto sys = FileUtil::nestedPath(root,{u"system"},Dir::FT_Dir);
   if(sys.empty())
@@ -68,8 +68,9 @@ static std::string detectModIni(const std::u16string& root) {
     if(low=="gothic.ini" || low=="gothicgame.ini" || low=="systempack.ini" || low=="gothicstarter.ini")
       continue;
 
+    // a mod ini says which world it starts in (TheChroniclesOfMyrtana.ini has nothing else), or which files it brings
     IniFile ini(e.path().u16string());
-    if(ini.has("FILES","GAME") || ini.has("FILES","VDF"))
+    if(ini.has("SETTINGS","WORLD") || ini.has("FILES","GAME") || ini.has("FILES","VDF"))
       found.push_back(name);
     }
   if(found.empty())
