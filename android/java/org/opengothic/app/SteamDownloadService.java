@@ -100,10 +100,9 @@ public final class SteamDownloadService extends Service {
                 }
 
                 @Override
-                public void percent(float done, long bytes) {
-                    s.percent = done;
-                    s.bytes = bytes;
+                public void bytes(long done, long total) {
                     s.text = "";
+                    s.progress(done, total);
                     update(s);
                 }
             });
@@ -139,7 +138,8 @@ public final class SteamDownloadService extends Service {
     private void update(Downloads.State s) {
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null)
-            nm.notify(NOTIFICATION, notification(s.title, s.text.isEmpty() ? Math.round(s.percent * 100) + "%" : s.text, Math.round(s.percent * 100)));
+            nm.notify(NOTIFICATION, notification(s.title, s.text.isEmpty() ? Math.round(s.percent * 100) + "%  \u00b7  " + Downloads.describe(s) : s.text,
+                    Math.round(s.percent * 100)));
     }
 
     private void finish(Downloads.State s) {

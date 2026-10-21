@@ -93,6 +93,7 @@ public final class LauncherActivity extends Activity {
         TextView subtitle;
         TextView chip;
         TextView error;
+        TextView detail;
         ProgressBar bar;
         Button primary;
         TextView menu;
@@ -326,6 +327,10 @@ public final class LauncherActivity extends Activity {
         chipParams.setMargins(0, dp(6), 0, dp(6));
         info.addView(c.chip, chipParams);
 
+        c.detail = text("", 12, GREY);
+        c.detail.setVisibility(View.GONE);
+        info.addView(c.detail);
+
         c.error = text("", 12, 0xffe29a8c);
         c.error.setMaxLines(3);
         info.addView(c.error);
@@ -431,6 +436,7 @@ public final class LauncherActivity extends Activity {
             boolean importingThis = importing == i;
 
             c.error.setText("");
+            c.detail.setVisibility(View.GONE);
             c.bar.setVisibility(View.GONE);
             c.menu.setVisibility((installed || canDownload(i)) && !working ? View.VISIBLE : View.GONE);
 
@@ -458,6 +464,8 @@ public final class LauncherActivity extends Activity {
                 setChip(c, Texts.t("Downloading", "Pobieranie") + " " + pct + "%", 0x33c9a24a, 0xffe7c873);
                 c.bar.setVisibility(View.VISIBLE);
                 c.bar.setProgress(Math.round(busy.percent * 1000));
+                c.detail.setText(Downloads.describe(busy));
+                c.detail.setVisibility(View.VISIBLE);
                 setPrimary(c, Texts.t("Stop", "Zatrzymaj"), false, true);
             } else if (importingThis) {
                 setChip(c, importText, 0x33c9a24a, 0xffe7c873);

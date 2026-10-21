@@ -74,8 +74,8 @@ final class SteamSession implements Closeable {
     interface Progress {
         void status(String text);
 
-        /** A part of the whole game, 0..1, and the bytes that are done. */
-        void percent(float done, long bytes);
+        /** The bytes that are done and the size of the whole game (0 when it is not known). */
+        void bytes(long done, long total);
     }
 
     static final class Failure extends Exception {
@@ -282,8 +282,23 @@ final class SteamSession implements Closeable {
     void download(int appId, java.io.File dir, boolean verify, String language, final Progress progress) throws Failure {
         List<License> list = await(licenses, 30, "Steam did not give the list of the licenses.");
         final CompletableFuture<Void> done = new CompletableFuture<>();
-        final long[] bytes = {0};
         final Failure[] failed = {null};
+
+        // the library tells the part of a depot, never the part of the game: the game is the sum of its depots
+        final Map<Integer, Long> sizes = new java.util.HashMap<>(depotSizes(appId, language));
+        final Map<Integer, Float> parts = new java.util.HashMap<>();
+        final Object lock = new Object();
+        final Runnable report = () -> {
+            long total = 0, got = 0;
+            synchronized (lock) {
+                for (Map.Entry<Integer, Long> e : sizes.entrySet()) {
+                    total += e.getValue();
+                    Float p = parts.get(e.getKey());
+                    got += p != null ? (long) (p * e.getValue()) : 0;
+                }
+            }
+            progress.bytes(got, total);
+        };
 
         IDownloadListener listener = new IDownloadListener() {
             @Override
@@ -313,21 +328,34 @@ final class SteamSession implements Closeable {
 
             @Override
             public void onFileCompleted(int depotId, String fileName, float depotPercentComplete) {
+                part(depotId, depotPercentComplete, 0);
             }
 
             @Override
             public void onChunkCompleted(int depotId, float depotPercentComplete, long compressedBytes, long uncompressedBytes) {
-                bytes[0] += uncompressedBytes;
-                progress.percent(depotPercentComplete, bytes[0]);
+                part(depotId, depotPercentComplete, uncompressedBytes);
             }
 
             @Override
             public void onDepotCompleted(int depotId, long compressedBytes, long uncompressedBytes) {
+                part(depotId, 1.f, uncompressedBytes);
+            }
+
+            private void part(int depotId, float percent, long bytesOfDepot) {
+                synchronized (lock) {
+                    parts.put(depotId, Math.min(1.f, percent));
+                    // a depot that the sizes of the app did not list: its size is what it has done so far over its part
+                    if (!sizes.containsKey(depotId) && percent > 0.01f && bytesOfDepot > 0)
+                        sizes.put(depotId, (long) (bytesOfDepot / percent));
+                }
+                report.run();
             }
         };
 
-        // the arguments: debug, LAN cache, chunks loaded, chunks unpacked and files written at the same time, the Windows build
-        DepotDownloader d = new DepotDownloader(client, list, false, false, 8, 2, 1, true, null);
+        // the arguments: debug, LAN cache, chunks loaded, chunks unpacked and files written at the same time, the Windows build.
+        // A chunk is a request to a server of Steam: a few of them at the same time are slow, the sample of the library has 50.
+        int cores = Runtime.getRuntime().availableProcessors();
+        DepotDownloader d = new DepotDownloader(client, list, false, false, 48, Math.max(2, cores), 4, true, null);
         downloader = d;
         try {
             d.addListener(listener);
@@ -357,6 +385,48 @@ final class SteamSession implements Closeable {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /**
+     * The sizes of the depots that this download takes, from the information of the app: the Windows ones and those of the chosen
+     * language (or of none). It is a guess of the library's own choice, an empty answer only means that the whole is learned on the way.
+     */
+    private Map<Integer, Long> depotSizes(int appId, String language) {
+        Map<Integer, Long> ret = new java.util.HashMap<>();
+        try {
+            Long token = apps.picsGetAccessTokens(appId).toFuture().get(30, TimeUnit.SECONDS).getAppTokens().get(appId);
+            PICSRequest request = new PICSRequest(appId, token != null ? token : 0L);
+            for (PICSProductInfoCallback c : apps.picsGetProductInfo(request).toFuture().get(30, TimeUnit.SECONDS).getResults()) {
+                PICSProductInfo info = c.getApps().get(appId);
+                if (info == null)
+                    continue;
+                for (KeyValue depot : info.getKeyValues().get("depots").getChildren()) {
+                    int id;
+                    try {
+                        id = Integer.parseInt(depot.getName());
+                    } catch (NumberFormatException e) {
+                        continue;   // "branches" and the like
+                    }
+                    KeyValue config = depot.get("config");
+                    String os = config.get("oslist").getValue();
+                    String lang = config.get("language").getValue();
+                    String low = config.get("lowviolence").getValue();
+                    if (os != null && !os.isEmpty() && !os.contains("windows"))
+                        continue;
+                    if (lang != null && !lang.isEmpty() && !lang.equals(language))
+                        continue;
+                    if ("1".equals(low))
+                        continue;
+                    long size = depot.get("manifests").get("public").get("size").asLong(0);
+                    if (size > 0)
+                        ret.put(id, size);
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "sizes of the depots: " + e);
+        }
+        Log.i(TAG, "depots of " + appId + ": " + ret);
+        return ret;
     }
 
     /** Stops what is going on, the files stay for the next try. */
