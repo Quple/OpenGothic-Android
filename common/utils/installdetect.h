@@ -16,6 +16,8 @@ class InstallDetect final {
     static std::u16string applicationSupportDirectory();
 #elif defined(__ANDROID__)
     static std::filesystem::path androidInternalDataPath();
+    /// The ini of the mod that the launcher has chosen (the second line of game.txt): "-" is the game with no mod, empty is not said
+    static std::string           androidModIni();
 #endif
 
   private:

@@ -69,6 +69,24 @@ std::u16string InstallDetect::detectG2() {
   }
 
 #ifdef __ANDROID__
+std::string InstallDetect::androidModIni() {
+  const auto base = Tempest::AndroidApi::externalDataPath();
+  if(base.empty())
+    return "";
+  std::ifstream in(std::filesystem::path(base)/"game.txt");
+  std::string   line, ini;
+  if(!in || !std::getline(in,line) || !std::getline(in,ini))
+    return "";
+  std::string ret;
+  for(char c:ini) {
+    const bool ok = ('a'<=c && c<='z') || ('A'<=c && c<='Z') || ('0'<=c && c<='9') || c=='_' || c=='-' || c=='.';
+    if(!ok)
+      break;
+    ret.push_back(c);
+    }
+  return ret;
+  }
+
 std::filesystem::path InstallDetect::androidInternalDataPath() {
   auto path = Tempest::AndroidApi::internalDataPath();
   std::filesystem::create_directories(path);

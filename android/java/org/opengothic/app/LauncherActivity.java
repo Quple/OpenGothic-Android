@@ -63,21 +63,23 @@ public final class LauncherActivity extends Activity {
         final String subtitle;
         final int appId;
         final String cover;
+        final String ini;   // the ini of the mod in System, "-" for a game with no mod
 
-        GameDef(String folder, String title, String subtitle, int appId, String cover) {
+        GameDef(String folder, String title, String subtitle, int appId, String cover, String ini) {
             this.folder = folder;
             this.title = title;
             this.subtitle = subtitle;
             this.appId = appId;
             this.cover = cover;
+            this.ini = ini;
         }
     }
 
     // app ids of Steam: Gothic 1 Classic, Gothic II: Gold Edition (with Night of the Raven), The Chronicles of Myrtana: Archolos
     private static final GameDef[] GAMES = {
-        new GameDef("Gothic1", "Gothic", "", 65540, "covers/gothic1.webp"),
-        new GameDef("Gothic2", "Gothic II", "Noc Kruka", 39510, "covers/gothic2.webp"),
-        new GameDef("Myrtana", "The Chronicles of Myrtana", "Archolos", 1467450, "covers/myrtana.webp"),
+        new GameDef("Gothic1", "Gothic", "", 65540, "covers/gothic1.webp", "-"),
+        new GameDef("Gothic2", "Gothic II", "Noc Kruka", 39510, "covers/gothic2.webp", "-"),
+        new GameDef("Myrtana", "The Chronicles of Myrtana", "Archolos", 1467450, "covers/myrtana.webp", "TheChroniclesOfMyrtana.ini"),
     };
 
     /** The names that Steam gives the languages of a game and what the player reads. */
@@ -522,9 +524,9 @@ public final class LauncherActivity extends Activity {
     private void play(int game) {
         lastPlayed = game;
         prefs.edit().putInt("game", game).apply();
-        // the engine reads which of the installations it is: it has no command line
+        // the engine reads which of the installations it is and which mod (the ini of it): it has no command line
         try (OutputStream out = new FileOutputStream(new File(external, "game.txt"))) {
-            out.write(GAMES[game].folder.getBytes(StandardCharsets.UTF_8));
+            out.write((GAMES[game].folder + "\n" + GAMES[game].ini + "\n").getBytes(StandardCharsets.UTF_8));
         } catch (IOException ignored) {
             // the engine takes Gothic II then
         }

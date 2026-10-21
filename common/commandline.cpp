@@ -67,6 +67,8 @@ static std::string detectModIni(const std::u16string& root) {
       continue;
     if(low=="gothic.ini" || low=="gothicgame.ini" || low=="systempack.ini" || low=="gothicstarter.ini")
       continue;
+    if(low.compare(0,10,"g2_classic")==0)
+      continue;   // the profile of Gothic II without the addon, not a mod
 
     // a mod ini says which world it starts in (TheChroniclesOfMyrtana.ini has nothing else), or which files it brings
     IniFile ini(e.path().u16string());
@@ -230,10 +232,16 @@ CommandLine::CommandLine(int argc, const char** argv) {
 
 #if defined(__ANDROID__)
   if(mod.empty() && !gpath.empty()) {
-    autoMod = detectModIni(gpath);
-    if(!autoMod.empty()) {
-      Log::i("mod of the installation: ",autoMod);
-      mod = autoMod;
+    // the launcher says which mod is played ("-" none), only an installation that it did not start is looked into
+    const std::string chosen = InstallDetect::androidModIni();
+    if(chosen=="-") {
+      Log::i("no mod: the launcher has chosen the game");
+      } else {
+      autoMod = chosen.empty() ? detectModIni(gpath) : chosen;
+      if(!autoMod.empty()) {
+        Log::i("mod of the installation: ",autoMod);
+        mod = autoMod;
+        }
       }
     }
 #endif
