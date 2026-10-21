@@ -19,9 +19,15 @@ APK: `build/android/OpenGothic-apk/build/outputs/apk/release/OpenGothic-apk-rele
 
 `android/build-apk.sh` builds a signed APK with the tools of the Android SDK only, without Gradle. See the comment in the script for its options.
 
+## Steam
+
+The **Steam** button of the launcher signs in to the account of Steam (the name and the password, then the code of Steam Guard or an approval in the app of Steam), shows which of Gothic, Gothic II (Gold Edition) and The Chronicles of Myrtana: Archolos the account owns and downloads them to the folders of the installations (`Gothic1`, `Gothic2`, `Myrtana`). It is the client of Steam, as the program of Steam is: the library is [JavaSteam](https://github.com/Longi94/JavaSteam) (MIT), `SteamSession.java` is the only place that uses it. The password goes to Steam only (the library encrypts it) and is not kept. The session is a refresh token, kept encrypted with a key of the Android Keystore (`SteamStore`); signing out deletes it. A download is a foreground service with a notification (`SteamDownloadService`), it goes on from what is on the disk after an interruption. It takes the Windows files, every language, into `<folder>.download` and moves them when the game is whole.
+
+The libraries come with the Gradle build (`DEPENDENCIES` in `CMakeLists.txt`). `build-apk.sh` has none, it leaves the Steam classes out and the launcher hides the button. JavaSteam needs Android 8 (`java.time`): on Android 7 the screen says so.
+
 ## Game files
 
-Use a legally owned Gothic II: Night of the Raven installation. No game files are included in the APK.
+Use legally owned installations of Gothic, Gothic II: Night of the Raven and The Chronicles of Myrtana, any of them or all. No game files are included in the APK. The launcher keeps a folder for each (`Gothic1`, `Gothic2`, `Myrtana` in the files of the application), chooses one and writes its name to `game.txt`, the engine starts that one.
 
 Make a ZIP of the installation: `Data`, `_work` and `System` have to be at the root of the archive, or in a single folder in it. Choose **Import game files** in the launcher; the files are copied to the app-specific storage, no storage permissions are needed.
 

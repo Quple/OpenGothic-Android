@@ -258,7 +258,20 @@ if(ANDROID)
     PACKAGE_NAME org.opengothic.mobile
     CODE Gothic2Notr
     MANIFEST android/AndroidManifest.xml
-    JAVA_DIRS android/java)
+    JAVA_DIRS android/java
+    # The login to Steam and the download of the games (android/java/org/opengothic/app/SteamSession.java).
+    # The cryptography, the unpacking of the content (xz, zstd) and the libraries that the POM of JavaSteam only lists as runtime ones.
+    DEPENDENCIES
+      "in.dragonbra:javasteam:1.8.0"
+      "in.dragonbra:javasteam-depotdownloader:1.8.0"
+      "org.bouncycastle:bcprov-jdk18on:1.80"
+      "org.tukaani:xz:1.12"
+      "com.github.luben:zstd-jni:1.5.7-11@aar"
+      "org.jetbrains.kotlin:kotlin-stdlib:2.2.21"
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
+      "com.google.protobuf:protobuf-java:4.31.1"
+      "com.squareup.okhttp3:okhttp:5.3.2"
+      "com.squareup.okio:okio:3.16.0")
 endif()
 
 # installation

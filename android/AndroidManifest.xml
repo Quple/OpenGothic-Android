@@ -2,9 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Downloads of the games from Steam go on when the screen is gone -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-feature android:name="android.hardware.vulkan.level" android:version="0" android:required="true" />
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x00401000" android:required="true" />
+    <!-- The servers of the content of Steam answer on plain HTTP too: the data is encrypted and checked by Steam's own hashes -->
     <application android:label="OpenGothic" android:hasCode="true" android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:resizeableActivity="true"
         android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
         <!-- Imports the game files and starts the game -->
@@ -20,6 +27,12 @@
         <activity android:name="org.opengothic.app.ModsActivity" android:exported="false"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+        <!-- The account of Steam: the login and the games that the account owns -->
+        <activity android:name="org.opengothic.app.SteamActivity" android:exported="false"
+            android:screenOrientation="landscape" android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <service android:name="org.opengothic.app.SteamDownloadService" android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <!-- Runs in its own process, the launcher stays alive when the game exits -->
         <activity android:name="org.opengothic.app.GameActivity" android:exported="false" android:process=":game"
             android:screenOrientation="landscape"

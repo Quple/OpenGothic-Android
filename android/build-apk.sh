@@ -58,8 +58,11 @@ PY
 
 "$tools_dir/aapt2" link -I "$android_jar" --manifest "$package_dir/AndroidManifest.xml" -o "$package_dir/base.apk"
 
+# The login to Steam and the downloads (Steam*.java) need JavaSteam, which only the Gradle build brings: this script has no libraries.
+# The launcher hides its Steam button when the class is missing.
+sources=$(ls "$repo_dir"/android/java/org/opengothic/app/*.java | grep -v '/Steam')
 javac -source 8 -target 8 -bootclasspath "$android_jar:$tools_dir/core-lambda-stubs.jar" \
-  -d "$package_dir/classes" "$repo_dir"/android/java/org/opengothic/app/*.java
+  -d "$package_dir/classes" $sources
 jar cf "$package_dir/classes.jar" -C "$package_dir/classes" .
 "$tools_dir/d8" --release --min-api 24 --lib "$android_jar" --output "$package_dir/dex" "$package_dir/classes.jar"
 

@@ -395,7 +395,7 @@ void SaveScreen::paint(Painter& p, int W, int H) {
       const int sx = int((float(thumb.w())-sw)/2);
       const int sy = int((float(thumb.h())-sh)/2);
       p.setBrush(Brush(thumb));
-      p.drawRect(t.x,t.y,t.w,t.h,sx,sy,int(sw),int(sh));
+      p.drawRect(t.x,t.y,t.w,t.h,sx,sy,sx+int(sw),sy+int(sh));   // the last two are the far corner, not the size
       } else {
       frame(p,t,1,PanelLine,Color(0.02f,0.04f,0.07f,0.95f));
       const int   cx = t.x+t.w/2;

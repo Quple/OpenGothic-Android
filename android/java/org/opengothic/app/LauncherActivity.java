@@ -23,6 +23,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -35,11 +36,34 @@ public final class LauncherActivity extends Activity {
     private static final int MAX_ENTRIES = 200000;
     private static final long MAX_SIZE = 20L * 1024 * 1024 * 1024;
 
+    /** The games that can be installed next to each other. The folder of Gothic II is the one that older versions had. */
+    private static final class GameDef {
+        final String folder;
+        final String title;
+        final String subtitle;
+
+        GameDef(String folder, String title, String subtitle) {
+            this.folder = folder;
+            this.title = title;
+            this.subtitle = subtitle;
+        }
+    }
+
+    private static final GameDef[] GAMES = {
+        new GameDef("Gothic1", "Gothic", "Gothic 1"),
+        new GameDef("Gothic2", "Gothic II", "Night of the Raven"),
+        new GameDef("Myrtana", "The Chronicles of Myrtana", "Archolos"),
+    };
+
     private TextView status;
     private Button start;
     private Button choose;
+    private Button remove;
+    private final View[] cards = new View[GAMES.length];
+    private final TextView[] cardStates = new TextView[GAMES.length];
     private volatile boolean importing;
-    private File root;
+    private File external;
+    private int selected = 1;
 
     @Override
     public void onCreate(Bundle state) {
@@ -49,7 +73,8 @@ public final class LauncherActivity extends Activity {
             finish();
             return;
         }
-        root = new File(external, "Gothic2");
+        this.external = external;
+        selected = Math.max(0, Math.min(GAMES.length - 1, getSharedPreferences("launcher", MODE_PRIVATE).getInt("game", 1)));
         SystemUi.hideBars(this);
         setContentView(buildUi());
         refresh();
@@ -81,16 +106,34 @@ public final class LauncherActivity extends Activity {
         left.addView(subtitle);
 
         start = button("Play", true);
-        start.setOnClickListener(v -> startActivity(new Intent(this, GameActivity.class)));
+        start.setOnClickListener(v -> {
+            // the game reads which of the installations it is (it has no command line)
+            writeSelection();
+            startActivity(new Intent(this, GameActivity.class));
+        });
         left.addView(start);
 
         choose = button("Import game files", false);
         choose.setOnClickListener(v -> pickArchive());
         left.addView(choose);
 
+        remove = button("Remove game files", false);
+        remove.setOnClickListener(v -> askRemove());
+        left.addView(remove);
+
         Button mods = button("Mods", false);
         mods.setOnClickListener(v -> startActivity(new Intent(this, ModsActivity.class)));
         left.addView(mods);
+
+        Button steam = button("Steam", false);
+        try {
+            // the screen of Steam is not in a build that has no libraries (build-apk.sh)
+            final Class<?> steamScreen = Class.forName("org.opengothic.app.SteamActivity");
+            steam.setOnClickListener(v -> startActivity(new Intent(this, steamScreen)));
+        } catch (ClassNotFoundException e) {
+            steam.setVisibility(View.GONE);
+        }
+        left.addView(steam);
 
         Button help = button("How to start", false);
         help.setOnClickListener(v -> showHelp());
@@ -100,18 +143,29 @@ public final class LauncherActivity extends Activity {
         right.setPadding(dp(40), 0, 0, 0);
         page.addView(right, new LinearLayout.LayoutParams(0, -1, 1.f));
 
-        TextView edition = label("GOTHIC II", 25, 0xffd9cfb4);
-        edition.setTypeface(Typeface.create("serif", Typeface.NORMAL));
-        right.addView(edition);
-        right.addView(label("NIGHT OF THE RAVEN", 14, 0xffa3b9c4));
+        right.addView(label("YOUR GAMES", 12, 0xffa4afb4));
+        for (int i = 0; i < GAMES.length; ++i) {
+            final int index = i;
+            LinearLayout card = column(Gravity.CENTER_VERTICAL);
+            card.setPadding(dp(16), dp(10), dp(16), dp(10));
+            card.setClickable(true);
+            card.setOnClickListener(v -> select(index));
 
-        View line = new View(this);
-        line.setBackgroundColor(0xff657581);
-        LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(-1, dp(1));
-        lineParams.setMargins(0, dp(22), 0, dp(22));
-        right.addView(line, lineParams);
+            TextView name = label(GAMES[i].title, 20, 0xffe9e0c8);
+            name.setTypeface(Typeface.create("serif", Typeface.NORMAL));
+            card.addView(name);
+            card.addView(label(GAMES[i].subtitle, 12, 0xff8fa5b0));
+            cardStates[i] = label("", 13, 0xff8fa5b0);
+            card.addView(cardStates[i]);
 
-        status = label("", 16, 0xffc8d4da);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.setMargins(0, dp(8), 0, 0);
+            right.addView(card, lp);
+            cards[i] = card;
+        }
+
+        status = label("", 15, 0xffc8d4da);
+        status.setPadding(0, dp(16), 0, 0);
         right.addView(status);
 
         TextView note = label("Touch controls  •  Vulkan\nGraphics and controls can be adjusted in the game menu", 12, 0xff8fa5b0);
@@ -165,10 +219,12 @@ public final class LauncherActivity extends Activity {
     private void showHelp() {
         new AlertDialog.Builder(this)
                 .setTitle("Getting started")
-                .setMessage("1. Make a ZIP of your own Gothic II: Night of the Raven installation. "
+                .setMessage("1. Choose the game on the right: Gothic, Gothic II or The Chronicles of Myrtana. "
+                        + "Every game has a place of its own, they can all be installed.\n\n"
+                        + "2. Make a ZIP of your own installation of that game. "
                         + "It must contain the Data, _work and System folders.\n\n"
-                        + "2. Choose Import game files. The files are copied once.\n\n"
-                        + "3. Choose Play. Button size, camera sensitivity and graphics are in the settings of the in-game menu.\n\n"
+                        + "3. Choose Import game files. The files are copied once.\n\n"
+                        + "4. Choose Play. Button size, camera sensitivity and graphics are in the settings of the in-game menu.\n\n"
                         + "The game files are not a part of the application.")
                 .setPositiveButton("OK", null)
                 .show();
@@ -187,14 +243,82 @@ public final class LauncherActivity extends Activity {
                 && new File(dir, "System").isDirectory();
     }
 
+    private File rootOf(int game) {
+        return new File(external, GAMES[game].folder);
+    }
+
+    private void select(int game) {
+        if (importing || game == selected)
+            return;
+        selected = game;
+        getSharedPreferences("launcher", MODE_PRIVATE).edit().putInt("game", game).apply();
+        refresh();
+    }
+
+    /** The name of the folder of the game that starts: the engine looks for it next to the files of the application. */
+    private void writeSelection() {
+        try (OutputStream out = new FileOutputStream(new File(external, "game.txt"))) {
+            out.write(GAMES[selected].folder.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException ignored) {
+            // the engine takes Gothic II then
+        }
+    }
+
+    private void askRemove() {
+        if (importing)
+            return;
+        final int game = selected;
+        new AlertDialog.Builder(this)
+                .setTitle("Remove game files")
+                .setMessage("The files of " + GAMES[game].title + " will be deleted from this phone. "
+                        + "The saves are kept. You can import the game again later.")
+                .setPositiveButton("Remove", (d, w) -> {
+                    importing = true;
+                    refresh();
+                    new Thread(() -> {
+                        remove(rootOf(game));
+                        runOnUiThread(() -> {
+                            importing = false;
+                            refresh();
+                        });
+                    }, "game-remove").start();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     private void refresh() {
-        boolean ready = isInstallation(root);
+        boolean ready = isInstallation(rootOf(selected));
         start.setEnabled(ready && !importing);
         choose.setEnabled(!ready && !importing);
         choose.setVisibility(ready ? View.GONE : View.VISIBLE);
+        remove.setEnabled(!importing);
+        remove.setVisibility(ready ? View.VISIBLE : View.GONE);
+
+        for (int i = 0; i < GAMES.length; ++i) {
+            boolean installed = isInstallation(rootOf(i));
+            cardStates[i].setText(installed ? "Installed" : "Not installed");
+            cardStates[i].setTextColor(installed ? 0xff8fd19e : 0xff8fa5b0);
+
+            GradientDrawable shape = new GradientDrawable();
+            shape.setColor(i == selected ? 0x44304656 : 0x22172530);
+            shape.setCornerRadius(dp(8));
+            shape.setStroke(dp(i == selected ? 2 : 1), i == selected ? 0xffd8c499 : 0xff425761);
+            cards[i].setBackground(shape);
+        }
+
+        String title = GAMES[selected].title;
         status.setText(ready
-                ? "Ready to play\nYour installation is available."
-                : "Add your game\nImport a ZIP archive with the files of Gothic II: Night of the Raven.");
+                ? "Ready to play\n" + title + " is installed."
+                : "Add your game\nImport a ZIP archive with the files of " + title + ".");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // a game may have been downloaded from Steam
+        if (status != null && external != null)
+            refresh();
     }
 
     @Override
@@ -209,11 +333,12 @@ public final class LauncherActivity extends Activity {
         status.setText("Importing... Keep the application open.");
 
         Uri uri = data.getData();
-        new Thread(() -> importArchive(uri), "game-import").start();
+        final File target = rootOf(selected);
+        new Thread(() -> importArchive(uri, target), "game-import").start();
     }
 
     /** Unpacks next to the final folder, which is created only after the whole archive is valid. */
-    private void importArchive(Uri uri) {
+    private void importArchive(Uri uri, File root) {
         File staging = new File(root.getParentFile(), "import-staging");
         try {
             remove(staging);
@@ -225,7 +350,7 @@ public final class LauncherActivity extends Activity {
             if (source == null)
                 throw new IOException("Missing Data, _work or System. ZIP the complete game installation.");
             if (root.exists())
-                throw new IOException("Gothic2 folder already exists; refusing to overwrite it");
+                throw new IOException("The folder of the game already exists; refusing to overwrite it");
             if (!source.renameTo(root))
                 throw new IOException("Cannot finalize import");
             remove(staging);

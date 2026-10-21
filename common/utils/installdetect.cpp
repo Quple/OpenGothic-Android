@@ -13,6 +13,7 @@
 #endif
 
 #include <cstring>
+#include <fstream>
 #include "utils/fileutil.h"
 
 InstallDetect::InstallDetect() {
@@ -39,8 +40,29 @@ std::u16string InstallDetect::detectG2() {
   auto path = Tempest::AndroidApi::externalDataPath().u16string();
   if(path.empty())
     return u"";
-  path = FileUtil::nestedPath(path + u"/", {u"gothic2"}, Tempest::Dir::FT_Dir);
-  return path;
+
+  // the launcher writes the name of the folder of the game that is chosen (Gothic1, Gothic2, Myrtana): there is no command line
+  std::u16string folder = u"gothic2";
+  {
+    std::ifstream in(std::filesystem::path(path)/"game.txt");
+    std::string   name;
+    if(in && std::getline(in,name)) {
+      std::u16string chosen;
+      for(char c:name) {
+        const bool ok = ('a'<=c && c<='z') || ('A'<=c && c<='Z') || ('0'<=c && c<='9') || c=='_' || c=='-';
+        if(!ok)
+          break;
+        chosen.push_back(char16_t(c));
+        }
+      if(!chosen.empty())
+        folder = chosen;
+      }
+  }
+
+  auto ret = FileUtil::nestedPath(path + u"/", {folder.c_str()}, Tempest::Dir::FT_Dir);
+  if(ret.empty() && folder!=u"gothic2")
+    ret = FileUtil::nestedPath(path + u"/", {u"gothic2"}, Tempest::Dir::FT_Dir);
+  return ret;
 #else
   return u"";
 #endif
