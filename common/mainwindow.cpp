@@ -78,8 +78,8 @@ MainWindow::MainWindow(Device& device)
 
   Gothic::inst().onBenchmarkFinished.bind(this,&MainWindow::onBenchmarkFinished);
 
-  if(!Gothic::inst().defaultSave().empty()){
-    Gothic::inst().load(Gothic::inst().defaultSave());
+  if(const std::string defSave = Gothic::inst().defaultSave(); !defSave.empty()){
+    Gothic::inst().load(defSave);
     rootMenu.popMenu();
     }
   else if(!CommandLine::inst().doStartMenu()) {
@@ -166,6 +166,7 @@ void MainWindow::setupUi() {
 #endif
   addWidget(&rootMenu);
   addWidget(&modMenu);
+  addWidget(&errorScreen);
 
   rootMenu.setMainMenu();
 
@@ -470,6 +471,12 @@ void MainWindow::mouseWheelEvent(MouseEvent &event) {
   }
 
 void MainWindow::keyDownEvent(KeyEvent &event) {
+  if(errorScreen.isActive()) {
+    event.accept();
+    errorScreen.keyDownEvent(event);
+    uiKeyUp=&errorScreen;
+    return;
+    }
   if(modMenu.isActive()) {
     event.accept();
     modMenu.keyDownEvent(event);
@@ -591,6 +598,12 @@ void MainWindow::keyRepeatEvent(KeyEvent& event) {
   }
 
 void MainWindow::keyUpEvent(KeyEvent &event) {
+  if(uiKeyUp==&errorScreen) {
+    event.accept();
+    errorScreen.keyUpEvent(event);
+    uiKeyUp = nullptr;
+    return;
+    }
   Scripting::game::keyEvent(event,false);
   {
   const int32_t code = KeyCodec::keyToCode(event.key);
@@ -1077,6 +1090,10 @@ void MainWindow::onMarvinKey() {
   }
 
 uint64_t MainWindow::tick() {
+  if(CommandLine::inst().doShowErrors())
+    errorScreen.poll();
+  if(errorScreen.isActive())
+    clearInput();
   Scripting::game::tick();
   if(auto* w = Gothic::inst().world()) {
     // a script (CoM, fistfight) closes the inventory of the player
@@ -1491,9 +1508,20 @@ void MainWindow::render(){
       once player position is updated, animation bones(cameraBone in particular) can be updated
       lastly - camera position
       */
-    const uint64_t dt = tick();
-    updateAnimation(dt);
-    tickCamera(dt);
+    uint64_t dt = 0;
+    try {
+      dt = tick();
+      updateAnimation(dt);
+      tickCamera(dt);
+      }
+    catch(const Tempest::SwapchainSuboptimal&) {
+      throw;
+      }
+    catch(const std::exception& e) {
+      // an exception of the scripts or of the game: it is shown with the details, the game goes on (the same error is shown once)
+      Log::e("exception in the game: ",e.what());
+      errorScreen.report("Exception of the game",e.what());
+      }
 
     auto& sync = fence[cmdId];
     if(!sync.wait(0)) {
@@ -1624,6 +1652,8 @@ void cycleSpell(Npc& pl) {
 }
 
 Mobile::Mode MainWindow::mobileContext() const {
+  if(errorScreen.isActive())
+    return Mobile::Mode::Menu;
   if(modMenu.isActive())
     return Mobile::Mode::Menu;
   if(Gothic::inst().checkLoading()!=Gothic::LoadState::Idle)
@@ -1665,6 +1695,8 @@ void MainWindow::setupMobileControls() {
       dialogs.mobileTouch(x,y,phase);
     };
   androidControls.menuTap = [this](float x, float y) {
+    if(errorScreen.isActive())
+      errorScreen.dismiss(); else
     if(modMenu.isActive())
       modMenu.mobileTap(x,y); else
     if(rootMenu.isActive())
@@ -1675,6 +1707,8 @@ void MainWindow::setupMobileControls() {
       dialogs.mobileTap(x,y);
     };
   androidControls.menuScroll = [this](float dy) {
+    if(errorScreen.isActive())
+      errorScreen.scroll(dy>0 ? 2 : -2); else
     if(rootMenu.isActive())
       rootMenu.mobileScroll(dy); else
     if(inventory.isActive())

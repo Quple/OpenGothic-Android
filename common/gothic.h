@@ -63,7 +63,12 @@ class Gothic final {
 
     std::string_view defaultWorld()       const;
     std::string_view defaultPlayer()      const;
-    std::string_view defaultSave()        const;
+    /// the saved game of the command line (-save), empty: none
+    std::string      defaultSave()        const;
+    /// The saved games are kept per game: the file of a mod has the name of the mod in front (a phone with the Chronicles of Myrtana and Gothic 2
+    /// has two sets of saves), Gothic 2 has the name of the old versions ("save_slot_N.sav"), Gothic 1 has g1_.
+    std::string      saveGameId()         const;
+    std::string      saveFileName(size_t slot) const;
     std::string_view defaultGameDatFile() const;
     std::string_view defaultOutputUnits() const;
 

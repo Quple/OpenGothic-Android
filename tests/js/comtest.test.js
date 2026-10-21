@@ -181,3 +181,16 @@ test("comtest with a name that does not exist says so, and a case of another mod
     c2.run("jorn");
     assert.match(c2.console.lines.join("\n"), /SKIP armor:/);
 });
+
+test("comtest error: writes an exception of the scripts to the log and tells what should be seen", () => {
+    const g = game();
+    const told = [];
+    g.debug.testError = (t) => { told.push(t); return true; };
+    const c = setup(g);
+    c.run("error");
+    assert.equal(told.length, 1);
+    assert.match(told[0], /comtest error/);
+    assert.match(c.console.lines.join("\n"), /LOOK error: .*full screen/);
+    c.run("screen");   // an alias
+    assert.equal(told.length, 2);
+});

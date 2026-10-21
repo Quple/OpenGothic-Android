@@ -312,6 +312,16 @@ function createFixCases(env) {
 
     // --- cases that only you can see
 
+    add("error", "an error of the scripts is shown on the whole screen with the call stack (the touch version, or the game with -showerrors)", {
+        manual: true,
+        run() {
+            needGame();
+            debug.testError("comtest error: a test of the screen of errors (wrong argument of a function)");
+            return look("An exception of the scripts was written to the log as the VM writes it. EXPECTED: a full screen with ERROR OF THE SCRIPTS, the text, " +
+                "the call stack and the variables; a tap or a key goes on. The same test again shows nothing: an error is shown once.");
+        },
+    });
+
     add("gestures", "a skipped line of a trialog ends the gestures of the hands of everyone and the next speaker does not wait", {
         manual: true,
         run() {
@@ -338,7 +348,7 @@ function createFixCases(env) {
 
     // the names that the commands use for the things that were fixed
     const aliases = { fight: "other", fights: "other", bag: "slot", weapon: "slot", qsort: "sort", tp: "teleport", dialogs: "tool", martha: "tool",
-                      beach: "routine", broom: "itemstate", ship: "plank", fish: "startkm", jorn: "armor" };
+                      beach: "routine", screen: "error", errors: "error", broom: "itemstate", ship: "plank", fish: "startkm", jorn: "armor" };
 
     return {
         cases,

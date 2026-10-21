@@ -588,11 +588,11 @@ void Gothic::updateAnimation(uint64_t dt) {
   }
 
 void Gothic::quickSave() {
-  save("save_slot_0.sav","Quick save");
+  save(saveFileName(0),"Quick save");
   }
 
 void Gothic::quickLoad() {
-  load("save_slot_0.sav");
+  load(saveFileName(0));
   }
 
 void Gothic::save(std::string_view slot, std::string_view name) {
@@ -665,8 +665,35 @@ std::string_view Gothic::defaultPlayer() const {
   return plDef;
   }
 
-std::string_view Gothic::defaultSave() const {
-  return CommandLine::inst().defaultSave();
+std::string Gothic::defaultSave() const {
+  const int slot = CommandLine::inst().defaultSaveSlot();
+  return slot<0 ? std::string() : saveFileName(size_t(slot));
+  }
+
+std::string Gothic::saveGameId() const {
+  const auto mod = CommandLine::inst().modPath();
+  if(!mod.empty()) {
+    // the name of the ini file of the mod: ".../system/TheChroniclesOfMyrtana.ini" -> "thechroniclesofmyrtana"
+    std::string name = TextCodec::toUtf8(std::u16string(mod));
+    const auto slash = name.find_last_of("/\\");
+    if(slash!=std::string::npos)
+      name.erase(0,slash+1);
+    const auto dot = name.find_last_of('.');
+    if(dot!=std::string::npos)
+      name.erase(dot);
+    std::string id;
+    for(char c:name)
+      if(std::isalnum(static_cast<unsigned char>(c)))
+        id.push_back(char(std::tolower(static_cast<unsigned char>(c))));
+    if(!id.empty())
+      return id;
+    }
+  return version().game==1 ? "g1" : std::string();
+  }
+
+std::string Gothic::saveFileName(size_t slot) const {
+  const auto id = saveGameId();
+  return (id.empty() ? std::string() : id+"_")+"save_slot_"+std::to_string(slot)+".sav";
   }
 
 std::string_view Gothic::defaultGameDatFile() const {

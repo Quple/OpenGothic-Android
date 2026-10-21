@@ -649,6 +649,23 @@ JSValue dlgSave(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return JS_NewBool(ctx,ok);
   }
 
+/// debug.testError(text): the log gets an exception of the scripts as the VM writes it (with a call stack), so that the screen of errors can be
+/// tried (the touch version shows it, the others with -showerrors)
+JSValue testError(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  const std::string text = argc>0 ? js::str(ctx,argv[0]) : std::string("a test of the screen of errors");
+  Tempest::Log::e("[zenkit] Internal Exception: ",text);
+  Tempest::Log::e("[zenkit] ------- CALL STACK (MOST RECENT CALL FIRST) -------");
+  Tempest::Log::e("[zenkit] in COMTEST_FAKE_FUNCTION at 1a2b3");
+  Tempest::Log::e("[zenkit] in B_CALLER_OF_THE_TEST at 4c5d6");
+  Tempest::Log::e("[zenkit] ------- STACK (MOST RECENT PUSH FIRST) -------");
+  Tempest::Log::e("[zenkit] 1: [IMMEDIATE INT] = 42");
+  Tempest::Log::e("[zenkit] ------- GLOBAL VARIABLES -------");
+  Tempest::Log::e("[zenkit] HERO = PC_HERO (50091)");
+  Tempest::Log::e("[zenkit] SELF = NONE_1_JORN (51439)");
+  Tempest::Log::e("[zenkit] OTHER = PC_HERO (50091)");
+  return JS_TRUE;
+  }
+
 /// debug.paused() -> the game is paused (the menu is open): the world does not run and the commands of the queues wait
 JSValue paused(JSContext* ctx, JSValueConst, int, JSValueConst*) {
   return JS_NewBool(ctx,Gothic::inst().isPause());
@@ -910,6 +927,7 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"dlgGuard",  dlgGuard,1);
   js::fn(ctx,dbg,"lastCallOther",lastCallOther,0);
   js::fn(ctx,dbg,"paused",    paused,0);
+  js::fn(ctx,dbg,"testError", testError,1);
   js::fn(ctx,dbg,"dlgCount",  dlgCount,0);
   js::fn(ctx,dbg,"infoCondition",infoCondition,2);
   js::fn(ctx,dbg,"vobVisual", vobVisual,3);

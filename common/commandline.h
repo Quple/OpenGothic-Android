@@ -47,7 +47,10 @@ class CommandLine {
     bool                doForceG2()        const { return forceG2;      }
     bool                doForceG2NR()      const { return forceG2NR;    }
     bool                aaPreset()         const { return aaPresetId;   }
-    std::string_view    defaultSave()      const { return saveDef;    }
+    /// the slot of the saved game of the command line (-save 3, -save q is the slot 0), -1: none
+    int                 defaultSaveSlot()  const { return saveSlot;   }
+    /// the errors of the scripts and of the program are shown on the screen (a phone has no log to read): the default of the touch version
+    bool                doShowErrors()     const { return showErrors; }
 
     std::string         wrldDef;
 
@@ -58,7 +61,12 @@ class CommandLine {
     std::u16string      gpath, gmod;
     std::u16string      gscript;
     std::u16string      gcutscene;
-    std::string         saveDef;
+    int                 saveSlot = -1;
+#ifdef OPENGOTHIC_TOUCH_UI
+    bool                showErrors   = true;
+#else
+    bool                showErrors   = false;
+#endif
     bool                devmode      = false;
     bool                noMenu       = false;
     Benchmark           isBenchmark  = Benchmark::None;

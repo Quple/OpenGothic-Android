@@ -64,6 +64,12 @@ CommandLine::CommandLine(int argc, const char** argv) {
       if(i<argc)
         gpath.assign(argv[i],argv[i]+std::strlen(argv[i]));
       }
+    else if(arg=="-showerrors") {
+      showErrors = true;
+      }
+    else if(arg=="-noerrors") {
+      showErrors = false;
+      }
     else if(arg=="-devmode") {
       // http://www.gothic-library.ru/publ/marvin/1-1-0-547
       devmode = true;
@@ -72,9 +78,9 @@ CommandLine::CommandLine(int argc, const char** argv) {
       ++i;
       if(i<argc){
         if(std::strcmp(argv[i],"q")==0) {
-          saveDef = "save_slot_0.sav";
+          saveSlot = 0;
           } else {
-          saveDef = string_frm("save_slot_",argv[i],".sav");
+          try { saveSlot = std::max(0,std::stoi(argv[i])); } catch(...) { Log::e("-save: not a number: ",argv[i]); }
           }
         }
       }

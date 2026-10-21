@@ -33,6 +33,7 @@
 #include "ui/inventorymenu.h"
 #include "ui/chapterscreen.h"
 #include "ui/documentmenu.h"
+#include "ui/errorscreen.h"
 #include "ui/videowidget.h"
 #include "ui/menuroot.h"
 #include "ui/consolewidget.h"
@@ -189,6 +190,7 @@ class MainWindow : public Tempest::Window {
     RuntimeMode               runtimeMode = R_Normal;
 
     Tempest::Widget*          uiKeyUp=nullptr;
+    ErrorScreen               errorScreen;
     std::bitset<256>          dmaKeysDown;
     Tempest::Point            dMouse;
     PlayerControl             player;
