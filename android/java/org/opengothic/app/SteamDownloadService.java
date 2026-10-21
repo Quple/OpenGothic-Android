@@ -12,6 +12,7 @@ import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.util.Log;
 
 import java.io.File;
 
@@ -34,6 +35,45 @@ public final class SteamDownloadService extends Service {
 
     private volatile SteamSession session;
     private PowerManager.WakeLock wake;
+    private static boolean guarded;
+
+    /**
+     * The library works in threads of its own: an error in one of them (the memory most of all) would end the application.
+     * While a download goes on it ends the download instead, tells why, and keeps the reason in a file.
+     */
+    private void guard() {
+        if (guarded)
+            return;
+        guarded = true;
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            Downloads.State s = Downloads.running();
+            if (s == null) {
+                if (previous != null)
+                    previous.uncaughtException(thread, error);
+                return;
+            }
+            Log.e("OpenGothic/Steam", "uncaught in " + thread.getName(), error);
+            record(error);
+            s.error = error instanceof OutOfMemoryError ? "Not enough memory for the download, try again."
+                    : "The download failed: " + error;
+            SteamSession steam = session;
+            if (steam != null)
+                steam.cancel();
+        });
+    }
+
+    /** What went wrong, for the person who looks for it: files/steam-error.txt of the application. */
+    private void record(Throwable error) {
+        File dir = getExternalFilesDir(null);
+        if (dir == null)
+            return;
+        try (java.io.PrintWriter out = new java.io.PrintWriter(new java.io.FileWriter(new File(dir, "steam-error.txt"), true))) {
+            out.println("---- " + new java.util.Date());
+            error.printStackTrace(out);
+        } catch (java.io.IOException ignored) {
+        }
+    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -62,6 +102,7 @@ public final class SteamDownloadService extends Service {
             return START_NOT_STICKY;
         }
 
+        guard();
         final Downloads.State s = new Downloads.State(appId, title);
         s.text = "...";
         Downloads.state = s;
@@ -124,7 +165,9 @@ public final class SteamDownloadService extends Service {
         } catch (SteamSession.Failure e) {
             s.error = e.getMessage();
         } catch (Throwable e) {
-            s.error = "The download failed: " + e;
+            Log.e("OpenGothic/Steam", "download", e);
+            record(e);
+            s.error = e instanceof OutOfMemoryError ? "Not enough memory for the download, try again." : "The download failed: " + e;
         } finally {
             session = null;
             if (steam != null)

@@ -353,9 +353,13 @@ final class SteamSession implements Closeable {
         };
 
         // the arguments: debug, LAN cache, chunks loaded, chunks unpacked and files written at the same time, the Windows build.
-        // A chunk is a request to a server of Steam: a few of them at the same time are slow, the sample of the library has 50.
+        // A chunk is a request to a server of Steam and about two megabytes in the memory (the packed one and the unpacked one):
+        // a few of them at the same time are slow, too many fill the memory of the application. The number follows the memory.
+        int megabytes = (int) (Runtime.getRuntime().maxMemory() / (1024 * 1024));
+        int chunks = Math.max(6, Math.min(32, megabytes / 20));
         int cores = Runtime.getRuntime().availableProcessors();
-        DepotDownloader d = new DepotDownloader(client, list, false, false, 48, Math.max(2, cores), 4, true, null);
+        Log.i(TAG, "memory " + megabytes + " MB, " + chunks + " chunks at the same time");
+        DepotDownloader d = new DepotDownloader(client, list, false, false, chunks, Math.max(2, Math.min(4, cores)), 2, true, null);
         downloader = d;
         try {
             d.addListener(listener);
