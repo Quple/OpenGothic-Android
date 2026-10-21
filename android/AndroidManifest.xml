@@ -27,8 +27,8 @@
         <activity android:name="org.opengothic.app.ModsActivity" android:exported="false"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboardHidden" />
-        <!-- The account of Steam: the login and the games that the account owns -->
-        <activity android:name="org.opengothic.app.SteamActivity" android:exported="false"
+        <!-- The login to Steam, the first screen when nobody is signed in -->
+        <activity android:name="org.opengothic.app.SteamLoginActivity" android:exported="false"
             android:screenOrientation="landscape" android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden" />
         <service android:name="org.opengothic.app.SteamDownloadService" android:exported="false"

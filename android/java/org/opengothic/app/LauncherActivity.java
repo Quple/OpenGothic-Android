@@ -3,17 +3,30 @@ package org.opengothic.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
+import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
+import android.widget.PopupMenu;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import java.io.BufferedInputStream;
@@ -24,217 +37,361 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Imports a ZIP of the user's own Gothic II installation and starts the game.
- * The files are copied to the app-specific storage, no storage permissions are needed.
+ * The library: the games that can be played here, each with its own place on the phone. A game is downloaded from Steam
+ * (the account of the player) or imported from a ZIP of an installation, and then it is played with one touch.
  */
 public final class LauncherActivity extends Activity {
     private static final int REQUEST_IMPORT = 1;
+    private static final int REQUEST_LOGIN = 3;
     private static final int MAX_ENTRIES = 200000;
     private static final long MAX_SIZE = 20L * 1024 * 1024 * 1024;
+
+    private static final int GOLD = 0xffe3cf9f;
+    private static final int CREAM = 0xfff1e7cd;
+    private static final int GREY = 0xff9fb2c0;
 
     /** The games that can be installed next to each other. The folder of Gothic II is the one that older versions had. */
     private static final class GameDef {
         final String folder;
         final String title;
         final String subtitle;
+        final int appId;
+        final String cover;
 
-        GameDef(String folder, String title, String subtitle) {
+        GameDef(String folder, String title, String subtitle, int appId, String cover) {
             this.folder = folder;
             this.title = title;
             this.subtitle = subtitle;
+            this.appId = appId;
+            this.cover = cover;
         }
     }
 
+    // app ids of Steam: Gothic 1 Classic, Gothic II: Gold Edition (with Night of the Raven), The Chronicles of Myrtana: Archolos
     private static final GameDef[] GAMES = {
-        new GameDef("Gothic1", "Gothic", "Gothic 1"),
-        new GameDef("Gothic2", "Gothic II", "Night of the Raven"),
-        new GameDef("Myrtana", "The Chronicles of Myrtana", "Archolos"),
+        new GameDef("Gothic1", "Gothic", "", 65540, "covers/gothic1.webp"),
+        new GameDef("Gothic2", "Gothic II", "Noc Kruka", 39510, "covers/gothic2.webp"),
+        new GameDef("Myrtana", "The Chronicles of Myrtana", "Archolos", 1467450, "covers/myrtana.webp"),
     };
 
-    private TextView status;
-    private Button start;
-    private Button choose;
-    private Button remove;
-    private final View[] cards = new View[GAMES.length];
-    private final TextView[] cardStates = new TextView[GAMES.length];
-    private volatile boolean importing;
+    /** The names that Steam gives the languages of a game and what the player reads. */
+    private static final String[][] LANGUAGES = {
+        {"polish", "Polski"}, {"english", "English"}, {"german", "Deutsch"}, {"russian", "Русский"},
+        {"french", "Français"}, {"spanish", "Español"}, {"italian", "Italiano"}, {"czech", "Čeština"},
+    };
+
+    private static final class Card {
+        FrameLayout root;
+        ImageView cover;
+        TextView title;
+        TextView subtitle;
+        TextView chip;
+        TextView error;
+        ProgressBar bar;
+        Button primary;
+        TextView menu;
+    }
+
+    private final Card[] cards = new Card[GAMES.length];
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private SharedPreferences prefs;
+    private SteamStore store;
+    private SteamStore.Session session;
+    private Set<Integer> owned;           // null: not known
+    private TextView accountButton;
+
     private File external;
-    private int selected = 1;
+    private int lastPlayed = 1;
+    private volatile int importing = -1;  // the game that is imported or removed now
+    private volatile String importText = "";
+    private int importTarget = -1;
+    private boolean ownedAsked;
+    private boolean loginShown;
 
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
-        File external = getExternalFilesDir(null);
+        external = getExternalFilesDir(null);
         if (external == null) {
             finish();
             return;
         }
-        this.external = external;
-        selected = Math.max(0, Math.min(GAMES.length - 1, getSharedPreferences("launcher", MODE_PRIVATE).getInt("game", 1)));
+        prefs = getSharedPreferences(SteamBridge.PREFS, MODE_PRIVATE);
+        store = new SteamStore(this);
+        lastPlayed = Math.max(0, Math.min(GAMES.length - 1, prefs.getInt("game", 1)));
         SystemUi.hideBars(this);
         setContentView(buildUi());
+        reloadSession();
+        refresh();
+        ui.postDelayed(this::tick, 600);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (external == null)
+            return;
+        reloadSession();
         refresh();
     }
 
-    private View buildUi() {
-        LinearLayout page = new LinearLayout(this);
-        page.setOrientation(LinearLayout.HORIZONTAL);
-        page.setPadding(dp(32), dp(24), dp(32), dp(24));
-        page.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[] {0xff071019, 0xff142e3e, 0xff080d14}));
-
-        LinearLayout left = column(Gravity.CENTER_VERTICAL);
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.addView(left);
-        page.addView(scroll, new LinearLayout.LayoutParams(0, -1, 1.3f));
-
-        TextView eyebrow = label("OPEN SOURCE  /  ANDROID", 12, 0xffa4afb4);
-        eyebrow.setLetterSpacing(0.16f);
-        left.addView(eyebrow);
-
-        TextView title = label("OpenGothic", 42, 0xfff1e7cd);
-        title.setTypeface(Typeface.create("serif", Typeface.NORMAL));
-        left.addView(title);
-
-        TextView subtitle = label("Return to Khorinis", 16, 0xffabbcc4);
-        subtitle.setPadding(0, 0, 0, dp(20));
-        left.addView(subtitle);
-
-        start = button("Play", true);
-        start.setOnClickListener(v -> {
-            // the game reads which of the installations it is (it has no command line)
-            writeSelection();
-            startActivity(new Intent(this, GameActivity.class));
-        });
-        left.addView(start);
-
-        choose = button("Import game files", false);
-        choose.setOnClickListener(v -> pickArchive());
-        left.addView(choose);
-
-        remove = button("Remove game files", false);
-        remove.setOnClickListener(v -> askRemove());
-        left.addView(remove);
-
-        Button mods = button("Mods", false);
-        mods.setOnClickListener(v -> startActivity(new Intent(this, ModsActivity.class)));
-        left.addView(mods);
-
-        Button steam = button("Steam", false);
-        try {
-            // the screen of Steam is not in a build that has no libraries (build-apk.sh)
-            final Class<?> steamScreen = Class.forName("org.opengothic.app.SteamActivity");
-            steam.setOnClickListener(v -> startActivity(new Intent(this, steamScreen)));
-        } catch (ClassNotFoundException e) {
-            steam.setVisibility(View.GONE);
-        }
-        left.addView(steam);
-
-        Button help = button("How to start", false);
-        help.setOnClickListener(v -> showHelp());
-        left.addView(help);
-
-        LinearLayout right = column(Gravity.CENTER_VERTICAL);
-        right.setPadding(dp(40), 0, 0, 0);
-        page.addView(right, new LinearLayout.LayoutParams(0, -1, 1.f));
-
-        right.addView(label("YOUR GAMES", 12, 0xffa4afb4));
-        for (int i = 0; i < GAMES.length; ++i) {
-            final int index = i;
-            LinearLayout card = column(Gravity.CENTER_VERTICAL);
-            card.setPadding(dp(16), dp(10), dp(16), dp(10));
-            card.setClickable(true);
-            card.setOnClickListener(v -> select(index));
-
-            TextView name = label(GAMES[i].title, 20, 0xffe9e0c8);
-            name.setTypeface(Typeface.create("serif", Typeface.NORMAL));
-            card.addView(name);
-            card.addView(label(GAMES[i].subtitle, 12, 0xff8fa5b0));
-            cardStates[i] = label("", 13, 0xff8fa5b0);
-            card.addView(cardStates[i]);
-
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.setMargins(0, dp(8), 0, 0);
-            right.addView(card, lp);
-            cards[i] = card;
-        }
-
-        status = label("", 15, 0xffc8d4da);
-        status.setPadding(0, dp(16), 0, 0);
-        right.addView(status);
-
-        TextView note = label("Touch controls  •  Vulkan\nGraphics and controls can be adjusted in the game menu", 12, 0xff8fa5b0);
-        note.setPadding(0, dp(24), 0, 0);
-        right.addView(note);
-        return page;
+    @Override
+    protected void onDestroy() {
+        ui.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 
-    private LinearLayout column(int gravity) {
-        LinearLayout ret = new LinearLayout(this);
-        ret.setOrientation(LinearLayout.VERTICAL);
-        ret.setGravity(gravity);
-        return ret;
+    // ---- the account
+
+    private void reloadSession() {
+        session = SteamBridge.available() ? store.load() : null;
+        if (session == null) {
+            owned = null;
+            ownedAsked = false;
+            boolean skipped = prefs.getBoolean(SteamBridge.SKIPPED, false);
+            if (SteamBridge.available() && !skipped && !loginShown) {
+                // nobody is signed in: the login is the first thing that is seen
+                loginShown = true;
+                startActivityForResult(SteamBridge.loginIntent(this), REQUEST_LOGIN);
+            }
+            return;
+        }
+        if (owned == null)
+            owned = store.loadOwned();
+        if (!ownedAsked) {
+            ownedAsked = true;
+            askOwned(session);
+        }
     }
+
+    /** The games of the account change when the player buys one: asked again at every start. */
+    private void askOwned(final SteamStore.Session s) {
+        new Thread(() -> {
+            Set<Integer> have = null;
+            boolean again = false;
+            try {
+                Set<Integer> ids = new HashSet<>();
+                for (GameDef g : GAMES)
+                    ids.add(g.appId);
+                have = SteamBridge.owned(s, ids);
+            } catch (SteamBridge.Denied e) {
+                again = e.signIn;
+            }
+            final Set<Integer> result = have;
+            final boolean gone = again;
+            runOnUiThread(() -> {
+                if (isFinishing())
+                    return;
+                if (gone) {
+                    store.clear();
+                    session = null;
+                    owned = null;
+                    ownedAsked = false;
+                    loginShown = false;
+                    reloadSession();
+                } else if (result != null) {
+                    owned = result;
+                    store.saveOwned(result);
+                }
+                refresh();
+            });
+        }, "steam-owned").start();
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == REQUEST_LOGIN) {
+            loginShown = false;
+            if (result != RESULT_OK && !prefs.getBoolean(SteamBridge.SKIPPED, false)) {
+                finish();
+                return;
+            }
+            ownedAsked = false;
+            reloadSession();
+            refresh();
+            return;
+        }
+        if (request != REQUEST_IMPORT || result != RESULT_OK || data == null || data.getData() == null || importTarget < 0)
+            return;
+
+        final Uri uri = data.getData();
+        final int game = importTarget;
+        importing = game;
+        importText = Texts.t("Importing...", "Importowanie...");
+        refresh();
+        new Thread(() -> importArchive(uri, game), "game-import").start();
+    }
+
+    // ---- the screen
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private TextView label(String text, int size, int color) {
-        TextView view = new TextView(this);
-        view.setText(text);
-        view.setTextSize(size);
-        view.setTextColor(color);
-        return view;
+    private View buildUi() {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(28), dp(14), dp(28), dp(20));
+        page.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[] {0xff050b12, 0xff0e2130, 0xff060c13}));
+
+        // the header: the name, and the account and the mods on the right
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        page.addView(header, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout names = new LinearLayout(this);
+        names.setOrientation(LinearLayout.VERTICAL);
+        header.addView(names, new LinearLayout.LayoutParams(0, -2, 1.f));
+        TextView title = text("OpenGothic", 32, CREAM);
+        title.setTypeface(Typeface.create("serif", Typeface.NORMAL));
+        names.addView(title);
+        names.addView(text(Texts.t("Your library", "Twoja biblioteka"), 14, GREY));
+
+        TextView mods = chip(Texts.t("Mods", "Mody"));
+        mods.setOnClickListener(v -> startActivity(new Intent(this, ModsActivity.class)));
+        header.addView(mods);
+        accountButton = chip("");
+        accountButton.setOnClickListener(v -> accountMenu());
+        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, -2);
+        ap.setMargins(dp(10), 0, 0, 0);
+        header.addView(accountButton, ap);
+
+        // the games
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, 0, 1.f);
+        rp.setMargins(0, dp(14), 0, 0);
+        page.addView(row, rp);
+        for (int i = 0; i < GAMES.length; ++i) {
+            Card c = buildCard(i);
+            cards[i] = c;
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -1, 1.f);
+            lp.setMargins(i == 0 ? 0 : dp(8), 0, i == GAMES.length - 1 ? 0 : dp(8), 0);
+            row.addView(c.root, lp);
+        }
+        return page;
     }
 
-    private Button button(String text, boolean primary) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setAllCaps(false);
-        b.setTextSize(18);
-        b.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
-        b.setPadding(dp(18), 0, dp(18), 0);
-        b.setTextColor(new ColorStateList(
-                new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}},
-                new int[] {0xff62727b, primary ? 0xff171c20 : 0xffe0e7e9}));
+    private Card buildCard(final int index) {
+        final Card c = new Card();
+        final int radius = dp(22);
 
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(primary ? 0xffd8c499 : 0x33172530);
-        shape.setCornerRadius(dp(8));
-        shape.setStroke(dp(1), primary ? 0xffe3d4b2 : 0xff425761);
-        b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x557f9caa), shape, null));
+        c.root = new FrameLayout(this);
+        c.root.setClipToOutline(true);
+        c.root.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+            }
+        });
+        c.root.setBackgroundColor(0xff0b1823);
 
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(52));
-        lp.setMargins(0, 0, dp(12), dp(9));
-        b.setLayoutParams(lp);
-        return b;
+        c.cover = new ImageView(this);
+        c.cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        Bitmap cover = loadCover(GAMES[index].cover);
+        if (cover != null)
+            c.cover.setImageBitmap(cover);
+        c.root.addView(c.cover, new FrameLayout.LayoutParams(-1, -1));
+
+        // the lower part is darker, the texts are on it
+        View shade = new View(this);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {0x00050b12, 0x00050b12, 0xf0050b12}));
+        c.root.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout info = new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.setPadding(dp(14), dp(10), dp(14), dp(14));
+        c.root.addView(info, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+
+        c.title = text(GAMES[index].title, 24, CREAM);
+        c.title.setTypeface(Typeface.create("serif", Typeface.NORMAL));
+        c.title.setMaxLines(2);
+        info.addView(c.title);
+        c.subtitle = text(GAMES[index].subtitle, 14, GREY);
+        c.subtitle.setVisibility(GAMES[index].subtitle.isEmpty() ? View.GONE : View.VISIBLE);
+        info.addView(c.subtitle);
+
+        c.chip = text("", 12, GREY);
+        c.chip.setPadding(dp(10), dp(3), dp(10), dp(3));
+        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(-2, -2);
+        chipParams.setMargins(0, dp(6), 0, dp(6));
+        info.addView(c.chip, chipParams);
+
+        c.error = text("", 12, 0xffe29a8c);
+        c.error.setMaxLines(3);
+        info.addView(c.error);
+
+        c.bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        c.bar.setMax(1000);
+        c.bar.setProgressTintList(ColorStateList.valueOf(GOLD));
+        c.bar.setVisibility(View.GONE);
+        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(-1, dp(6));
+        barParams.setMargins(0, 0, 0, dp(8));
+        info.addView(c.bar, barParams);
+
+        c.primary = new Button(this);
+        c.primary.setAllCaps(false);
+        c.primary.setTextSize(16);
+        c.primary.setOnClickListener(v -> onPrimary(index));
+        info.addView(c.primary, new LinearLayout.LayoutParams(-1, dp(46)));
+
+        // the menu of the game: the files of it
+        c.menu = text("⋮", 22, 0xffe0e7e9);
+        c.menu.setGravity(Gravity.CENTER);
+        c.menu.setBackground(round(0x66050b12, 0, 0, dp(18)));
+        c.menu.setOnClickListener(v -> cardMenu(index, v));
+        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.TOP | Gravity.END);
+        mp.setMargins(0, dp(10), dp(10), 0);
+        c.root.addView(c.menu, mp);
+        return c;
     }
 
-    private void showHelp() {
-        new AlertDialog.Builder(this)
-                .setTitle("Getting started")
-                .setMessage("1. Choose the game on the right: Gothic, Gothic II or The Chronicles of Myrtana. "
-                        + "Every game has a place of its own, they can all be installed.\n\n"
-                        + "2. Make a ZIP of your own installation of that game. "
-                        + "It must contain the Data, _work and System folders.\n\n"
-                        + "3. Choose Import game files. The files are copied once.\n\n"
-                        + "4. Choose Play. Button size, camera sensitivity and graphics are in the settings of the in-game menu.\n\n"
-                        + "The game files are not a part of the application.")
-                .setPositiveButton("OK", null)
-                .show();
+    private Bitmap loadCover(String asset) {
+        try (InputStream in = getAssets().open(asset)) {
+            return BitmapFactory.decodeStream(in);
+        } catch (IOException e) {
+            return null;
+        }
     }
 
-    private void pickArchive() {
-        Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        pick.setType("*/*");
-        pick.addCategory(Intent.CATEGORY_OPENABLE);
-        startActivityForResult(pick, REQUEST_IMPORT);
+    private TextView text(String s, int size, int color) {
+        TextView v = new TextView(this);
+        v.setText(s);
+        v.setTextSize(size);
+        v.setTextColor(color);
+        return v;
+    }
+
+    private TextView chip(String s) {
+        TextView v = text(s, 14, 0xffe0e7e9);
+        v.setGravity(Gravity.CENTER);
+        v.setPadding(dp(16), dp(8), dp(16), dp(8));
+        v.setBackground(round(0x33172530, 0xff33495a, dp(1), dp(20)));
+        return v;
+    }
+
+    private GradientDrawable round(int fill, int stroke, int strokeWidth, int radius) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(fill);
+        d.setCornerRadius(radius);
+        if (strokeWidth > 0)
+            d.setStroke(strokeWidth, stroke);
+        return d;
+    }
+
+    // ---- the state of the games
+
+    private File rootOf(int game) {
+        return new File(external, GAMES[game].folder);
     }
 
     private static boolean isInstallation(File dir) {
@@ -243,103 +400,247 @@ public final class LauncherActivity extends Activity {
                 && new File(dir, "System").isDirectory();
     }
 
-    private File rootOf(int game) {
-        return new File(external, GAMES[game].folder);
+    private boolean canDownload(int game) {
+        return session != null && owned != null && owned.contains(GAMES[game].appId) && SteamBridge.available();
     }
 
-    private void select(int game) {
-        if (importing || game == selected)
+    private void tick() {
+        if (isFinishing())
             return;
-        selected = game;
-        getSharedPreferences("launcher", MODE_PRIVATE).edit().putInt("game", game).apply();
-        refresh();
+        if (Downloads.state != null || importing >= 0)
+            refresh();
+        ui.postDelayed(this::tick, 600);
     }
 
-    /** The name of the folder of the game that starts: the engine looks for it next to the files of the application. */
-    private void writeSelection() {
-        try (OutputStream out = new FileOutputStream(new File(external, "game.txt"))) {
-            out.write(GAMES[selected].folder.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException ignored) {
-            // the engine takes Gothic II then
+    private void refresh() {
+        if (external == null || cards[0] == null)
+            return;
+        Downloads.State dl = Downloads.state;
+        Downloads.State busy = Downloads.running();
+        boolean working = busy != null || importing >= 0;
+
+        accountButton.setText(session != null ? (session.account.isEmpty() ? "Steam" : session.account)
+                : Texts.t("Sign in", "Zaloguj"));
+        accountButton.setVisibility(session != null || SteamBridge.available() ? View.VISIBLE : View.GONE);
+
+        for (int i = 0; i < GAMES.length; ++i) {
+            Card c = cards[i];
+            GameDef g = GAMES[i];
+            boolean installed = isInstallation(rootOf(i));
+            boolean downloading = busy != null && busy.appId == g.appId;
+            boolean importingThis = importing == i;
+
+            c.error.setText("");
+            c.bar.setVisibility(View.GONE);
+            c.menu.setVisibility((installed || canDownload(i)) && !working ? View.VISIBLE : View.GONE);
+
+            // not installed: the picture is dimmed
+            if (installed) {
+                c.cover.clearColorFilter();
+                c.cover.setImageAlpha(255);
+            } else {
+                ColorMatrix gray = new ColorMatrix();
+                gray.setSaturation(0.35f);
+                c.cover.setColorFilter(new ColorMatrixColorFilter(gray));
+                c.cover.setImageAlpha(190);
+            }
+
+            // the border of the game that was played last
+            boolean marked = i == lastPlayed && installed;
+            GradientDrawable border = new GradientDrawable();
+            border.setColor(0);
+            border.setCornerRadius(dp(22));
+            border.setStroke(dp(marked ? 2 : 1), marked ? GOLD : 0xff23394a);
+            c.root.setForeground(border);
+
+            if (downloading) {
+                int pct = Math.round(busy.percent * 100);
+                setChip(c, Texts.t("Downloading", "Pobieranie") + " " + pct + "%", 0x33c9a24a, 0xffe7c873);
+                c.bar.setVisibility(View.VISIBLE);
+                c.bar.setProgress(Math.round(busy.percent * 1000));
+                setPrimary(c, Texts.t("Stop", "Zatrzymaj"), false, true);
+            } else if (importingThis) {
+                setChip(c, importText, 0x33c9a24a, 0xffe7c873);
+                setPrimary(c, "...", false, false);
+            } else if (installed) {
+                setChip(c, "✓  " + Texts.t("Installed", "Zainstalowane"), 0x331f7a4a, 0xff7fe0a0);
+                setPrimary(c, "▶  " + Texts.t("Play", "Graj"), true, !working);
+            } else {
+                setChip(c, Texts.t("Not installed", "Niezainstalowane"), 0x33415563, 0xff9fb2c0);
+                if (dl != null && dl.appId == g.appId && dl.error != null)
+                    c.error.setText(dl.error);
+                if (canDownload(i))
+                    setPrimary(c, Texts.t("Download", "Pobierz"), false, !working);
+                else
+                    setPrimary(c, Texts.t("Import", "Importuj"), false, !working);
+            }
         }
     }
 
-    private void askRemove() {
-        if (importing)
+    private void setChip(Card c, String text, int fill, int color) {
+        c.chip.setText(text);
+        c.chip.setTextColor(color);
+        c.chip.setBackground(round(fill, 0, 0, dp(14)));
+    }
+
+    private void setPrimary(Card c, String text, boolean gold, boolean enabled) {
+        c.primary.setText(text);
+        c.primary.setEnabled(enabled);
+        c.primary.setTextColor(new ColorStateList(
+                new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}},
+                new int[] {0xff62727b, gold ? 0xff171c20 : 0xffe9eef0}));
+        GradientDrawable shape = round(gold ? GOLD : 0x66172530, gold ? 0xffefe0b8 : 0xff425761, dp(1), dp(12));
+        c.primary.setBackground(new RippleDrawable(ColorStateList.valueOf(0x557f9caa), shape, null));
+    }
+
+    // ---- what the player does
+
+    private void onPrimary(int game) {
+        Downloads.State busy = Downloads.running();
+        if (busy != null && busy.appId == GAMES[game].appId) {
+            startService(SteamBridge.stopIntent(this));
             return;
-        final int game = selected;
+        }
+        if (isInstallation(rootOf(game))) {
+            play(game);
+            return;
+        }
+        if (canDownload(game))
+            chooseLanguage(game);
+        else
+            pickArchive(game);
+    }
+
+    private void play(int game) {
+        lastPlayed = game;
+        prefs.edit().putInt("game", game).apply();
+        // the engine reads which of the installations it is: it has no command line
+        try (OutputStream out = new FileOutputStream(new File(external, "game.txt"))) {
+            out.write(GAMES[game].folder.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException ignored) {
+            // the engine takes Gothic II then
+        }
+        startActivity(new Intent(this, GameActivity.class));
+    }
+
+    private void chooseLanguage(final int game) {
+        int selected = 1;
+        String phone = Texts.steamLanguage();
+        final String[] names = new String[LANGUAGES.length];
+        for (int i = 0; i < LANGUAGES.length; ++i) {
+            names[i] = LANGUAGES[i][1];
+            if (LANGUAGES[i][0].equals(phone))
+                selected = i;
+        }
+        final int[] chosen = {selected};
         new AlertDialog.Builder(this)
-                .setTitle("Remove game files")
-                .setMessage("The files of " + GAMES[game].title + " will be deleted from this phone. "
-                        + "The saves are kept. You can import the game again later.")
-                .setPositiveButton("Remove", (d, w) -> {
-                    importing = true;
+                .setTitle(Texts.t("Language of the game", "Język gry"))
+                .setSingleChoiceItems(names, selected, (d, which) -> chosen[0] = which)
+                .setPositiveButton(Texts.t("Download", "Pobierz"), (d, w) -> startDownload(game, LANGUAGES[chosen[0]][0]))
+                .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
+                .show();
+    }
+
+    private void startDownload(int game, String language) {
+        if (external.getUsableSpace() < 1500L * 1024 * 1024) {
+            new AlertDialog.Builder(this)
+                    .setMessage(Texts.t("There is not enough free space on the phone.", "Brakuje wolnego miejsca w telefonie."))
+                    .setPositiveButton("OK", null).show();
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 33)
+            requestPermissions(new String[] {"android.permission.POST_NOTIFICATIONS"}, 1);
+        Downloads.state = null;
+        startForegroundService(SteamBridge.downloadIntent(this, GAMES[game].appId, GAMES[game].folder, GAMES[game].title, language));
+        refresh();
+    }
+
+    private void cardMenu(final int game, View anchor) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        if (isInstallation(rootOf(game)))
+            menu.getMenu().add(0, 1, 0, Texts.t("Remove files", "Usuń pliki"));
+        else
+            menu.getMenu().add(0, 2, 0, Texts.t("Import from ZIP", "Importuj z ZIP"));
+        menu.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == 1)
+                askRemove(game);
+            else
+                pickArchive(game);
+            return true;
+        });
+        menu.show();
+    }
+
+    private void accountMenu() {
+        if (session == null) {
+            if (SteamBridge.available()) {
+                loginShown = true;
+                startActivityForResult(SteamBridge.loginIntent(this), REQUEST_LOGIN);
+            }
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(session.account)
+                .setPositiveButton(Texts.t("Sign out", "Wyloguj"), (d, w) -> {
+                    store.clear();
+                    prefs.edit().putBoolean(SteamBridge.SKIPPED, false).apply();
+                    session = null;
+                    owned = null;
+                    ownedAsked = false;
+                    loginShown = false;
+                    reloadSession();
+                    refresh();
+                })
+                .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
+                .show();
+    }
+
+    private void askRemove(final int game) {
+        if (importing >= 0 || Downloads.running() != null)
+            return;
+        new AlertDialog.Builder(this)
+                .setTitle(GAMES[game].title)
+                .setMessage(Texts.t("The files of the game will be deleted from this phone. The saves are kept.",
+                        "Pliki gry zostaną usunięte z telefonu. Zapisy zostaną."))
+                .setPositiveButton(Texts.t("Remove", "Usuń"), (d, w) -> {
+                    importing = game;
+                    importText = Texts.t("Removing...", "Usuwanie...");
                     refresh();
                     new Thread(() -> {
                         remove(rootOf(game));
                         runOnUiThread(() -> {
-                            importing = false;
+                            importing = -1;
                             refresh();
                         });
                     }, "game-remove").start();
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
                 .show();
     }
 
-    private void refresh() {
-        boolean ready = isInstallation(rootOf(selected));
-        start.setEnabled(ready && !importing);
-        choose.setEnabled(!ready && !importing);
-        choose.setVisibility(ready ? View.GONE : View.VISIBLE);
-        remove.setEnabled(!importing);
-        remove.setVisibility(ready ? View.VISIBLE : View.GONE);
+    // ---- the import of a ZIP
 
-        for (int i = 0; i < GAMES.length; ++i) {
-            boolean installed = isInstallation(rootOf(i));
-            cardStates[i].setText(installed ? "Installed" : "Not installed");
-            cardStates[i].setTextColor(installed ? 0xff8fd19e : 0xff8fa5b0);
-
-            GradientDrawable shape = new GradientDrawable();
-            shape.setColor(i == selected ? 0x44304656 : 0x22172530);
-            shape.setCornerRadius(dp(8));
-            shape.setStroke(dp(i == selected ? 2 : 1), i == selected ? 0xffd8c499 : 0xff425761);
-            cards[i].setBackground(shape);
-        }
-
-        String title = GAMES[selected].title;
-        status.setText(ready
-                ? "Ready to play\n" + title + " is installed."
-                : "Add your game\nImport a ZIP archive with the files of " + title + ".");
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // a game may have been downloaded from Steam
-        if (status != null && external != null)
-            refresh();
-    }
-
-    @Override
-    protected void onActivityResult(int request, int result, Intent data) {
-        super.onActivityResult(request, result, data);
-        if (request != REQUEST_IMPORT || result != RESULT_OK || data == null || data.getData() == null)
-            return;
-
-        importing = true;
-        start.setEnabled(false);
-        choose.setEnabled(false);
-        status.setText("Importing... Keep the application open.");
-
-        Uri uri = data.getData();
-        final File target = rootOf(selected);
-        new Thread(() -> importArchive(uri, target), "game-import").start();
+    private void pickArchive(final int game) {
+        new AlertDialog.Builder(this)
+                .setTitle(GAMES[game].title)
+                .setMessage(Texts.t("Choose a ZIP of your own installation of the game. It has to contain the Data, _work and System folders.",
+                        "Wskaż ZIP z własną instalacją gry. Musi zawierać foldery Data, _work i System."))
+                .setPositiveButton(Texts.t("Choose", "Wybierz"), (d, w) -> {
+                    importTarget = game;
+                    Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    pick.setType("*/*");
+                    pick.addCategory(Intent.CATEGORY_OPENABLE);
+                    startActivityForResult(pick, REQUEST_IMPORT);
+                })
+                .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
+                .show();
     }
 
     /** Unpacks next to the final folder, which is created only after the whole archive is valid. */
-    private void importArchive(Uri uri, File root) {
+    private void importArchive(Uri uri, int game) {
+        File root = rootOf(game);
         File staging = new File(root.getParentFile(), "import-staging");
+        String failure = null;
         try {
             remove(staging);
             if (!staging.mkdirs())
@@ -348,24 +649,24 @@ public final class LauncherActivity extends Activity {
 
             File source = findInstallation(staging);
             if (source == null)
-                throw new IOException("Missing Data, _work or System. ZIP the complete game installation.");
+                throw new IOException(Texts.t("Missing Data, _work or System. ZIP the complete game installation.",
+                        "Brakuje Data, _work lub System. Spakuj całą instalację gry."));
             if (root.exists())
                 throw new IOException("The folder of the game already exists; refusing to overwrite it");
             if (!source.renameTo(root))
                 throw new IOException("Cannot finalize import");
             remove(staging);
-            runOnUiThread(() -> {
-                importing = false;
-                refresh();
-            });
         } catch (Exception error) {
             remove(staging);
-            runOnUiThread(() -> {
-                importing = false;
-                refresh();
-                status.setText("Import failed: " + error.getMessage());
-            });
+            failure = error.getMessage();
         }
+        final String shown = failure;
+        runOnUiThread(() -> {
+            importing = -1;
+            refresh();
+            if (shown != null)
+                new AlertDialog.Builder(this).setMessage(shown).setPositiveButton("OK", null).show();
+        });
     }
 
     private void unzip(Uri uri, File staging) throws IOException {
@@ -399,10 +700,8 @@ public final class LauncherActivity extends Activity {
                             output.write(buffer, 0, n);
                         }
                     }
-                    if (count % 25 == 0) {
-                        final long mb = total / (1024 * 1024);
-                        runOnUiThread(() -> status.setText("Importing... " + mb + " MiB"));
-                    }
+                    if (count % 25 == 0)
+                        importText = Texts.t("Importing", "Importowanie") + " " + total / (1024 * 1024) + " MB";
                 }
             }
         }

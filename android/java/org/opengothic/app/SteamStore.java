@@ -8,6 +8,8 @@ import android.util.Base64;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.util.HashSet;
+import java.util.Set;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -75,6 +77,29 @@ final class SteamStore {
             clear();
             return false;
         }
+    }
+
+    /** The apps of the account that the launcher knows, kept so that the library is there at once and without a connection. */
+    void saveOwned(Set<Integer> apps) {
+        StringBuilder s = new StringBuilder();
+        for (int a : apps)
+            s.append(s.length() > 0 ? "," : "").append(a);
+        prefs.edit().putString("owned", s.toString()).apply();
+    }
+
+    /** Null when it was never asked for. */
+    Set<Integer> loadOwned() {
+        String s = prefs.getString("owned", null);
+        if (s == null)
+            return null;
+        Set<Integer> ret = new HashSet<>();
+        for (String part : s.split(",")) {
+            try {
+                ret.add(Integer.parseInt(part.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return ret;
     }
 
     void clear() {

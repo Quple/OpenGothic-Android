@@ -58,18 +58,17 @@ PY
 
 "$tools_dir/aapt2" link -I "$android_jar" --manifest "$package_dir/AndroidManifest.xml" -o "$package_dir/base.apk"
 
-# The login to Steam and the downloads (Steam*.java) need JavaSteam, which only the Gradle build brings: this script has no libraries.
-# The launcher hides its Steam button when the class is missing.
-sources=$(ls "$repo_dir"/android/java/org/opengothic/app/*.java | grep -v '/Steam')
-javac -source 8 -target 8 -bootclasspath "$android_jar:$tools_dir/core-lambda-stubs.jar" \
-  -d "$package_dir/classes" $sources
+# The login to Steam and the downloads need JavaSteam, which only the Gradle build brings: this script has no libraries.
+# These classes are left out, the launcher goes on without Steam (the games are imported from a ZIP).
+sources=$(ls "$repo_dir"/android/java/org/opengothic/app/*.java | grep -v -E '/(SteamSession|SteamOwnership|SteamLoginActivity|SteamDownloadService)\.java$')
+javac -encoding UTF-8 -source 8 -target 8 -bootclasspath "$android_jar:$tools_dir/core-lambda-stubs.jar"   -d "$package_dir/classes" $sources
 jar cf "$package_dir/classes.jar" -C "$package_dir/classes" .
 "$tools_dir/d8" --release --min-api 24 --lib "$android_jar" --output "$package_dir/dex" "$package_dir/classes.jar"
 
 cp "$build_dir/opengothic/libGothic2Notr.so" "$package_dir/lib/arm64-v8a/"
 "$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded "$package_dir/lib/arm64-v8a/libGothic2Notr.so"
 
-python3 - "$package_dir" <<'PY'
+python3 - "$package_dir" "$repo_dir/android/launcher-assets" <<'PY'
 import sys
 import zipfile
 from pathlib import Path
@@ -80,6 +79,11 @@ with zipfile.ZipFile(root / 'base.apk', 'a', compression=zipfile.ZIP_DEFLATED) a
     z.write(f, f.name)
   for f in sorted((root / 'lib').rglob('*.so')):
     z.write(f, f.relative_to(root).as_posix())
+  # the pictures of the launcher
+  assets = Path(sys.argv[2])
+  for f in sorted(assets.rglob('*')):
+    if f.is_file():
+      z.write(f, 'assets/' + f.relative_to(assets).as_posix())
 PY
 
 # 16 KiB page alignment is required by recent Android versions

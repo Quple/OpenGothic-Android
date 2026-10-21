@@ -27,33 +27,13 @@ public final class SteamDownloadService extends Service {
     static final String EXTRA_APP = "app";
     static final String EXTRA_FOLDER = "folder";
     static final String EXTRA_TITLE = "title";
+    static final String EXTRA_LANGUAGE = "language";
 
     private static final String CHANNEL = "steam-download";
     private static final int NOTIFICATION = 7;
 
-    /** What the screen shows. Only the service changes it. */
-    static final class State {
-        final int appId;
-        final String title;
-        volatile String text = "Starting...";
-        volatile float percent;
-        volatile long bytes;
-        volatile boolean done;
-        volatile String error;
-
-        State(int appId, String title) {
-            this.appId = appId;
-            this.title = title;
-        }
-    }
-
-    private static volatile State state;
     private volatile SteamSession session;
     private PowerManager.WakeLock wake;
-
-    static State state() {
-        return state;
-    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -68,7 +48,7 @@ public final class SteamDownloadService extends Service {
                 s.cancel();
             return START_NOT_STICKY;
         }
-        if (intent == null || state != null && !state.done && state.error == null) {
+        if (intent == null || Downloads.running() != null) {
             // a download is going on already (or the system has restarted the service with nothing to do)
             return START_NOT_STICKY;
         }
@@ -76,13 +56,15 @@ public final class SteamDownloadService extends Service {
         final int appId = intent.getIntExtra(EXTRA_APP, 0);
         final String folder = intent.getStringExtra(EXTRA_FOLDER);
         final String title = intent.getStringExtra(EXTRA_TITLE) != null ? intent.getStringExtra(EXTRA_TITLE) : "game";
+        final String language = intent.getStringExtra(EXTRA_LANGUAGE) != null ? intent.getStringExtra(EXTRA_LANGUAGE) : "english";
         if (appId == 0 || folder == null) {
             stopSelf();
             return START_NOT_STICKY;
         }
 
-        final State s = new State(appId, title);
-        state = s;
+        final Downloads.State s = new Downloads.State(appId, title);
+        s.text = "...";
+        Downloads.state = s;
         startForeground(title, "Starting...", 0);
 
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
@@ -90,11 +72,11 @@ public final class SteamDownloadService extends Service {
             wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "opengothic:steam");
             wake.acquire(6L * 60 * 60 * 1000);
         }
-        new Thread(() -> run(s, folder), "steam-download").start();
+        new Thread(() -> run(s, folder, language), "steam-download").start();
         return START_NOT_STICKY;
     }
 
-    private void run(final State s, String folder) {
+    private void run(final Downloads.State s, String folder, String language) {
         SteamSession steam = null;
         try {
             File external = getExternalFilesDir(null);
@@ -110,7 +92,7 @@ public final class SteamDownloadService extends Service {
             steam.resume(saved.account, saved.refreshToken);
 
             File part = new File(external, folder + ".download");
-            steam.download(s.appId, part, part.exists(), new SteamSession.Progress() {
+            steam.download(s.appId, part, part.exists(), language, new SteamSession.Progress() {
                 @Override
                 public void status(String text) {
                     s.text = text;
@@ -121,7 +103,7 @@ public final class SteamDownloadService extends Service {
                 public void percent(float done, long bytes) {
                     s.percent = done;
                     s.bytes = bytes;
-                    s.text = "Downloading";
+                    s.text = "";
                     update(s);
                 }
             });
@@ -138,7 +120,7 @@ public final class SteamDownloadService extends Service {
             remove(part);
 
             s.percent = 1.f;
-            s.text = "Done";
+            s.text = "";
             s.done = true;
         } catch (SteamSession.Failure e) {
             s.error = e.getMessage();
@@ -154,18 +136,18 @@ public final class SteamDownloadService extends Service {
         }
     }
 
-    private void update(State s) {
+    private void update(Downloads.State s) {
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null)
-            nm.notify(NOTIFICATION, notification(s.title, s.text, Math.round(s.percent * 100)));
+            nm.notify(NOTIFICATION, notification(s.title, s.text.isEmpty() ? Math.round(s.percent * 100) + "%" : s.text, Math.round(s.percent * 100)));
     }
 
-    private void finish(State s) {
+    private void finish(Downloads.State s) {
         stopForeground(false);
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) {
             Notification.Builder b = builder().setContentTitle(s.title)
-                    .setContentText(s.error != null ? s.error : "The game is ready to play.")
+                    .setContentText(s.error != null ? s.error : Texts.t("Ready to play", "Gotowe do gry"))
                     .setSmallIcon(android.R.drawable.stat_sys_download_done)
                     .setAutoCancel(true)
                     .setOngoing(false);

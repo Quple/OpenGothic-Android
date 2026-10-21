@@ -19,11 +19,15 @@ APK: `build/android/OpenGothic-apk/build/outputs/apk/release/OpenGothic-apk-rele
 
 `android/build-apk.sh` builds a signed APK with the tools of the Android SDK only, without Gradle. See the comment in the script for its options.
 
+## Launcher
+
+The first screen is the login to Steam (`SteamLoginActivity`) when nobody is signed in; "Continue without an account" goes to the library and the games are imported from a ZIP then. The library (`LauncherActivity`) has a card for Gothic, Gothic II and The Chronicles of Myrtana: **Play** when the game is installed, **Download** when the account owns it, **Import** otherwise. The games live next to each other (`Gothic1`, `Gothic2`, `Myrtana` in the files of the application), the one that is played is written to `game.txt` for the engine. The covers are in `android/launcher-assets/covers` (assets of the APK).
+
 ## Steam
 
-The **Steam** button of the launcher signs in to the account of Steam (the name and the password, then the code of Steam Guard or an approval in the app of Steam), shows which of Gothic, Gothic II (Gold Edition) and The Chronicles of Myrtana: Archolos the account owns and downloads them to the folders of the installations (`Gothic1`, `Gothic2`, `Myrtana`). It is the client of Steam, as the program of Steam is: the library is [JavaSteam](https://github.com/Longi94/JavaSteam) (MIT), `SteamSession.java` is the only place that uses it. The password goes to Steam only (the library encrypts it) and is not kept. The session is a refresh token, kept encrypted with a key of the Android Keystore (`SteamStore`); signing out deletes it. A download is a foreground service with a notification (`SteamDownloadService`), it goes on from what is on the disk after an interruption. It takes the Windows files, every language, into `<folder>.download` and moves them when the game is whole.
+The login is the one of the client of Steam, with the library [JavaSteam](https://github.com/Longi94/JavaSteam) (MIT); `SteamSession.java` is the only place that uses it, the launcher reaches it by names (`SteamBridge`). The password goes to Steam only (the library encrypts it) and is not kept. The session is a refresh token, kept encrypted with a key of the Android Keystore (`SteamStore`); signing out deletes it. A download asks for the language of the game, then it is a foreground service with a notification (`SteamDownloadService`); it takes the Windows files of that language into `<folder>.download` and moves them when the game is whole, and it goes on from what is on the disk after an interruption.
 
-The libraries come with the Gradle build (`DEPENDENCIES` in `CMakeLists.txt`). `build-apk.sh` has none, it leaves the Steam classes out and the launcher hides the button. JavaSteam needs Android 8 (`java.time`): on Android 7 the screen says so.
+The libraries come with the Gradle build (`DEPENDENCIES` in `CMakeLists.txt`). `build-apk.sh` has none: it leaves the Steam classes out and the launcher works without Steam. JavaSteam needs Android 8 (`java.time`): on Android 7 the launcher has no Steam.
 
 ## Game files
 

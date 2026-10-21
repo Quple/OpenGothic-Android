@@ -276,10 +276,10 @@ final class SteamSession implements Closeable {
     // ---- the download
 
     /**
-     * The files of the Windows version of the game go to the folder, the whole game, in every language
-     * (the game decides which one it speaks). An interrupted download goes on from what is there.
+     * The files of the Windows version of the game go to the folder, in the language that was chosen (the name that Steam
+     * gives it, "polish"). An interrupted download goes on from what is there.
      */
-    void download(int appId, java.io.File dir, boolean verify, final Progress progress) throws Failure {
+    void download(int appId, java.io.File dir, boolean verify, String language, final Progress progress) throws Failure {
         List<License> list = await(licenses, 30, "Steam did not give the list of the licenses.");
         final CompletableFuture<Void> done = new CompletableFuture<>();
         final long[] bytes = {0};
@@ -331,9 +331,10 @@ final class SteamSession implements Closeable {
         downloader = d;
         try {
             d.addListener(listener);
-            // the game, the files of Windows, every architecture and language: the files of the game itself tell which one it uses
+            // the game, the files of Windows and every architecture, in the language that the player has chosen:
+            // what has no language (the world, the textures) comes with it
             d.add(new AppItem(appId, false, dir.getAbsolutePath(), null, null,
-                    false, "windows", true, null, true, null, false,
+                    false, "windows", true, null, false, language, false,
                     Collections.<Integer>emptyList(), Collections.<Long>emptyList(), verify, false));
             d.finishAdding();
             while (!done.isDone() && running) {
