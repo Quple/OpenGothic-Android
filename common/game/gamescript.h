@@ -22,6 +22,7 @@
 class GameSession;
 class World;
 class DirectMemory;
+class DialogTest;
 class Npc;
 class Item;
 class Interactive;
@@ -103,6 +104,7 @@ class GameScript final {
     bool         dmaDialogCameraOff() const;
     bool         dmaSaveDisabled() const;
     bool         dmaInCamera() const;
+    std::string  dmaLastCallOther() const;
     void         logMoveToTop(std::string_view topic);
     bool         dmaFinishingMove(Npc& npc, Npc& target);
     size_t       dmaPickLockLength(Interactive& mob, size_t length);
@@ -240,6 +242,11 @@ class GameScript final {
     void      fixNpcPosition(Npc& npc, float angle0, float distBias);
 
     void      eventPlayAni(Npc& npc, std::string_view ani);
+
+    /// The developer tool of the dialogs (DialogTest)
+    auto&     infoList() const { return dialogsInfo; }
+    bool      npcKnowsInfo(Npc& npc, size_t infoInstance) const;
+    DialogTest& dialogTest();
 
   private:
     template<typename T>
@@ -539,6 +546,7 @@ class GameScript final {
     NpcProcessPolicy                                            aiProcessPolicy = NpcProcessPolicy::AiNormal;
 
     std::unique_ptr<DirectMemory>                               dma;
+    std::unique_ptr<DialogTest>                                 dlgTest;
 
     std::unique_ptr<SpellDefinitions>                           spells;
     std::unique_ptr<SvmDefinitions>                             svm;

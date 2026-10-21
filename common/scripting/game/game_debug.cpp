@@ -6,8 +6,10 @@
 #include <exception>
 
 #include "camera.h"
+#include "game/dialogtest.h"
 #include "game/gamescript.h"
 #include "gothic.h"
+#include <Tempest/Log>
 #include "utils/gamelog.h"
 #include "world/objects/npc.h"
 #include "world/objects/interactive.h"
@@ -525,6 +527,162 @@ JSValue moveNpc(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return JS_NULL;
   }
 
+// --- the tool of the dialogs (game/dialogtest): the tab Dialogs of mods/devtools
+
+DialogTest* dlgTool() {
+  auto* w = world();
+  return w==nullptr ? nullptr : &w->script().dialogTest();
+  }
+
+JSValue strArray(JSContext* ctx, const std::vector<std::string>& v) {
+  JSValue arr = JS_NewArray(ctx);
+  for(uint32_t i=0; i<v.size(); ++i)
+    JS_SetPropertyUint32(ctx,arr,i,JS_NewString(ctx,v[i].c_str()));
+  return arr;
+  }
+
+JSValue dlgResult(JSContext* ctx, DialogTest& t, const DialogTest::Result& r) {
+  JSValue o = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx,o,"name",   JS_NewString(ctx,r.name.c_str()));
+  JS_SetPropertyStr(ctx,o,"npc",    JS_NewString(ctx,r.npc.c_str()));
+  JS_SetPropertyStr(ctx,o,"status", JS_NewString(ctx,r.status.c_str()));
+  JS_SetPropertyStr(ctx,o,"before", JS_NewBool(ctx,r.conditionBefore));
+  JS_SetPropertyStr(ctx,o,"after",  JS_NewBool(ctx,r.conditionAfter));
+  JS_SetPropertyStr(ctx,o,"executed",JS_NewBool(ctx,r.executed));
+  JS_SetPropertyStr(ctx,o,"outputs",JS_NewInt32(ctx,r.outputs));
+  JS_SetPropertyStr(ctx,o,"actions",JS_NewInt32(ctx,r.actions));
+  JS_SetPropertyStr(ctx,o,"applied", strArray(ctx,r.applied));
+  JS_SetPropertyStr(ctx,o,"unsolved",strArray(ctx,r.unsolved));
+  JS_SetPropertyStr(ctx,o,"issues",  strArray(ctx,r.issues));
+  JS_SetPropertyStr(ctx,o,"text",    JS_NewString(ctx,t.describe(r).c_str()));
+  return o;
+  }
+
+/// debug.dlgList(filter, skip, max) -> {total, rows: [{name, npc, npcName, description, nr, important, permanent, trade, known, inWorld, status}]}
+JSValue dlgList(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* t = dlgTool();
+  if(t==nullptr)
+    return JS_NULL;
+  size_t total = 0;
+  auto rows = t->list(argc>0 ? js::str(ctx,argv[0]) : std::string(),number(ctx,argc,argv,1,0),std::min<size_t>(number(ctx,argc,argv,2,50),500),&total);
+  JSValue arr = JS_NewArray(ctx);
+  for(uint32_t i=0; i<rows.size(); ++i) {
+    auto& r = rows[i];
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx,o,"name",       JS_NewString(ctx,r.name.c_str()));
+    JS_SetPropertyStr(ctx,o,"npc",        JS_NewString(ctx,r.npc.c_str()));
+    JS_SetPropertyStr(ctx,o,"npcName",    JS_NewString(ctx,r.npcName.c_str()));
+    JS_SetPropertyStr(ctx,o,"description",JS_NewString(ctx,r.description.c_str()));
+    JS_SetPropertyStr(ctx,o,"nr",         JS_NewInt32(ctx,r.nr));
+    JS_SetPropertyStr(ctx,o,"important",  JS_NewBool(ctx,r.important));
+    JS_SetPropertyStr(ctx,o,"permanent",  JS_NewBool(ctx,r.permanent));
+    JS_SetPropertyStr(ctx,o,"trade",      JS_NewBool(ctx,r.trade));
+    JS_SetPropertyStr(ctx,o,"known",      JS_NewBool(ctx,r.known));
+    JS_SetPropertyStr(ctx,o,"inWorld",    JS_NewBool(ctx,r.inWorld));
+    JS_SetPropertyStr(ctx,o,"status",     JS_NewString(ctx,r.status.c_str()));
+    JS_SetPropertyUint32(ctx,arr,i,o);
+    }
+  JSValue ret = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx,ret,"total",JS_NewUint32(ctx,uint32_t(total)));
+  JS_SetPropertyStr(ctx,ret,"rows", arr);
+  return ret;
+  }
+
+/// debug.dlgAnalyze(info) -> text: what the condition of the dialog needs and what the tool can do about it
+JSValue dlgAnalyze(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* t = dlgTool();
+  if(t==nullptr || argc<1)
+    return JS_NULL;
+  return JS_NewString(ctx,t->analyze(js::str(ctx,argv[0])).c_str());
+  }
+
+/// debug.dlgRun(info, solve, execute) -> the result of the run
+JSValue dlgRun(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* t = dlgTool();
+  if(t==nullptr || argc<1)
+    return JS_NULL;
+  const bool solve   = argc<2 || JS_ToBool(ctx,argv[1])>0;
+  const bool execute = argc<3 || JS_ToBool(ctx,argv[2])>0;
+  DialogTest::Result r;
+  try {
+    r = t->run(js::str(ctx,argv[0]),solve,execute);
+    }
+  catch(const std::exception& e) {
+    // a failure of the scripts or of the engine in one dialog must not end the game, the run goes on with the next one
+    r.name   = js::str(ctx,argv[0]);
+    r.status = "error";
+    r.issues.push_back(std::string("exception: ")+e.what());
+    Tempest::Log::e("dialog test: ",r.name," ",e.what());
+    }
+  return dlgResult(ctx,*t,r);
+  }
+
+/// debug.dlgRunFn(function, selfNpcInstance) -> the result of the run of a scene (a function of the scripts)
+JSValue dlgRunFn(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* t = dlgTool();
+  if(t==nullptr || argc<1)
+    return JS_NULL;
+  DialogTest::Result r;
+  try {
+    r = t->runFunction(js::str(ctx,argv[0]),argc>1 ? js::str(ctx,argv[1]) : std::string());
+    }
+  catch(const std::exception& e) {
+    r.name   = js::str(ctx,argv[0]);
+    r.status = "error";
+    r.issues.push_back(std::string("exception: ")+e.what());
+    Tempest::Log::e("dialog test: ",r.name," ",e.what());
+    }
+  return dlgResult(ctx,*t,r);
+  }
+
+JSValue dlgReport(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  auto* t = dlgTool();
+  return t==nullptr ? JS_NULL : JS_NewString(ctx,t->report().c_str());
+  }
+
+/// debug.dlgSave(path) -> bool
+JSValue dlgSave(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto* t = dlgTool();
+  if(t==nullptr || argc<1)
+    return JS_FALSE;
+  const bool ok = t->saveReport(js::str(ctx,argv[0]));
+  return JS_NewBool(ctx,ok);
+  }
+
+/// debug.paused() -> the game is paused (the menu is open): the world does not run and the commands of the queues wait
+JSValue paused(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  return JS_NewBool(ctx,Gothic::inst().isPause());
+  }
+
+/// debug.lastCallOther() -> the name of OTHER in the last command that AI_Function of a mod ran ("" if none ran)
+JSValue lastCallOther(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  auto* w = world();
+  return JS_NewString(ctx,w==nullptr ? "" : w->script().dmaLastCallOther().c_str());
+  }
+
+/// debug.dlgGuard(on): during a run of many dialogs the scripts cannot end the game
+JSValue dlgGuard(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  DialogTest::guardExit = argc>0 && JS_ToBool(ctx,argv[0])>0;
+  return JS_TRUE;
+  }
+
+/// debug.dlgResume() -> the number of results that were read from dialogtest_progress.txt (a run that the game did not finish)
+JSValue dlgResume(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  auto* t = dlgTool();
+  return JS_NewUint32(ctx,t==nullptr ? 0 : uint32_t(t->loadProgress()));
+  }
+
+JSValue dlgReset(JSContext*, JSValueConst, int, JSValueConst*) {
+  if(auto* t = dlgTool())
+    t->reset();
+  return JS_TRUE;
+  }
+
+JSValue dlgCount(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  auto* t = dlgTool();
+  return JS_NewUint32(ctx,t==nullptr ? 0 : uint32_t(t->resultCount()));
+  }
+
 /// debug.infoCondition(npcName, infoName) -> [condition, known] or null: why a dialog does not appear (condition of the info and
 /// whether the player has had it already)
 JSValue infoCondition(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
@@ -741,6 +899,18 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"queues",    queues,1);
   js::fn(ctx,dbg,"findNpc",   findNpc,1);
   js::fn(ctx,dbg,"moveNpc",   moveNpc,2);
+  js::fn(ctx,dbg,"dlgList",   dlgList,3);
+  js::fn(ctx,dbg,"dlgAnalyze",dlgAnalyze,1);
+  js::fn(ctx,dbg,"dlgRun",    dlgRun,3);
+  js::fn(ctx,dbg,"dlgRunFn",  dlgRunFn,2);
+  js::fn(ctx,dbg,"dlgReport", dlgReport,0);
+  js::fn(ctx,dbg,"dlgSave",   dlgSave,1);
+  js::fn(ctx,dbg,"dlgReset",  dlgReset,0);
+  js::fn(ctx,dbg,"dlgResume", dlgResume,0);
+  js::fn(ctx,dbg,"dlgGuard",  dlgGuard,1);
+  js::fn(ctx,dbg,"lastCallOther",lastCallOther,0);
+  js::fn(ctx,dbg,"paused",    paused,0);
+  js::fn(ctx,dbg,"dlgCount",  dlgCount,0);
   js::fn(ctx,dbg,"infoCondition",infoCondition,2);
   js::fn(ctx,dbg,"vobVisual", vobVisual,3);
   js::fn(ctx,dbg,"placeOnGround",placeOnGround,4);

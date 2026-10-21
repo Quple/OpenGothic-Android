@@ -6,9 +6,11 @@ const { LogView } = require("./logview.js");
 const { ScriptView } = require("./scriptview.js");
 const { WorldView } = require("./worldview.js");
 const { IkarusView } = require("./ikarusview.js");
+const { DialogView } = require("./dialogview.js");
+const { TestsView } = require("./testsview.js");
 
 const Gold = [0.82, 0.66, 0.34, 1];
-const Sections = ["Log", "Scripts", "World", "Ikarus"];
+const Sections = ["Log", "Scripts", "World", "Ikarus", "Dialogs", "Tests"];
 
 /// env: { ui, debug, player, npcs, world }
 function createPanel(env) {
@@ -19,6 +21,8 @@ function createPanel(env) {
         Scripts: new ScriptView(full),
         World: new WorldView(full),
         Ikarus: new IkarusView(full),
+        Dialogs: new DialogView(full),
+        Tests: new TestsView(full),
     };
     let section = "Log";
 

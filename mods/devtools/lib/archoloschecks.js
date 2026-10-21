@@ -1,7 +1,10 @@
 // Manual checks only: no game state is changed until the user enters comcheck.
 "use strict";
 
-function registerArcholosChecks({ debug, player, npcs, world, console, screen }) {
+const { createSelfTests } = require("./selftests.js");
+const { createFixCases } = require("./fixcases.js");
+
+function registerArcholosChecks({ debug, player, npcs, world, console, screen, later }) {
     let sequence = 0;
     let archer = null;
     let archerWorld = "";
@@ -12,6 +15,32 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
     let partyNpc = null;
     let finishNpc = null;
     let partyStrength = false;
+    let fixCases = null;
+
+    // comtest <case> and comcheck fix <case>: the cases that were fixed
+    function fixCommand(args) {
+        const cases = fixCases || (fixCases = createFixCases({ debug, player, npcs, world, later }));
+        const show = (name, r) => {
+            const line = `${r.status.toUpperCase().padEnd(4)} ${name}: ${r.message}`;
+            if (r.status === "fail") console.error(line); else console.log(line);
+        };
+        if (!args[0]) {
+            console.log("comtest <case>: fight (OTHER in the commands of the scenes) | teleport (AI_TeleportAlways) | sort (QSORT_G2) | bag (GetSlotItem, EquipWeapon) | tool (the tool of the dialogs) | all");
+            console.log("Every case: " + cases.cases.map(c => c.name + (c.auto ? "" : c.manual ? " (you look)" : " (set up, the answer comes by itself)")).join(", "));
+            return;
+        }
+        if (args[0] === "all") {
+            console.log("comtest all: the cases are done one after another, the ones that need time answer after some seconds (keep the game running).");
+            cases.runEverything(show);
+            return;
+        }
+        if (!cases.find(args[0])) throw new Error("No such case. comtest lists them.");
+        if (args[1] === "check") {
+            show(args[0], cases.check(cases.find(args[0]).name));
+            return;
+        }
+        cases.runFollowed(args[0], show);
+    }
 
     function call(name, args, context) {
         const result = debug.call(name, args, context);
@@ -413,6 +442,88 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     for (const l of list) console.log("  " + l);
                     break;
                 }
+                case "fix": {
+                    // the cases of Chronicles of Myrtana that were fixed: comcheck fix | all | <case> [check]  (comtest does it with less typing)
+                    const cases = fixCases || (fixCases = createFixCases({ debug, player, npcs, world, later }));
+                    const show = (name, r) => {
+                        const line = `${r.status.toUpperCase().padEnd(4)} ${name}: ${r.message}`;
+                        if (r.status === "fail") console.error(line); else console.log(line);
+                        };
+                    if (!args[1]) {
+                        console.log("Cases that were fixed (comtest <case>, or comcheck fix <case>; comcheck fix all runs the ones that check themselves):");
+                        for (const c of cases.cases) console.log(`  ${c.name}${c.auto ? "" : c.manual ? " (you look)" : " (two steps)"}: ${c.about}`);
+                        break;
+                    }
+                    if (args[1] === "all") {
+                        const results = cases.runAuto();
+                        for (const r of results) show(r.name, r);
+                        const count = (s) => results.filter(r => r.status === s).length;
+                        console.log(`Cases: ${count("pass")} passed, ${count("fail")} failed, ${count("skip")} skipped. The others need two steps or your eyes: comcheck fix`);
+                        break;
+                    }
+                    const c = cases.find(args[1]);
+                    if (!c) throw new Error("No such case. comcheck fix lists them.");
+                    show(c.name, args[2] === "check" ? cases.check(c.name) : cases.run(c.name));
+                    break;
+                }
+                case "test": {
+                    // the tests of the game that run in the game: comcheck test [all|<area>|<word of the name>]
+                    const suite = createSelfTests({ debug, player, npcs, world });
+                    if (!args[1]) {
+                        console.log(`Tests: ${suite.tests.length}; areas: ${suite.areas().join(", ")}. comcheck test all | <area> | <word>`);
+                        for (const t of suite.tests) console.log(`  [${t.area}] ${t.name}`);
+                        break;
+                    }
+                    const r = suite.run(args[1]);
+                    for (const x of r.results) {
+                        const line = `${x.status.toUpperCase().padEnd(4)} [${x.area}] ${x.name}${x.message ? ": " + x.message : ""}`;
+                        if (x.status === "fail") console.error(line); else console.log(line);
+                        }
+                    console.log(`Tests (${args[1]}): ${r.pass} passed, ${r.fail} failed, ${r.skip} skipped.`);
+                    break;
+                }
+                case "dlg": {
+                    // the dialogs of the mod: comcheck dlg list [words] | analyze NAME | run NAME [plain] | all [words] | scene FUNCTION [self] | report | reset
+                    // (the tab Dialogs of this menu does the same with buttons and a progress)
+                    const sub = args[1] || "";
+                    const rest = args.slice(2).join(" ");
+                    if (sub === "list") {
+                        const r = debug.dlgList(rest, 0, 40);
+                        console.log(`${r.total} dialogs${r.total > r.rows.length ? ", the first " + r.rows.length : ""}:`);
+                        for (const d of r.rows) console.log(`  ${d.npc}: ${d.name} "${d.description}"${d.status ? " [" + d.status + "]" : ""}${d.inWorld ? "" : " (npc not in this world)"}`);
+                    } else if (sub === "analyze") {
+                        if (!args[2]) throw new Error("Usage: comcheck dlg analyze <DIALOG_INSTANCE>");
+                        console.log(debug.dlgAnalyze(args[2]));
+                    } else if (sub === "run") {
+                        if (!args[2]) throw new Error("Usage: comcheck dlg run <DIALOG_INSTANCE> [plain]");
+                        const r = debug.dlgRun(args[2], args[3] !== "plain", true);
+                        console.log(r.text);
+                    } else if (sub === "scene") {
+                        if (!args[2]) throw new Error("Usage: comcheck dlg scene <FUNCTION> [SELF_INSTANCE]");
+                        const r = debug.dlgRunFn(args[2], args[3] || "");
+                        console.log(r.text);
+                    } else if (sub === "all") {
+                        // all at once, the game stops for the time: for more than a few hundred use the tab Dialogs
+                        const r = debug.dlgList(rest, 0, 500);
+                        if (r.total > 300) throw new Error(`${r.total} dialogs: use the tab Dialogs (Test all), or narrow the words.`);
+                        debug.dlgReset();
+                        for (const d of r.rows) debug.dlgRun(d.name, true, true);
+                        const ok = debug.dlgSave("dialogtest_report.txt");
+                        const report = debug.dlgReport();
+                        for (const line of report.split("\n").slice(0, 60)) console.log(line);
+                        console.log(ok ? "The whole report: dialogtest_report.txt (next to log.txt)." : "The report could not be written.");
+                    } else if (sub === "report") {
+                        const ok = debug.dlgSave("dialogtest_report.txt");
+                        for (const line of debug.dlgReport().split("\n").slice(0, 60)) console.log(line);
+                        console.log(ok ? "The whole report: dialogtest_report.txt (next to log.txt)." : "The report could not be written.");
+                    } else if (sub === "reset") {
+                        debug.dlgReset();
+                        console.log("The results are forgotten.");
+                    } else {
+                        throw new Error("Usage: comcheck dlg list|analyze|run|scene|all|report|reset. The tab Dialogs (F10) has buttons and Test all.");
+                    }
+                    break;
+                }
                 case "info": {
                     // why a dialog does not appear: comcheck info Viktor DIA_VIKTOR_MARTHATRIALOG
                     if (!args[1] || !args[2]) throw new Error("Usage: comcheck info <npc name part> <INFO_NAME>, for example comcheck info Viktor DIA_VIKTOR_MARTHATRIALOG");
@@ -556,7 +667,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
                     break;
                 default:
                     console.log("Tools for saves: state | scale [instance] [factor] | item <NAME> [n] | clock <h> [m] | world [list|<name> [waypoint]] | wp [part] | tp <waypoint> | heal | god [off] | xp <n> | attr <strength|dexterity|health|mana> <n>.");
-                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | faint [keep|drop|go|wake] | vob <NAME> [go|hide|show|ghost|solid] | queue [radius] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers]");
+                    console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | faint [keep|drop|go|wake] | vob <NAME> [go|hide|show|ghost|solid] | queue [radius] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers] | fix [case] [check] | test [all|area] | dlg list|analyze|run|all|report");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
             }
@@ -564,6 +675,15 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen })
             console.error(String(error));
         }
     }, "comcheck - manual checks of Archolos compatibility; use a disposable save");
+
+    console.registerCommand("comtest", ({ args }) => {
+        try {
+            if (!player.valid) throw new Error("Load a disposable save first.");
+            fixCommand(args);
+        } catch (error) {
+            console.error(String(error));
+        }
+    }, "comtest <fight|teleport|sort|bag|tool|all> - tests of the cases of Chronicles of Myrtana that were fixed; use a disposable save");
 }
 
 module.exports = { registerArcholosChecks };
