@@ -28,6 +28,11 @@ namespace {
 using Sock = SOCKET;
 constexpr Sock Invalid = INVALID_SOCKET;
 
+// Winsock: char* buffers, int sizes
+using Bytes   = const char*;
+using Chunk   = int;
+using AddrLen = int;
+
 int  lastError()           { return WSAGetLastError(); }
 bool wouldBlock(int e)     { return e==WSAEWOULDBLOCK || e==WSAEINPROGRESS || e==WSAEALREADY; }
 void closeSock(Sock s)     { closesocket(s); }
@@ -50,6 +55,11 @@ bool ensureStarted() {
 using Sock = int;
 constexpr Sock Invalid = -1;
 
+// POSIX (Android too): void* buffers, size_t sizes, socklen_t for addresses
+using Bytes   = const void*;
+using Chunk   = size_t;
+using AddrLen = socklen_t;
+
 int  lastError()           { return errno; }
 bool wouldBlock(int e)     { return e==EWOULDBLOCK || e==EAGAIN || e==EINPROGRESS || e==EALREADY || e==EINTR; }
 void closeSock(Sock s)     { ::close(s); }
@@ -63,6 +73,15 @@ bool ensureStarted() { return true; }
 #ifndef MSG_NOSIGNAL
 #  define MSG_NOSIGNAL 0
 #endif
+
+/// send and recv with the types of the platform: the sizes and the result are the same for the callers
+int sendBytes(Sock s, const char* data, size_t size) {
+  return int(::send(s,static_cast<Bytes>(data),Chunk(size),MSG_NOSIGNAL));
+  }
+
+int recvBytes(Sock s, char* data, size_t size) {
+  return int(::recv(s,data,Chunk(size),0));
+  }
 
 std::string errorText(int code) {
   return "error "+std::to_string(code);
@@ -278,7 +297,7 @@ uint32_t Hub::connect(const std::string& host, uint16_t port, std::string& error
       continue;
       }
     tune(s);
-    if(::connect(s,a->ai_addr,int(a->ai_addrlen))!=0 && !wouldBlock(lastError())) {
+    if(::connect(s,a->ai_addr,AddrLen(a->ai_addrlen))!=0 && !wouldBlock(lastError())) {
       e = lastError();
       closeSock(s);
       s = Invalid;
@@ -350,7 +369,7 @@ void Hub::disconnect(uint32_t peer) {
   // what is queued gets one try to reach the other side
   Peer& p = it->second;
   if(!p.connecting && !p.out.empty())
-    ::send(p.sock,p.out.data(),int(p.out.size()),MSG_NOSIGNAL);
+    sendBytes(p.sock,p.out.data(),p.out.size());
   if(p.sock!=InvalidSocket)
     closeSock(p.sock);
   links.erase(it);
@@ -379,7 +398,7 @@ void Hub::readPeer(uint32_t id, Peer& p, std::vector<Event>& out, bool& alive) {
   size_t budget = 512*1024;   // a peer cannot take the whole frame
 
   while(budget>0) {
-    const int n = ::recv(p.sock,buf,int(sizeof(buf)),0);
+    const int n = recvBytes(p.sock,buf,sizeof(buf));
     if(n>0) {
       p.in.append(buf,size_t(n));
       budget -= std::min(budget,size_t(n));
@@ -423,7 +442,7 @@ void Hub::readPeer(uint32_t id, Peer& p, std::vector<Event>& out, bool& alive) {
 
 void Hub::writePeer(uint32_t id, Peer& p, std::vector<Event>& out, bool& alive) {
   while(!p.out.empty()) {
-    const int n = ::send(p.sock,p.out.data(),int(std::min<size_t>(p.out.size(),65536)),MSG_NOSIGNAL);
+    const int n = sendBytes(p.sock,p.out.data(),std::min<size_t>(p.out.size(),65536));
     if(n>0) {
       p.out.erase(0,size_t(n));
       continue;

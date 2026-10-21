@@ -5,7 +5,7 @@
 #include <cstring>
 #include <cassert>
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__ANDROID__)
 #include <filesystem>
 #endif
 
@@ -13,6 +13,7 @@
 
 #include "utils/installdetect.h"
 #include "utils/fileutil.h"
+#include "utils/inifile.h"
 #include "utils/string_frm.h"
 
 using namespace Tempest;
@@ -46,12 +47,52 @@ static int intArg(std::string_view v) {
   return (std::stoi(std::string(v)));
   }
 
+#if defined(__ANDROID__)
+/// A phone has no command line, so the mod of the installation is chosen here as -game: does on a computer.
+/// It is the ini in System that names its own game (or VDFs), for example TheChroniclesOfMyrtana.ini; none means the plain Gothic.
+static std::string detectModIni(const std::u16string& root) {
+  const auto sys = FileUtil::nestedPath(root,{u"system"},Dir::FT_Dir);
+  if(sys.empty())
+    return "";
+
+  std::vector<std::string> found;
+  std::error_code          ec;
+  for(auto& e:std::filesystem::directory_iterator(std::filesystem::path(sys),ec)) {
+    if(!e.is_regular_file(ec))
+      continue;
+    std::string name = e.path().filename().string();
+    std::string low  = name;
+    std::transform(low.begin(),low.end(),low.begin(),[](unsigned char c){ return char(std::tolower(c)); });
+    if(low.size()<5 || low.compare(low.size()-4,4,".ini")!=0)
+      continue;
+    if(low=="gothic.ini" || low=="gothicgame.ini" || low=="systempack.ini" || low=="gothicstarter.ini")
+      continue;
+
+    IniFile ini(e.path().u16string());
+    if(ini.has("FILES","GAME") || ini.has("FILES","VDF"))
+      found.push_back(name);
+    }
+  if(found.empty())
+    return "";
+
+  std::sort(found.begin(),found.end());
+  for(auto& f:found) {
+    std::string low = f;
+    std::transform(low.begin(),low.end(),low.begin(),[](unsigned char c){ return char(std::tolower(c)); });
+    if(low=="thechroniclesofmyrtana.ini")
+      return f;
+    }
+  return found[0];
+  }
+#endif
+
 CommandLine::CommandLine(int argc, const char** argv) {
   instance = this;
   if(argc<1)
     return;
 
   std::string_view mod;
+  std::string      autoMod;
   for(int i=1;i<argc;++i) {
     std::string_view arg = argv[i];
     if(arg.find("-game:")==0) {
@@ -185,6 +226,16 @@ CommandLine::CommandLine(int argc, const char** argv) {
 
   if(gpath.size()>0 && gpath.back()!='/')
     gpath.push_back('/');
+
+#if defined(__ANDROID__)
+  if(mod.empty() && !gpath.empty()) {
+    autoMod = detectModIni(gpath);
+    if(!autoMod.empty()) {
+      Log::i("mod of the installation: ",autoMod);
+      mod = autoMod;
+      }
+    }
+#endif
 
   gscript   = nestedPath({u"_work",u"Data",u"Scripts",   u"_compiled"},Dir::FT_Dir);
   gcutscene = nestedPath({u"_work",u"Data",u"Scripts",   u"content",u"CUTSCENE"},Dir::FT_Dir);

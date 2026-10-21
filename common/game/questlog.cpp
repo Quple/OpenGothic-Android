@@ -13,7 +13,13 @@ QuestLog::Quest &QuestLog::add(std::string_view name, Section s) {
   q.name    = name;
   q.section = s;
   quests.emplace_back(q);
+  touched(quests.back());
   return quests.back();
+  }
+
+void QuestLog::touched(const Quest& q) {
+  if(q.section==Section::Mission)
+    lastTopic = q.name;
   }
 
 void QuestLog::setStatus(std::string_view name, QuestLog::Status s) {
@@ -22,17 +28,21 @@ void QuestLog::setStatus(std::string_view name, QuestLog::Status s) {
     return;
   auto& q  = add(name,Mission);
   q.status = s;
+  touched(q);
   }
 
 void QuestLog::addEntry(std::string_view name, std::string_view entry) {
-  if(auto m = find(name))
+  if(auto m = find(name)) {
     m->entry.emplace_back(entry);
+    touched(*m);
+    }
   }
 
 void QuestLog::moveToTop(std::string_view name) {
   for(size_t i=0; i<quests.size(); ++i)
     if(quests[i].name==name) {
       std::rotate(quests.begin()+ptrdiff_t(i),quests.begin()+ptrdiff_t(i)+1,quests.end());
+      touched(quests.back());
       return;
       }
   }
@@ -59,5 +69,22 @@ void QuestLog::load(Serialize &fin) {
 
   for(auto& i:quests){
     fin.read(i.name,reinterpret_cast<uint8_t&>(i.section),reinterpret_cast<uint8_t&>(i.status),i.entry);
+    }
+
+  // the order of the topics is the order of the journal: the newest running one is the best guess for a game that was loaded
+  lastTopic.clear();
+  for(size_t i=quests.size(); i>0; --i) {
+    auto& q = quests[i-1];
+    if(q.section==Section::Mission && q.status==Status::Running) {
+      lastTopic = q.name;
+      return;
+      }
+    }
+  for(size_t i=quests.size(); i>0; --i) {
+    auto& q = quests[i-1];
+    if(q.section==Section::Mission) {
+      lastTopic = q.name;
+      return;
+      }
     }
   }

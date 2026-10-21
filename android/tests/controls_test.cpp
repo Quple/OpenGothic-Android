@@ -254,6 +254,43 @@ void keyboard() {
   CHECK(e.size()==2 && e[0].key==Key::Enter);
   }
 
+void keyboardCapitalsAndPolishLetters() {
+  Controls c;
+  c.configure(2400,1080,Mode::Menu);
+  c.drain();
+  tap(c,special(c,Special::Keyboard).rect);
+  CHECK(c.typing());
+
+  auto textOf = [&](const char* label) {
+    for(const auto& b:c.buttons())
+      if(b.label==label && b.character!=0)
+        return b;
+    CHECK(false);
+    return c.buttons()[0];
+    };
+
+  // the letter of the Polish alphabet is a code point, not a byte of UTF-8
+  tap(c,textOf("\xC4\x85").rect);
+  auto e = c.drain();
+  CHECK(e.size()==1 && e[0].kind==Event::Text && e[0].code==0x105);
+
+  // SHIFT is for one letter
+  tap(c,special(c,Special::Shift).rect);
+  c.drain();
+  tap(c,textOf("Q").rect);
+  e = c.drain();
+  CHECK(e.size()==1 && e[0].kind==Event::Text && e[0].code=='Q');
+  tap(c,textOf("q").rect);
+  e = c.drain();
+  CHECK(e.size()==1 && e[0].code=='q');
+
+  tap(c,special(c,Special::Shift).rect);
+  c.drain();
+  tap(c,textOf("\xC5\x81").rect);
+  e = c.drain();
+  CHECK(e.size()==1 && e[0].code==0x141);
+  }
+
 void lockpick() {
   Controls c;
   c.configure(2400,1080,Mode::Lockpick);
@@ -521,6 +558,7 @@ int main() {
   explicitConfirmation();
   gameMultitouch();
   keyboard();
+  keyboardCapitalsAndPolishLetters();
   lockpick();
   layoutFitsScreens();
   floatingStick();

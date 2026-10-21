@@ -109,6 +109,9 @@ class Npc final {
     void       stopDlgAnim();
     void       clearSpeed();
     bool       resetPositionToTA();
+    /// A character who waits at the dead point (TOT: the scripts hide the characters there) and gets a routine somewhere in the world appears
+    /// at the point of the routine: the way point of the dead point is not connected to the world and he would never get anywhere.
+    void       leaveDeadPoint(std::string_view wp);
 
     void       setProcessPolicy(NpcProcessPolicy t);
     auto       processPolicy() const -> NpcProcessPolicy { return aiPolicy; }

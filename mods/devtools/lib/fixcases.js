@@ -264,6 +264,31 @@ function createFixCases(env) {
         },
     });
 
+    add("tot", "a character who waits at the dead point (TOT) and gets a routine appears at its point, he does not try to walk from TOT (Kurt and Lokvar after the sleep)", {
+        wait: 5,
+        run() {
+            needGame();
+            needSymbols("TELEPORTNPCTOWP", "NPC_EXCHANGEROUTINE");
+            if (!world.waypoint("TOT")) skip("this world has no TOT");
+            const npc = npcs.nearby(3000).find(n => !n.dead && n.name && has("RTN_START_" + n.id));
+            if (!npc) skip("stand near a character who has a routine Start");
+            call("TELEPORTNPCTOWP", [npc.instanceId, "TOT"]);
+            call("NPC_EXCHANGEROUTINE", [npc, "Start"]);
+            state.tot = { npc, name: npc.name };
+            return look(`${npc.name} was hidden at TOT and got the routine Start. Close F10 and wait 5 seconds`);
+        },
+        check() {
+            const s = state.tot;
+            if (!s) skip("run comtest tot first");
+            const line = debug.findNpc(s.name)[0] || "";
+            const m = /C_NPC\.WP '([A-Z0-9_]+)'/.exec(line);
+            const wp = m && world.waypoint(m[1]);
+            if (!wp) skip("the point of the routine is not known: " + line);
+            const d = dist(wp, s.npc);
+            return d < 1200 ? pass(`${s.name} is ${Math.round(d)} from ${m[1]}`) : fail(`${s.name} is ${Math.round(d)} from ${m[1]} (he walks from TOT?) ${line}`);
+        },
+    });
+
     add("itemstate", "a character who uses an item (the broom of Martha, the food) can walk away: the animation of the item does not hold him", {
         wait: 10,
         run() {
@@ -348,7 +373,7 @@ function createFixCases(env) {
 
     // the names that the commands use for the things that were fixed
     const aliases = { fight: "other", fights: "other", bag: "slot", weapon: "slot", qsort: "sort", tp: "teleport", dialogs: "tool", martha: "tool",
-                      beach: "routine", screen: "error", errors: "error", broom: "itemstate", ship: "plank", fish: "startkm", jorn: "armor" };
+                      beach: "routine", dead: "tot", sleep: "tot", kurt: "tot", screen: "error", errors: "error", broom: "itemstate", ship: "plank", fish: "startkm", jorn: "armor" };
 
     return {
         cases,

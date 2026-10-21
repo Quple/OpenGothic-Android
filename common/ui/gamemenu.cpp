@@ -290,6 +290,7 @@ GameMenu::GameMenu(MenuRoot &owner, KeyCodec& keyCodec, zenkit::DaedalusVm& vm, 
 
   back = Resources::loadTexture(menu->back_pic);
 #ifdef OPENGOTHIC_TOUCH_UI
+  int savesKind = -1;
   {
     // character sheet and log keep their original layout
     std::string section(menuSection);
@@ -297,10 +298,26 @@ GameMenu::GameMenu(MenuRoot &owner, KeyCodec& keyCodec, zenkit::DaedalusVm& vm, 
       ch = char(std::toupper(static_cast<unsigned char>(ch)));
     touch.log    = section.find("MENU_LOG")!=std::string::npos && section.find("STATUS")==std::string::npos;
     touch.list = section.find("STATUS")==std::string::npos && section.find("LOG")==std::string::npos;
+
+    const bool loadScreen = section.find("SAVEGAME_LOAD")!=std::string::npos;
+    const bool saveScreen = section.find("SAVEGAME_SAVE")!=std::string::npos;
+    if(loadScreen || saveScreen) {
+      touch.list = false;
+      touch.log  = false;
+      savesKind = loadScreen ? 0 : 1;
+      }
+    if(section=="MENU_OPTIONS") {
+      optView.host = true;
+      touch.list   = false;
+      }
   }
 #endif
 
   initItems();
+#ifdef OPENGOTHIC_TOUCH_UI
+  if(savesKind>=0)
+    saves.reset(new SaveScreen(savesKind==0 ? SaveScreen::Load : SaveScreen::Save,scanPolish()));
+#endif
   float infoX = 1000.0f/scriptDiv;
   float infoY = 7500.0f/scriptDiv;
 
@@ -339,6 +356,10 @@ void GameMenu::resetVm(zenkit::DaedalusVm* inVm) {
   for(int i=0; i<zenkit::IMenu::item_count; ++i){
     hItems[i].handle = nullptr;
     }
+#ifdef OPENGOTHIC_TOUCH_UI
+  if(optView.pane!=nullptr)
+    optView.pane->resetVm(inVm);
+#endif
   if(vm==nullptr)
     return;
   initItems();
@@ -398,6 +419,35 @@ void GameMenu::initItems() {
   }
 
 #ifdef OPENGOTHIC_TOUCH_UI
+std::string GameMenu::touchRowLabel(uint32_t index, uint32_t controlId) const {
+  const auto& item    = hItems[index];
+  const auto& control = hItems[controlId];
+  const bool  choiceRow = control.handle->type==zenkit::MenuItemType::CHOICEBOX;
+
+  std::string label = item.handle->text[0];
+  if(choiceRow && controlId==index) {
+    const auto sep = label.find('#');
+    label = sep==std::string::npos ? control.handle->text[1] : label.substr(0,sep);
+    }
+  if(label.empty()) {
+    // scripts often place the label in a separate, non-selectable TEXT item
+    int best = 8193;
+    for(const auto& candidate:hItems) {
+      if(!candidate.handle || !candidate.visible || candidate.handle->type!=zenkit::MenuItemType::TEXT ||
+         candidate.handle->text[0].empty() || candidate.handle->pos_x>=control.handle->pos_x)
+        continue;
+      const int distance = std::abs(candidate.handle->pos_y-control.handle->pos_y);
+      if(distance<best && distance<350) {
+        best  = distance;
+        label = candidate.handle->text[0];
+        }
+      }
+    }
+  if(control.handle->type==zenkit::MenuItemType::INPUT && label.empty())
+    label = "---";
+  return label;
+  }
+
 namespace {
 // Layout of the touch list, in fractions of the menu size
 constexpr float TouchLeft       = 0.035f;
@@ -440,6 +490,13 @@ std::vector<uint32_t> GameMenu::touchRows() const {
     const auto& item = hItems[i];
     if(!item.visible || (!isSelectable(item.handle) && !isHorSelectable(item.handle)))
       continue;
+    if(embedded) {
+      bool back = false;
+      for(size_t a=0; a<zenkit::IMenuItem::select_action_count; ++a)
+        back = back || item.handle->on_sel_action[a]==int(zenkit::MenuItemSelectAction::BACK);
+      if(back)
+        continue;
+      }
 
     bool paired = false;
     for(auto prev:rows) {
@@ -453,6 +510,25 @@ std::vector<uint32_t> GameMenu::touchRows() const {
   }
 
 int GameMenu::touchRowAt(float px, float py) const {
+  if(!embedded && isButtonList()) {
+    const auto m = mainRows();
+    if(px<float(w())*0.04f || px>float(w())*0.34f)
+      return -1;
+    for(size_t i=size_t(touch.offset); i<m.rows.size(); ++i) {
+      const int top = m.y0+m.top[i]-m.top[size_t(touch.offset)];
+      if(py>=float(top) && py<float(top+m.rowH))
+        return int(m.rows[i]);
+      }
+    return -1;
+    }
+  if(embedded) {
+    const auto g = panelGeom();
+    if(px<0 || px>float(w()) || py<float(g.rowsTop) || py>=float(g.rowsTop+g.rowH*g.visible))
+      return -1;
+    const auto rows = touchRows();
+    const int  n    = touch.offset+int((py-float(g.rowsTop))/float(g.rowH));
+    return n>=0 && size_t(n)<rows.size() ? int(rows[size_t(n)]) : -1;
+    }
   if(px<float(w())*TouchLeft || px>float(w())*TouchRight ||
      py<float(h())*TouchTop  || py>=float(h())*TouchBottom)
     return -1;
@@ -462,8 +538,48 @@ int GameMenu::touchRowAt(float px, float py) const {
   return n>=0 && size_t(n)<rows.size() ? int(rows[size_t(n)]) : -1;
   }
 
+void GameMenu::textKey(const Tempest::KeyEvent& e) {
+  if(saves==nullptr)
+    return;
+  saves->key(e);
+  update();
+  }
+
+bool GameMenu::closeInner() {
+  if(saves==nullptr)
+    return false;
+  const bool closed = saves->cancel();
+  update();
+  return closed;
+  }
+
+/// what the screen of the saves has asked for: the menu is the last thing that is touched, it can be gone after this
+void GameMenu::finishSaves() {
+  if(saves==nullptr)
+    return;
+  switch(saves->takeResult()) {
+    case SaveScreen::Result::None:
+      break;
+    case SaveScreen::Result::Back:
+      owner.popMenu();
+      break;
+    case SaveScreen::Result::Close:
+      owner.closeAll();
+      break;
+    }
+  }
+
 /// phase: 0 - down, 1 - move, 2 - up, 3 - cancel
 void GameMenu::mobileTouch(float px, float py, int phase) {
+  if(optView.host) {
+    optionsTouch(px,py,phase);
+    return;
+    }
+  if(saves!=nullptr) {
+    saves->touch(px,py,phase,w(),h());
+    update();
+    return;
+    }
   if(touch.log) {
     mobileLogTouch(px,py,phase);
     return;
@@ -483,7 +599,7 @@ void GameMenu::mobileTouch(float px, float py, int phase) {
     touch.startY   = py;
 
     const int row = touchRowAt(px,py);
-    if(row<0 || !isEnabled(hItems[row].handle) || px<float(w())*TouchControlX)
+    if(row<0 || !isEnabled(hItems[row].handle) || px<(embedded ? float(panelGeom().trackX0)-float(h())*0.04f : float(w())*TouchControlX))
       return;
     const auto id = touchControl(uint32_t(row));
     auto&      h  = hItems[id].handle;
@@ -507,8 +623,14 @@ void GameMenu::mobileTouch(float px, float py, int phase) {
     }
   if(dx>float(h())*0.02f && dx>dy*1.25f)
     touch.dragging = true;
-  if(touch.dragging || phase==2)
-    touch.preview = std::clamp((px/float(w())-TouchSliderX)/TouchSliderW,0.f,1.f);
+  if(touch.dragging || phase==2) {
+    if(embedded) {
+      const auto g = panelGeom();
+      touch.preview = std::clamp((px-float(g.trackX0))/float(std::max(1,g.trackX1-g.trackX0)),0.f,1.f);
+      } else {
+      touch.preview = std::clamp((px/float(w())-TouchSliderX)/TouchSliderW,0.f,1.f);
+      }
+    }
   update();
 
   if(phase==2) {
@@ -522,8 +644,13 @@ void GameMenu::mobileTouch(float px, float py, int phase) {
   }
 
 void GameMenu::mobileScroll(float dy) {
-  if(touch.log)
+  if(touch.log || saves!=nullptr)
     return;
+  if(optView.host) {
+    if(optView.pane!=nullptr)
+      optView.pane->mobileScroll(dy);
+    return;
+    }
   if(touch.consumed || ctrlInput!=nullptr)
     return;
   if(!touch.list) {
@@ -531,11 +658,22 @@ void GameMenu::mobileScroll(float dy) {
     return;
     }
   const int rows = int(touchRows().size());
-  touch.offset = std::clamp(touch.offset+(dy<0 ? 2 : -2),0,std::max(0,rows-TouchRows));
+  const int vis  = visibleRows();
+  touch.offset = std::clamp(touch.offset+(dy<0 ? 2 : -2),0,std::max(0,rows-vis));
   update();
   }
 
 void GameMenu::mobileTap(float px, float py) {
+  if(optView.host) {
+    optionsTap(px,py);
+    return;
+    }
+  if(saves!=nullptr) {
+    saves->tap(px,py,w(),h());
+    update();
+    finishSaves();
+    return;
+    }
   if(touch.log) {
     mobileLogTap(px,py);
     return;
@@ -553,7 +691,13 @@ void GameMenu::mobileTap(float px, float py) {
   if(control.handle->type==zenkit::MenuItemType::SLIDER)
     return;
   if(control.handle->type==zenkit::MenuItemType::CHOICEBOX) {
-    const int dir = px<float(w())*TouchChoiceMid ? -1 : 1;
+    const float mid = embedded ? float(panelGeom().valueR)-float(w())*0.12f : float(w())*TouchChoiceMid;
+    int         dir = px<mid ? -1 : 1;
+    if(embedded && strEnumSize(control.handle->text[0])==2) {
+      // a switch: a tap changes it, whatever the place
+      const bool on = Gothic::settingsGetI(control.handle->on_chg_set_option_section,control.handle->on_chg_set_option)!=0;
+      dir = on ? -1 : 1;
+      }
     exec(hItems[row],dir,dir<0 ? KeyCodec::Left : KeyCodec::Right);
     } else {
     onKeyboard(KeyCodec::ActionGeneric);
@@ -609,6 +753,10 @@ void touchFrame(Painter& p, int x, int y, int w, int h, int th, const Color& bor
 }
 
 void GameMenu::paintTouch(Painter& p) {
+  if(isButtonList()) {
+    paintMainList(p);
+    return;
+    }
   const auto rows = touchRows();
   touch.offset = std::clamp(touch.offset,0,std::max(0,int(rows.size())-TouchRows));
 
@@ -672,27 +820,7 @@ void GameMenu::paintTouch(Painter& p) {
     const bool keysRow   = control.handle->type==zenkit::MenuItemType::INPUT &&
                            control.handle->on_chg_set_option_section=="KEYS";
 
-    std::string label = item.handle->text[0];
-    if(choiceRow && controlId==index) {
-      const auto sep = label.find('#');
-      label = sep==std::string::npos ? control.handle->text[1] : label.substr(0,sep);
-      }
-    if(label.empty()) {
-      // scripts often place the label in a separate, non-selectable TEXT item
-      int best = 8193;
-      for(const auto& candidate:hItems) {
-        if(!candidate.handle || !candidate.visible || candidate.handle->type!=zenkit::MenuItemType::TEXT ||
-           candidate.handle->text[0].empty() || candidate.handle->pos_x>=control.handle->pos_x)
-          continue;
-        const int distance = std::abs(candidate.handle->pos_y-control.handle->pos_y);
-        if(distance<best && distance<350) {
-          best  = distance;
-          label = candidate.handle->text[0];
-          }
-        }
-      }
-    if(control.handle->type==zenkit::MenuItemType::INPUT && label.empty())
-      label = "---";
+    const std::string label = touchRowLabel(index,controlId);
 
     const bool hasValue = sliderRow || choiceRow || keysRow;
     if(!hasValue) {
@@ -1087,6 +1215,18 @@ void GameMenu::paintEvent(PaintEvent &e) {
   Painter p(e);
   p.setScissor(-x(),-y(),owner.w(),owner.h());
 #ifdef OPENGOTHIC_TOUCH_UI
+  if(saves!=nullptr) {
+    saves->paint(p,w(),h());
+    return;
+    }
+  if(optView.host) {
+    paintOptionsHost(p);
+    return;
+    }
+  if(embedded) {
+    paintPanel(p);
+    return;
+    }
   if(touch.log) {
     paintTouchLog(p);
     return;
@@ -1382,6 +1522,30 @@ void GameMenu::onEndTouch(bool activate) {
   }
 
 void GameMenu::onKeyboard(KeyCodec::Action key) {
+#ifdef OPENGOTHIC_TOUCH_UI
+  if(saves!=nullptr) {
+    if(key==KeyCodec::Forward)
+      saves->step(-1);
+    else if(key==KeyCodec::Back)
+      saves->step(+1);
+    else if(key==KeyCodec::ActionGeneric)
+      saves->confirm();
+    update();
+    finishSaves();
+    return;
+    }
+  if(optView.host && !optView.cats.empty()) {
+    if(key==KeyCodec::Forward || key==KeyCodec::Back) {
+      const int n = int(optView.cats.size());
+      optionsSelect((optView.active+(key==KeyCodec::Forward ? n-1 : 1))%n);
+      } else
+    if(optView.pane!=nullptr) {
+      optView.pane->onKeyboard(key);
+      }
+    update();
+    return;
+    }
+#endif
   auto sel = selectedItem();
   if(sel!=nullptr && isHorSelectable(sel->handle)) {
     if(key==KeyCodec::Left)
@@ -1418,7 +1582,15 @@ void GameMenu::onTick() {
   update();
 
 #ifdef OPENGOTHIC_TOUCH_UI
-  if(touch.list || touch.log) {
+  if(embedded)
+    return;   // the panel of the options sets the place of it
+  if(optView.host) {
+    resize(owner.size());
+    setPosition(0,0);
+    optionsUpdate();
+    return;
+    }
+  if(touch.list || touch.log || saves!=nullptr) {
     resize(owner.size());
     setPosition(0,0);
     return;
@@ -1618,6 +1790,13 @@ void GameMenu::exec(Item &p, int slideDx, KeyCodec::Action hint) {
       }
     }
 
+#ifdef OPENGOTHIC_TOUCH_UI
+  if(embedded) {
+    closeFlag = false;
+    exitFlag  = false;
+    return;
+    }
+#endif
   if(closeFlag)
     owner.closeAll();
   else if(exitFlag)

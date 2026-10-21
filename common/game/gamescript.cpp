@@ -891,6 +891,12 @@ const QuestLog& GameScript::questLog() const {
   return quests;
   }
 
+int GameScript::chapter() const {
+  if(auto* sym = vm.find_symbol_by_name("KAPITEL"))
+    return sym->get_int();
+  return 0;
+  }
+
 void GameScript::saveSym(Serialize &fout, zenkit::DaedalusSymbol& i) {
   auto& w = world();
   switch(i.type()) {

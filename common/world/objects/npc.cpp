@@ -488,6 +488,24 @@ float Npc::angleDir(float x, float z) {
   return a;
   }
 
+void Npc::leaveDeadPoint(std::string_view wpName) {
+  if(isPlayer() || isDead() || wpName.empty() || wpName.compare(0,3,"TOT")==0 || !owner.script().hasDma())
+    return;
+  const auto& dead = owner.deadPoint();
+  if((position()-dead.position()).length()>5000.f)
+    return;
+  auto* wp = owner.findPoint(wpName,false);
+  if(wp==nullptr || (wp->position()-dead.position()).length()<5000.f)
+    return;
+  Log::d("[",displayName().data(),"] leaves the dead point for the routine at ",wpName);
+  clearGoTo();
+  attachToPoint(nullptr);
+  setPosition(wp->groundPos);
+  setDirection(wp->direction());
+  attachToPoint(wp);
+  updateTransform();
+  }
+
 bool Npc::resetPositionToTA() {
   const bool g2       = owner.version().game==2;
   const bool isDragon = (g2 && guild()==GIL_DRAGON);
@@ -3494,6 +3512,7 @@ void Npc::tickRoutine() {
     auto r = currentRoutine();
     if(r.callback.isValid()) {
       auto t = endTime(r);
+      leaveDeadPoint(r.wayPointName());
       startState(r.callback, r.wayPointName(), t, false);
       }
     else if(hnpc->start_aistate!=0) {
@@ -3874,6 +3893,7 @@ void Npc::resumeAiRoutine() {
   auto& r = currentRoutine();
   if(r.callback.isValid()) {
     auto t = endTime(r);
+    leaveDeadPoint(r.wayPointName());
     startState(r.callback,r.wayPointName(),t,false);
     }
   }

@@ -16,6 +16,8 @@ class GthFont final {
 
     int  pixelSize() const;
     void setScale(float s);
+    /// the same font in another color (the letters of the texture are white)
+    GthFont tinted(const Tempest::Color& c) const { GthFont f(*this); f.color = c; return f; }
 
     void drawText(Tempest::Painter& p, int x, int y, int w, int h, std::string_view txt, Tempest::AlignFlag align, int firstLine=0) const;
     void drawText(Tempest::Painter& p, int x, int y, std::string_view txt) const;

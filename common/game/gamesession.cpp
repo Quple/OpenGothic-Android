@@ -204,6 +204,18 @@ void GameSession::save(Serialize &fout, std::string_view name, const Pixmap& scr
     fout.write(i.name);
   }
 
+  // what the list of the saves shows (older saves do not have it)
+  {
+  std::string topic;
+  if(vm!=nullptr)
+    topic = std::string(vm->questLog().lastUpdated());
+  const int32_t chapter = vm!=nullptr ? int32_t(vm->chapter()) : 0;
+  const Npc*    hero    = player();
+  const int32_t level   = hero!=nullptr ? hero->level() : 0;
+  fout.setEntry("info");
+  fout.write(uint32_t(1),chapter,level,topic);
+  }
+
   fout.setEntry("preview.jpg");
   fout.write(std::tie(screen,"jpg"));
 

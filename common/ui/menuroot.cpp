@@ -197,6 +197,13 @@ void MenuRoot::keyRepeatEvent(Tempest::KeyEvent &e) {
     e.ignore();
     return;
     }
+#ifdef OPENGOTHIC_TOUCH_UI
+  if(current->wantsText()) {
+    if(e.key==Event::K_Back)
+      current->textKey(e);
+    return;
+    }
+#endif
 
   if(e.key == Event::K_A || e.key == Event::K_Left)
     current->onKeyboard(KeyCodec::Left);
@@ -209,6 +216,14 @@ void MenuRoot::keyRepeatEvent(Tempest::KeyEvent &e) {
   }
 
 void MenuRoot::keyDownEvent(KeyEvent &e) {
+#ifdef OPENGOTHIC_TOUCH_UI
+  if(current!=nullptr && current->wantsText()) {
+    current->textKey(e);
+    return;
+    }
+  if(current!=nullptr && e.key==Event::K_ESCAPE && current->closeInner())
+    return;
+#endif
   const float scale = Gothic::interfaceScale(this);
   size_t sz = std::extent_v<decltype(cheatCode)>;
   for(size_t i=1; i<sz; ++i)
@@ -253,6 +268,10 @@ void MenuRoot::keyDownEvent(KeyEvent &e) {
 #ifdef OPENGOTHIC_TOUCH_UI
 bool MenuRoot::isTouchMenu() const {
   return current!=nullptr && current->isTouchMenu();
+  }
+
+bool MenuRoot::wantsText() const {
+  return current!=nullptr && current->wantsText();
   }
 
 void MenuRoot::mobileTouch(float x, float y, int phase) {

@@ -39,12 +39,18 @@ class QuestLog final {
     void   save(Serialize &fout);
     void   load(Serialize &fin);
 
+    /// The topic of the journal that has changed last (a new topic, a new entry or a new status), empty when there is none.
+    /// A save is named after it, the player knows what he has been doing.
+    std::string_view lastUpdated() const { return lastTopic; }
+
     size_t questCount() const { return quests.size(); }
     auto   quest(size_t i) const -> const Quest& { return quests[i]; }
 
 
   private:
     Quest* find(std::string_view name);
+    void   touched(const Quest& q);
 
+    std::string        lastTopic;
     std::vector<Quest> quests;
   };

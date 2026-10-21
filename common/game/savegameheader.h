@@ -14,6 +14,9 @@ class SaveGameHeader final {
 
     void save(Serialize& fout) const;
 
+    /// size of the tag in front of the header, the header of a save is: the tag, version (2 bytes), the name (4 bytes of the length and the text)
+    static size_t tagSize();
+
     uint16_t        version = 0;
     std::string     name;
     std::string     world;

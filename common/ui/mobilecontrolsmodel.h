@@ -52,6 +52,7 @@ namespace Special {
     Target,
     Spell,
     Mods,
+    Shift,
     FirstSetting  = 8,
     FirstCategory = 24
     };
@@ -222,6 +223,7 @@ class Controls {
 
     Mode     current  = Mode::Loading;
     bool     keyboard = false;
+    bool     shift    = false;   // the next letter of the keyboard is a capital one
     bool     settingsOpen = false;
     bool     twoLists = false; // the inventory shows the other list too
     bool     padVisible = false;

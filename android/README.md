@@ -52,6 +52,10 @@ The state machine of the controls has no Android dependencies and is tested on t
 c++ -std=c++17 -I common android/tests/controls_test.cpp common/ui/mobilecontrolsmodel.cpp -o controls_test && ./controls_test
 ```
 
+## Saves
+
+The load and save screens of the touch UI list every `save_slot_N.sav` of the game (there is no limit of the slots), the newest first. A new save is named after the journal topic that has changed last, the name can be changed on the screen (the keyboard of the screen has capital and Polish letters), a save can be renamed, overwritten and deleted. The list shows the chapter and the level of the hero, saves made before this have only the date and the play time. The options are one screen too: the categories on the left, the chosen menu on the right.
+
 ## Icons
 
 The icons of the controls are 128x128 RGBA PNG files in `android/assets/touch-icons`. They are embedded into the binary by `android/assets/CMakeLists.txt` and decoded at startup. `IconFiles` in `common/utils/androidinput.cpp` lists them in the order of `AndroidInput::Icon`.

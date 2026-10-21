@@ -116,6 +116,10 @@ Ikarus, for the list of the hooks that nobody answers):
 Gothic2Notr.exe -g "C:/Program Files (x86)/Steam/steamapps/common/TheChroniclesOfMyrtana" -game:TheChroniclesOfMyrtana.ini
 ```
 
+On Android there is no command line: when the installation has an ini in `System` that names its own game or VDFs
+(`TheChroniclesOfMyrtana.ini`), it is chosen at the start as `-game:` does, and the log says `mod of the installation: ...`.
+An installation without such an ini starts the plain Gothic.
+
 The messages of the libraries are in the log (`log.txt` next to the program): `mem_*: address translation failure`
 (a script reads a memory that is not mirrored), `not implemented call [...]` (an engine function or a hook that is not
 answered). They are the list of what to do next; `tools/ikarus/analyze.py` orders them by the use in the mod.

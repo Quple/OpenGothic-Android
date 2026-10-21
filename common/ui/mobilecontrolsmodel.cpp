@@ -152,6 +152,7 @@ void Controls::configure(float w, float h, Mode next) {
   height       = h;
   current      = next;
   keyboard     = false;
+  shift        = false;
   settingsOpen = false;
   scale        = std::min(width/1000.f,height/440.f);
   rebuild();
@@ -220,23 +221,54 @@ void Controls::buildSettings(const Anchor& a) {
   add(a.l,a.b-60*scale,100,60,"MODS",Key::Enter).special = Special::Mods;
   }
 
+namespace {
+/// UTF-8 of a code point of the Latin letters, the labels of the keys
+std::string utf8(uint32_t c) {
+  std::string s;
+  if(c<0x80) {
+    s.push_back(char(c));
+    } else {
+    s.push_back(char(0xC0|(c>>6)));
+    s.push_back(char(0x80|(c&0x3F)));
+    }
+  return s;
+  }
+}
+
 void Controls::buildKeyboard(const Anchor& a) {
-  static const char* rows[] = {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm", "._-:/"};
+  // the last row has the Polish letters, small and capital ones
+  static const uint32_t polish[2][9] = {
+    {0x105,0x107,0x119,0x142,0x144,0xF3,0x15B,0x17A,0x17C},
+    {0x104,0x106,0x118,0x141,0x143,0xD3,0x15A,0x179,0x17B}
+    };
+  static const char* rows[] = {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm", "._-:/!?,'"};
   const float kw = std::min((width-2*a.l)/11.f,72.f*scale);
   const float kh = 52.f*scale;
-  float       y  = a.b-5*kh-10*scale;
+  float       y  = a.b-6*kh-10*scale;
   for(const char* row:rows) {
     const size_t n = std::string(row).size();
     float        x = (width-float(n)*kw)/2;
     for(size_t i=0; i<n; ++i) {
-      const char text[2] = {row[i],'\0'};
-      add(x,y,kw/scale-4,48,text,Key::Enter).character = uint32_t(row[i]);
+      char c = row[i];
+      if(shift && 'a'<=c && c<='z')
+        c = char(c-'a'+'A');
+      const char text[2] = {c,'\0'};
+      add(x,y,kw/scale-4,48,text,Key::Enter).character = uint32_t(c);
       x += kw;
       }
     y += kh;
     }
+  {
+  float x = (width-9*kw)/2;
+  for(size_t i=0; i<9; ++i) {
+    const uint32_t c = polish[shift ? 1 : 0][i];
+    add(x,y,kw/scale-4,48,utf8(c).c_str(),Key::Enter).character = c;
+    x += kw;
+    }
+  }
   add(a.l,a.t,100,54,"HIDE",Key::Enter).special = Special::Keyboard;
   add(a.l+110*scale,a.t,110,54,"SPACE",Key::Enter).character = ' ';
+  add(a.l+230*scale,a.t,110,54,shift ? "ABC" : "abc",Key::Enter).special = Special::Shift;
   add(a.r-220*scale,a.t,100,54,"DEL",Key::Backspace).repeat = true;
   add(a.r-110*scale,a.t,110,54,"OK",Key::Enter);
   }
@@ -487,6 +519,12 @@ void Controls::activate(Button button) {
     rebuild();
     return;
     }
+  if(button.special==Special::Shift) {
+    cancel();
+    shift = !shift;
+    rebuild();
+    return;
+    }
   if(button.special==Special::Settings) {
     cancel();
     settingsOpen = !settingsOpen;
@@ -500,6 +538,11 @@ void Controls::activate(Button button) {
     }
   if(button.character!=0) {
     events.push_back({Event::Text,Key::Enter,0,0,button.character});
+    if(shift) {
+      // a capital letter is for one letter only
+      shift = false;
+      rebuild();
+      }
     return;
     }
   if(keyboard && button.key==Key::Enter) {

@@ -27,6 +27,8 @@ class MenuRoot : public Tempest::Widget {
 
 #ifdef OPENGOTHIC_TOUCH_UI
     bool isTouchMenu() const;
+    /// a name is typed, the keyboard of the screen is needed
+    bool wantsText() const;
     void mobileTouch(float x, float y, int phase);
     void mobileTap(float x, float y);
     void mobileScroll(float dy);

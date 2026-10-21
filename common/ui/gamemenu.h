@@ -16,6 +16,7 @@
 #include "game/savegameheader.h"
 #include "game/questlog.h"
 #include "utils/keycodec.h"
+#include "ui/savescreen.h"
 
 class Gothic;
 class MenuRoot;
@@ -36,7 +37,12 @@ class GameMenu : public Tempest::Widget {
     void onEndTouch(bool activate);
     void onTick();
 #ifdef OPENGOTHIC_TOUCH_UI
-    bool isTouchMenu() const { return touch.list || touch.log; }
+    bool isTouchMenu() const { return touch.list || touch.log || saves!=nullptr || optView.host; }
+    /// the name of a save is typed on the screen of the saves
+    bool wantsText() const { return saves!=nullptr && saves->wantsText(); }
+    void textKey(const Tempest::KeyEvent& e);
+    /// closes what is open on the screen of the saves, false when the menu should go back
+    bool closeInner();
     void mobileTouch(float x, float y, int phase);
     void mobileTap(float x, float y);
     void mobileScroll(float dy);
@@ -106,6 +112,56 @@ class GameMenu : public Tempest::Widget {
       bool                                consumed  = false; // the gesture was a slider drag, not a tap
       };
     TouchState                            touch;
+
+    /// The menus that are only a list of buttons (the main menu) are drawn in a column on the left (gamemenu_main.cpp)
+    struct MainRows {
+      std::vector<uint32_t> rows;      // the buttons
+      std::vector<int>      top;       // place of each of them, from the top of the first one
+      std::vector<bool>     groupEnd;  // a divider follows the button
+      int                   rowH    = 1;
+      int                   visible = 1;
+      int                   y0      = 0;   // the first button
+      int                   cx      = 0;   // the middle of the column
+      std::vector<Tempest::Rect>             images;   // the logo and the title of the game
+      std::vector<const Tempest::Texture2d*> imgTex;
+      };
+    bool                                  isButtonList() const;
+    MainRows                              mainRows() const;
+    int                                   visibleRows() const;
+    void                                  paintMainList(Tempest::Painter& p);
+
+    /// The saves and the loading of them have a screen of their own
+    std::unique_ptr<SaveScreen>           saves;
+    void                                  finishSaves();
+
+    /// The options are one screen: the categories on the left, the menu of the chosen one in the panel on the right (gamemenu_options.cpp)
+    struct OptionsView {
+      bool                  host    = false;     // the menu of the options with the categories
+      bool                  built   = false;
+      bool                  drag    = false;     // the finger has started in the panel
+      std::vector<uint32_t> cats;                // items of the categories
+      int                   active  = -1;
+      GameMenu*             pane    = nullptr;
+      };
+    OptionsView                           optView;
+    bool                                  embedded = false;   // the menu of a category, it is drawn in the panel of the options
+    std::string                           panelTitle;
+
+    struct PanelGeom {
+      int rowsTop = 0, rowH = 1, visible = 1, padX = 0, trackX0 = 0, trackX1 = 0, valueR = 0;
+      };
+    /// the menu speaks Polish (the setting of the language is -1 when the game takes the language of the scripts)
+    bool                                  scanPolish() const;
+    PanelGeom                             panelGeom() const;
+    std::string                           touchRowLabel(uint32_t index, uint32_t controlId) const;
+    Tempest::Rect                         optionsSidebar() const;
+    Tempest::Rect                         optionsPaneRect() const;
+    void                                  optionsUpdate();
+    void                                  optionsSelect(int category);
+    void                                  optionsTouch(float x, float y, int phase);
+    void                                  optionsTap(float x, float y);
+    void                                  paintOptionsHost(Tempest::Painter& p);
+    void                                  paintPanel(Tempest::Painter& p);
 
     /// The journal is a screen of its own
     struct LogView {

@@ -51,6 +51,10 @@ static void writeTm(Serialize& fout, const std::tm& i) {
   fout.writeBytes(&tx,sizeof(tx));
   }
 
+size_t SaveGameHeader::tagSize() {
+  return sizeof(tag);
+  }
+
 SaveGameHeader::SaveGameHeader(Serialize &fin) {
   char     buf[sizeof(tag)]={};
   fin.readBytes(buf,sizeof(buf));

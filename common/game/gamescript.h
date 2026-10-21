@@ -143,6 +143,8 @@ class GameScript final {
     auto         dmaDamageBegin(Npc& victim, Npc& attacker, bool isSpell, int spellId, bool ranged, bool dontKill) -> DmaDamage;
     void         dmaDamageEnd(Npc& victim, DmaDamage& d);
     auto         questLog() const -> const QuestLog&;
+    /// The chapter of the story (KAPITEL of the scripts), 0 when the scripts have none
+    int          chapter() const;
 
     const World& world() const;
     World&       world();
