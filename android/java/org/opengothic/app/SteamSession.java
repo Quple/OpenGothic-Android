@@ -8,6 +8,7 @@ import in.dragonbra.javasteam.enums.EResult;
 import in.dragonbra.javasteam.steam.authentication.AuthPollResult;
 import in.dragonbra.javasteam.steam.authentication.AuthSessionDetails;
 import in.dragonbra.javasteam.steam.authentication.AuthenticationException;
+import in.dragonbra.javasteam.steam.authentication.CredentialsAuthSession;
 import in.dragonbra.javasteam.steam.authentication.IAuthenticator;
 import in.dragonbra.javasteam.steam.handlers.steamapps.License;
 import in.dragonbra.javasteam.steam.handlers.steamapps.PICSProductInfo;
@@ -19,6 +20,7 @@ import in.dragonbra.javasteam.steam.handlers.steamuser.LogOnDetails;
 import in.dragonbra.javasteam.steam.handlers.steamuser.SteamUser;
 import in.dragonbra.javasteam.steam.handlers.steamuser.callback.LoggedOffCallback;
 import in.dragonbra.javasteam.steam.handlers.steamuser.callback.LoggedOnCallback;
+import in.dragonbra.javasteam.steam.steamclient.AsyncJobFailedException;
 import in.dragonbra.javasteam.steam.steamclient.SteamClient;
 import in.dragonbra.javasteam.steam.steamclient.callbackmgr.CallbackManager;
 import in.dragonbra.javasteam.steam.steamclient.callbacks.ConnectedCallback;
@@ -113,6 +115,13 @@ final class SteamSession implements Closeable {
 
     SteamSession() {
         client = new SteamClient(SteamConfiguration.create(builder -> { }));
+        try {
+            // a job of the library fails after ten seconds without an answer: a slow network (a phone far from the servers of
+            // Steam) is not a failure. The calls here have the time limits of their own.
+            client.getJobManager$javasteam().setTimeoutsEnabled(false);
+        } catch (Throwable e) {
+            Log.w(TAG, "the time limit of the jobs stays: " + e);
+        }
         manager = new CallbackManager(client);
         user = client.getHandler(SteamUser.class);
         apps = client.getHandler(SteamApps.class);
@@ -184,8 +193,21 @@ final class SteamSession implements Closeable {
 
         AuthPollResult result;
         try {
-            result = client.getAuthentication().beginAuthSessionViaCredentials(details).get()
-                    .pollingWaitForResult().get();
+            // the first call goes to a server that may be slow or may have just been lost: one more try
+            CredentialsAuthSession auth;
+            for (int attempt = 0; ; ++attempt) {
+                try {
+                    auth = client.getAuthentication().beginAuthSessionViaCredentials(details).get(90, TimeUnit.SECONDS);
+                    break;
+                } catch (ExecutionException e) {
+                    if (attempt > 0 || closing || !(e.getCause() instanceof AsyncJobFailedException))
+                        throw e;
+                    Log.w(TAG, "the login did not get an answer, trying again");
+                }
+            }
+            result = auth.pollingWaitForResult().get();
+        } catch (TimeoutException e) {
+            throw new Failure("Steam did not answer in time. Check the connection and try again.", false);
         } catch (AuthenticationException e) {
             throw explain(e);
         } catch (ExecutionException e) {
@@ -516,6 +538,9 @@ final class SteamSession implements Closeable {
                 return new Failure("The Steam Guard code is wrong.", false);
             return new Failure("Steam refused the login" + (r != null ? ": " + r : "") + ".", false);
         }
+        Log.w(TAG, "failure", e);
+        if (e instanceof AsyncJobFailedException)
+            return new Failure("Steam did not answer in time or the connection was lost. Check the connection and try again.", false);
         String m = e.getMessage();
         return new Failure(m != null && !m.isEmpty() ? m : e.getClass().getSimpleName(), false);
     }

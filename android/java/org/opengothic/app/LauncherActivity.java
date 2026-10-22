@@ -113,6 +113,7 @@ public final class LauncherActivity extends Activity {
 
     private File external;
     private int lastPlayed = 1;
+    private boolean askedAboutExit;
     private volatile int importing = -1;  // the game that is imported or removed now
     private volatile String importText = "";
     private int importTarget = -1;
@@ -171,6 +172,36 @@ public final class LauncherActivity extends Activity {
             return;
         reloadSession();
         refresh();
+        checkGameExit();
+    }
+
+    /**
+     * The game that ends a few seconds after it has started did not want to: the end of its log is shown, so that the reason
+     * is known (and can be sent to somebody) without a computer.
+     */
+    private void checkGameExit() {
+        long started = prefs.getLong("started", 0);
+        if (started == 0 || askedAboutExit)
+            return;
+        prefs.edit().remove("started").apply();
+        boolean quick = System.currentTimeMillis() - started < 25000;
+        if (!quick && !Logs.crashedSince(this, started))
+            return;
+        askedAboutExit = true;
+        String tail = Logs.tail(new java.io.File(getFilesDir(), "crash.log"), 1500);
+        if (tail.isEmpty())
+            tail = Logs.tail(new java.io.File(getFilesDir(), "log.txt"), 1500);
+        new AlertDialog.Builder(this)
+                .setTitle(Texts.t("The game has closed", "Gra się zamknęła"))
+                .setMessage(Texts.t("The game ended a moment after the start. If it was not meant to, send the log.\n\n",
+                        "Gra zakończyła się chwilę po starcie. Jeśli to nie było zamierzone, wyślij log.\n\n") + tail)
+                .setPositiveButton(Texts.t("Share the log", "Udostępnij log"), (d, w) -> {
+                    askedAboutExit = false;
+                    Logs.share(this);
+                })
+                .setNegativeButton(Texts.t("Close", "Zamknij"), (d, w) -> askedAboutExit = false)
+                .setOnCancelListener(d -> askedAboutExit = false)
+                .show();
     }
 
     @Override
@@ -653,7 +684,7 @@ public final class LauncherActivity extends Activity {
 
     private void play(int game) {
         lastPlayed = game;
-        prefs.edit().putInt("game", game).apply();
+        prefs.edit().putInt("game", game).putLong("started", System.currentTimeMillis()).apply();
         // the engine reads which of the installations it is and which mod (the ini of it): it has no command line
         try (OutputStream out = new FileOutputStream(new File(external, "game.txt"))) {
             out.write((GAMES[game].folder + "\n" + GAMES[game].ini + "\n").getBytes(StandardCharsets.UTF_8));
@@ -701,9 +732,13 @@ public final class LauncherActivity extends Activity {
             menu.getMenu().add(0, 1, 0, Texts.t("Remove files", "Usuń pliki"));
         else
             menu.getMenu().add(0, 2, 0, Texts.t("Import from ZIP", "Importuj z ZIP"));
+        if (Logs.hasLog(this))
+            menu.getMenu().add(0, 3, 1, Texts.t("Share the log of the game", "Udostępnij log gry"));
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1)
                 askRemove(game);
+            else if (item.getItemId() == 3)
+                Logs.share(this);
             else
                 pickArchive(game);
             return true;
