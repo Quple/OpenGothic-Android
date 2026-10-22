@@ -1,0 +1,123 @@
+diff --git a/Engine/gapi/vulkan/vdevice.h b/Engine/gapi/vulkan/vdevice.h
+index 73272e50..919b0e21 100644
+--- a/Engine/gapi/vulkan/vdevice.h
++++ b/Engine/gapi/vulkan/vdevice.h
+@@ -426,6 +426,10 @@ class VDevice : public AbstractGraphicsApi::Device {
+     std::mutex              allocSync;
+     VAllocator              allocator;
+ 
++    /// Pipelines are compiled by the driver, on a thread of the engine while the others go on creating objects: one at a time,
++    /// as the drivers of some GPUs (Mali) are not safe for the parallel compilation, hardened allocators report it
++    std::mutex              pipelineSync;
++
+     VFramebufferMap         fboMap;
+ 
+     VSetLayoutCache         setLayouts;
+diff --git a/Engine/gapi/vulkan/vpipeline.cpp b/Engine/gapi/vulkan/vpipeline.cpp
+index a9532d8b..5e78059f 100644
+--- a/Engine/gapi/vulkan/vpipeline.cpp
++++ b/Engine/gapi/vulkan/vpipeline.cpp
+@@ -322,7 +322,11 @@ VkPipeline VPipeline::initGraphicsPipeline(VDevice& device,
+     }
+ 
+   VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+-  const auto err = vkCreateGraphicsPipelines(device.device.impl,VK_NULL_HANDLE,1,&pipelineInfo,nullptr,&graphicsPipeline);
++  VkResult   err = VK_SUCCESS;
++  {
++    std::lock_guard<std::mutex> guard(device.pipelineSync);
++    err = vkCreateGraphicsPipelines(device.device.impl,VK_NULL_HANDLE,1,&pipelineInfo,nullptr,&graphicsPipeline);
++  }
+   if(err!=VK_SUCCESS)
+     throw std::system_error(Tempest::GraphicsErrc::InvalidShaderModule);
+   return graphicsPipeline;
+@@ -401,38 +405,40 @@ VCompPipeline::VCompPipeline(VDevice& device, const VShader& comp)
+   shader         = Detail::DSharedPtr<const VShader*>{&comp};
+ 
+   VkDevice dev = device.device.impl;
+-  try {
+-    VkComputePipelineCreateInfo info = {};
+-    info.sType        = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+-    info.stage.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+-    info.stage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
+-    info.stage.module = comp.impl;
+-    info.stage.pName  = "main";
+-    info.layout       = pipelineLayout;
+-    if(layout.isUpdateAfterBind() && !device.props.hasDescriptorHeap) {
+-      info.flags = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+-      }
+-    if(device.props.hasDescriptorHeap) {
+-      mappingInfo.pNext = info.stage.pNext;
+-      info.stage.pNext  = &mappingInfo;
+ 
+-      createFlags2.pNext = info.pNext;
+-      info.pNext         = &createFlags2;
+-      }
+-    const auto err = vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &info, nullptr, &impl);
+-    if(err!=VK_SUCCESS)
+-      throw std::system_error(Tempest::GraphicsErrc::InvalidShaderModule);
++  // NOTE: pipelineLayout is owned by the cache of the device (VPsoLayoutCache), other pipelines use it as well:
++  // it must not be destroyed here, even if the driver has refused the pipeline
++  VkComputePipelineCreateInfo info = {};
++  info.sType        = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
++  info.stage.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
++  info.stage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
++  info.stage.module = comp.impl;
++  info.stage.pName  = "main";
++  info.layout       = pipelineLayout;
++  // NOTE: no pipeline derivatives (ALLOW_DERIVATIVES): they bring nothing on a modern driver, and Mali drivers are not good at them
++  if(device.props.hasDescriptorHeap) {
++    mappingInfo.pNext = info.stage.pNext;
++    info.stage.pNext  = &mappingInfo;
+ 
+-    VkDebugMarkerObjectNameInfoEXT nameInfo = {VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT};
+-    nameInfo.objectType   = VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT;
+-    nameInfo.object       = impl;
+-    nameInfo.pObjectName  = comp.dbgShortName();
+-    device.vkDebugMarkerSetObjectName(device.device.impl, &nameInfo);
++    createFlags2.pNext = info.pNext;
++    info.pNext         = &createFlags2;
+     }
+-  catch(...) {
+-    vkDestroyPipelineLayout(dev,pipelineLayout,nullptr);
+-    throw;
++
++  VkResult err = VK_SUCCESS;
++  {
++    std::lock_guard<std::mutex> guard(device.pipelineSync);
++    err = vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &info, nullptr, &impl);
++  }
++  if(err!=VK_SUCCESS) {
++    impl = VK_NULL_HANDLE;
++    throw std::system_error(Tempest::GraphicsErrc::InvalidShaderModule);
+     }
++
++  VkDebugMarkerObjectNameInfoEXT nameInfo = {VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT};
++  nameInfo.objectType   = VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT;
++  nameInfo.object       = impl;
++  nameInfo.pObjectName  = comp.dbgShortName();
++  device.vkDebugMarkerSetObjectName(device.device.impl, &nameInfo);
+   }
+ 
+ VCompPipeline::~VCompPipeline() {
+@@ -474,12 +480,16 @@ VkPipeline VCompPipeline::instance(VkPipelineLayout pLay) {
+     info.stage.module       = shader.handler->impl;
+     info.stage.pName        = "main";
+     info.layout             = pLay;
+-    info.flags              = VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+-    info.basePipelineHandle = impl;
+-    info.basePipelineIndex  = -1;
+-    const auto err = vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &info, nullptr, &val);
+-    if(err!=VK_SUCCESS)
++    // an independent pipeline, not a derivative of impl (see the constructor)
++    VkResult err = VK_SUCCESS;
++    {
++      std::lock_guard<std::mutex> compileGuard(device.pipelineSync);
++      err = vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &info, nullptr, &val);
++    }
++    if(err!=VK_SUCCESS) {
++      val = VK_NULL_HANDLE;
+       throw std::system_error(Tempest::GraphicsErrc::InvalidShaderModule);
++      }
+ 
+     inst.emplace_back(pLay,val);
+     }

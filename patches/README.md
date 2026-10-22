@@ -14,3 +14,13 @@ git -C lib/ZenKit apply --ignore-whitespace ../../patches/zenkit-opengothic.patc
 ```
 
 Make the patch again after a change in the submodule: `git -C lib/ZenKit diff > patches/zenkit-opengothic.patch`.
+
+## Tempest
+
+`lib/Tempest` is the upstream Try/Tempest. `patches/tempest-opengothic.patch` is about the creation of the Vulkan pipelines, a crash on Mali (Pixel 9, `hardened_malloc: detected write after free` in `vkCreateComputePipelines`):
+
+- `VCompPipeline` destroyed the pipeline layout when the driver refused the pipeline, but the layout belongs to `VPsoLayoutCache` and the other pipelines use it: it was freed and handed out again;
+- no pipeline derivatives (`ALLOW_DERIVATIVES`, `DERIVATIVE_BIT`): the bindless variants (update-after-bind) were derived from a base pipeline, Arm advises against it and it brings nothing;
+- `VDevice::pipelineSync`: one pipeline is compiled at a time (the compilation of the shaders runs on a thread of its own while the others create objects).
+
+CMake applies it (`cmake/tempestpatch.cmake`, before Tempest is added), as for ZenKit. By hand: `git -C lib/Tempest apply --ignore-whitespace ../../patches/tempest-opengothic.patch`; make it again with `git -C lib/Tempest diff > patches/tempest-opengothic.patch`.
