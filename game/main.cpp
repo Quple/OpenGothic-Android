@@ -90,6 +90,11 @@ int main(int argc,const char** argv) {
       logFile.write("\n",1);
       if(mode==Tempest::Log::Error)
         logFile.flush();
+#if defined(__ANDROID__)
+      // the engine reports a pipeline before the driver compiles it: if the driver takes the process down, the line is the last one
+      if(mode==Tempest::Log::Debug)
+        logFile.flush();
+#endif
       });
     }
   catch(...) {

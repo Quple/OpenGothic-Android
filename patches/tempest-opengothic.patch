@@ -115,15 +115,30 @@ index 73272e50..39655b2c 100644
      void                    createLogicalDevice(VkPhysicalDevice pdev);
  
 diff --git a/Engine/gapi/vulkan/vpipeline.cpp b/Engine/gapi/vulkan/vpipeline.cpp
-index a9532d8b..5e78059f 100644
+index a9532d8b..a7314f32 100644
 --- a/Engine/gapi/vulkan/vpipeline.cpp
 +++ b/Engine/gapi/vulkan/vpipeline.cpp
-@@ -322,7 +322,11 @@ VkPipeline VPipeline::initGraphicsPipeline(VDevice& device,
+@@ -6,6 +6,7 @@
+ #include "vshader.h"
+ 
+ #include <Tempest/RenderState>
++#include <Tempest/Log>
+ 
+ using namespace Tempest;
+ using namespace Tempest::Detail;
+@@ -322,7 +323,18 @@ VkPipeline VPipeline::initGraphicsPipeline(VDevice& device,
      }
  
    VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 -  const auto err = vkCreateGraphicsPipelines(device.device.impl,VK_NULL_HANDLE,1,&pipelineInfo,nullptr,&graphicsPipeline);
 +  VkResult   err = VK_SUCCESS;
++#if defined(__ANDROID__)
++  // the shader compiler of a mobile driver can take the whole process down (SIGSEGV in the driver, nothing to catch):
++  // the last line of the log tells which shaders it was. Debug lines are flushed by the application.
++  for(size_t i=0; i<5; ++i)
++    if(shaders[i].handler!=nullptr)
++      Log::d("vkCreateGraphicsPipelines: ", shaders[i].handler->dbgShortName());
++#endif
 +  {
 +    std::lock_guard<std::mutex> guard(device.pipelineSync);
 +    err = vkCreateGraphicsPipelines(device.device.impl,VK_NULL_HANDLE,1,&pipelineInfo,nullptr,&graphicsPipeline);
@@ -131,7 +146,7 @@ index a9532d8b..5e78059f 100644
    if(err!=VK_SUCCESS)
      throw std::system_error(Tempest::GraphicsErrc::InvalidShaderModule);
    return graphicsPipeline;
-@@ -401,38 +405,40 @@ VCompPipeline::VCompPipeline(VDevice& device, const VShader& comp)
+@@ -401,38 +413,40 @@ VCompPipeline::VCompPipeline(VDevice& device, const VShader& comp)
    shader         = Detail::DSharedPtr<const VShader*>{&comp};
  
    VkDevice dev = device.device.impl;
@@ -200,7 +215,7 @@ index a9532d8b..5e78059f 100644
    }
  
  VCompPipeline::~VCompPipeline() {
-@@ -474,12 +480,16 @@ VkPipeline VCompPipeline::instance(VkPipelineLayout pLay) {
+@@ -474,12 +488,16 @@ VkPipeline VCompPipeline::instance(VkPipelineLayout pLay) {
      info.stage.module       = shader.handler->impl;
      info.stage.pName        = "main";
      info.layout             = pLay;

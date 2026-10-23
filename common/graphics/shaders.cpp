@@ -4,6 +4,8 @@
 #include <Tempest/Device>
 #include <Tempest/Log>
 #include <cassert>
+#include <cstdlib>
+#include <cstring>
 
 #include "gothic.h"
 #include "commandline.h"
@@ -14,8 +16,24 @@
 
 using namespace Tempest;
 
+/// Adreno 6xx and older: the shader compiler of their driver crashed (SIGSEGV in libllvm-glnext, Adreno 619) on the first material
+/// pipeline of the world. The suspect are the shaders that index arrays of descriptors with non-uniform values (bindless)
+static bool isLegacyAdreno(const char* name) {
+  const char* at = std::strstr(name,"Adreno");
+  if(at==nullptr)
+    return false;
+  for(at+=6; *at!='\0' && (*at<'0' || *at>'9'); ++at) {}
+  const int model = std::atoi(at);
+  return model>0 && model<700;
+  }
+
 static bool hasBindless() {
   const auto& p = Resources::device().properties();
+  if(isLegacyAdreno(p.name)) {
+    // the same pipelines without arrays of descriptors: the path of every GPU without descriptor indexing, no effect is lost
+    Log::i("bindless is off: ", p.name);
+    return false;
+    }
   if(p.descriptors.nonUniformIndexing && p.descriptors.maxTexture>=65000 && p.descriptors.maxStorage>=65000)
     return true;
   return false;
