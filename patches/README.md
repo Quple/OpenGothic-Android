@@ -23,4 +23,6 @@ Make the patch again after a change in the submodule: `git -C lib/ZenKit diff > 
 - no pipeline derivatives (`ALLOW_DERIVATIVES`, `DERIVATIVE_BIT`): the bindless variants (update-after-bind) were derived from a base pipeline, Arm advises against it and it brings nothing;
 - `VDevice::pipelineSync`: one pipeline is compiled at a time (the compilation of the shaders runs on a thread of its own while the others create objects).
 
+A second change is about null descriptors (a crash of the intro on Mali-G720, `vkUpdateDescriptorSets` in `VDescriptorArray::populate`): `DrawBuckets::updateBindlessArrays` rounds the arrays up to 1024 and the rest is `nullptr`, and Tempest wrote `VK_NULL_HANDLE` for them. That is allowed with the feature `nullDescriptor` of VK_EXT_robustness2 only, but `hasRobustness2` was set by the presence of the extension. Now `props.nullDescriptor` is the feature itself, and without it the empty slots (of textures and of buffers) get a real 1x1 image (`VDevice::dummyTexture`) or the dummy buffer.
+
 CMake applies it (`cmake/tempestpatch.cmake`, before Tempest is added), as for ZenKit. By hand: `git -C lib/Tempest apply --ignore-whitespace ../../patches/tempest-opengothic.patch`; make it again with `git -C lib/Tempest diff > patches/tempest-opengothic.patch`.
