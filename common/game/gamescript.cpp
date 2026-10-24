@@ -1469,8 +1469,7 @@ void GameScript::invokeSpell(Npc &npc, Npc* target, Item &it) {
   if(fn==nullptr)
     return;
 
-  // FIXME: actually set the spell level!
-  int32_t  splLevel = 0;
+  const int32_t splLevel = npc.activeSpellLevel();
   ScopeVar self (*vm.global_self(),  npc.handlePtr());
   ScopeVar other(*vm.global_other(), target != nullptr ? target->handlePtr() : nullptr);
   try {
@@ -2282,7 +2281,12 @@ void GameScript::mdl_setvisualbody(std::shared_ptr<zenkit::INpc> npcRef, std::st
   if(armor>0) {
     if(npc->itemCount(uint32_t(armor))==0)
       npc->addItem(uint32_t(armor),1);
-    npc->useItem(uint32_t(armor),Item::NSLOT,true);
+    npc->equipItem(uint32_t(armor));
+    }
+  else if(armor<0) {
+    // NO_ARMOR is -1. CoM's NPC_ChangeFace passes 0 to retain the armor.
+    if(auto* equipped = npc->currentArmor())
+      npc->unequipItem(equipped->clsId());
     }
   }
 

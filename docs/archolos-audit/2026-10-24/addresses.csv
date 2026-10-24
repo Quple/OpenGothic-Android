@@ -16,7 +16,7 @@ address,status,static_call_sites,wrapper_call_sites,callers,callbacks,handler
 0x47ed60,hook_declared_review_semantics,1,1,INIT_FEATURES_GAMESTART,STATUSSCREENSHOW_HOOK,
 0x484930,hook_declared_review_semantics,1,1,SPELL_PICKLOCK_INIT_GAMESTART,SPELL_PICKLOCK_PRIO,
 0x485fc4,hook_declared_review_semantics,1,1,SPELL_PICKLOCK_INIT_GAMESTART,SPELL_PICKLOCK_FOCUS,
-0x4b20f0,caller_overridden_review_semantics,1,1,DIACAM_UPDATE,,common/game/compatibility/directmemory_events.cpp:981
+0x4b20f0,caller_overridden_review_semantics,1,1,DIACAM_UPDATE,,common/game/compatibility/directmemory_events.cpp:991
 0x4c3270,hook_declared_review_semantics,1,1,CUTSCENESYSTEM_INIT,ZCCSCAMERA__ONTRIGGER_HOOK,
 0x4c3ac0,hook_declared_review_semantics,1,1,CUTSCENESYSTEM_INIT,ZCCSCAMERA__ONUNTRIGGER_HOOK,
 0x4cc470,registered_review_semantics,1,2,CATINV_KEYBINDINGISTOGGLED,,common/game/compatibility/directmemory_engine.cpp:308
@@ -109,15 +109,15 @@ address,status,static_call_sites,wrapper_call_sites,callers,callbacks,handler
 0x733eb7,missing_hook_bridge,1,1,INIT_HIDEFOCUSFORPARTYMEMBERS,HIDEFOCUSFORPARTYMEMBERS_UPDATESTATUSREPLACEHOOK,
 0x734f4d,hook_declared_review_semantics,1,1,INIT_GETNEXTENEMYFIX,OCNPC__GETNEXTENEMY_REPLACEHOOK,
 0x735fab,hook_declared_review_semantics,1,1,INIT_DROPUNCONSCIOUS_HOOK,OCNPC__DROPUNCONSCIOUS_HOOK,
-0x7375e0,registered_trivial,1,0,OCNPC__DROPUNCONSCIOUS_HOOK,,common/game/compatibility/directmemory_events.cpp:969
+0x7375e0,registered_trivial,1,0,OCNPC__DROPUNCONSCIOUS_HOOK,,common/game/compatibility/directmemory_events.cpp:979
 0x738720,registered_review_semantics,1,2,OCNPC_GETMODEL,,common/game/compatibility/directmemory_engine.cpp:374
 0x739c90,registered_review_semantics,2,3,OCNPC_EQUIP;TORCH_EQUIP,,common/game/compatibility/directmemory.cpp:2448
 0x73a030,registered_review_semantics,3,12,EQUIPWEAPON;OCNPC__DROPUNCONSCIOUS_HOOK,,common/game/compatibility/directmemory.cpp:2512
 0x73d340,registered_review_semantics,1,1,OCNPC_ISSPELLACTIVE,,common/game/compatibility/directmemory.cpp:2505
 0x7449c0,registered_review_semantics,1,0,OCAIHUMAN__PC_DIVING_HOOK,,common/game/compatibility/directmemory_engine.cpp:336
 0x745fa6,hook_declared_review_semantics,1,1,FIXEQUIPBESTWEAPONS_INIT,_FIXEQUIPBESTWEAPONS,
-0x749cb0,caller_overridden_review_semantics,1,2,OCNPC_PUTINSLOT,,common/game/compatibility/directmemory_events.cpp:933
-0x74a270,caller_overridden_review_semantics,1,6,OCNPC_REMOVEFROMSLOT,,common/game/compatibility/directmemory_events.cpp:942
+0x749cb0,caller_overridden_review_semantics,1,2,OCNPC_PUTINSLOT,,common/game/compatibility/directmemory_events.cpp:943
+0x74a270,caller_overridden_review_semantics,1,6,OCNPC_REMOVEFROMSLOT,,common/game/compatibility/directmemory_events.cpp:952
 0x74a590,registered_review_semantics,1,2,OCNPC_DROPFROMSLOT,,common/game/compatibility/directmemory.cpp:2499
 0x74ef30,caller_overridden_review_semantics,1,2,NPCEQUIPBESTWEAPONBYTYPE,,common/game/compatibility/directmemory.cpp:2437
 0x751af0,hook_declared_review_semantics,1,1,INIT_FEATURES_GAMESTART,EV_FINISHINGMOVE_HOOK,

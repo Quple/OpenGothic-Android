@@ -82,6 +82,12 @@ do EXE/kopii moda podczas kompilacji; ostatnio dodano cutscene.
 - `comcheck telekinesis` — odczyt fazy i kroków ruchu. Naturalnie przyciągnąć
   luźny przedmiot: koszt many, ruch, ukończenie i opadanie. Przerwać rzucanie,
   zmienić broń, zapisać i wczytać; przedmiot nie może pozostać bez fizyki.
+- Zbroje NPC: QA306 Bloodwyn bez zbroi; zmiany munduru w Q102/rozdziałach,
+  wielokrotne zastosowanie tego samego modelu i odtworzenie po loadzie.
+  Zmiana twarzy NPC nie może zdejmować jego zbroi.
+- Dźwięki ZEN: rozmowy tłumu na statku Q101 mają cichnąć po rozmowie z Jornem,
+  przestraszony tłum po finale sceny; piła SQ125 po zakończeniu pracy. Zapisać
+  po wyłączeniu, wczytać/zmienić świat — wyłączony kanał nie wraca sam.
 - Kolejkowane teleporty: naturalne limity odległości Jorna/Ruperta w Q102,
   przygotowanie postaci w Q602 i manekiny domu; brak skoku do środka świata.
 - `comcheck musiczone` — tylko odczyt strefy/świata i flag koncertu. Wejście do nakładających się stref, wyjście, dzień/noc, koncert
@@ -123,9 +129,17 @@ do EXE/kopii moda podczas kompilacji; ostatnio dodano cutscene.
   potwierdził użytkownik; brak odbioru kolejnych zmian.
 - `CRAFTINGVIEW_UPDATE` korzysta z natywnego wyboru menu. Nie oznacza to pełnej
   emulacji prywatnego InformationManagera ani wszystkich hooków pod 0x660bb0.
-- Drugi parametr time.slw ma już kod zegara modelu i zapisu. Kompilacja/odbiór
+- Drugi parametr time.slw ma już kod zegara modelu i zapisu. Odbiór
   naturalnego zaklęcia i sceny Q306 pozostają warunkiem uznania działania w grze.
 
 - Pakiet voices oraz torchbindings z 2026-10-24 skompilował oba EXE kodem 0.
 
 - Strefy muzyki: oba EXE skompilowane; najnowsze ręczne komendy nadal bez odbioru.
+
+## STOP użytkownika — stan końcowy tej sesji
+
+Nowe prace zatrzymane na polecenie użytkownika. Postęp nadal 24/27 grup.
+Muzyka menu oraz wygląd craftingu potwierdzone przez użytkownika. Pozostały
+odbiór z listy powyżej nie jest zaliczony na podstawie samej kompilacji.
+Pakiet dźwięków ZEN i armor/spelllevel skompilował oba EXE kodem 0.
+Nie wykonano prób gry, testów automatycznych ani komend comcheck przez agenta.

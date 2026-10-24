@@ -86,6 +86,12 @@ do EXE/kopii moda podczas kompilacji; ostatnio dodano cutscene.
 - `comcheck telekinesis` — odczyt fazy i kroków ruchu. Naturalnie przyciągnąć
   luźny przedmiot: koszt many, ruch, ukończenie i opadanie. Przerwać rzucanie,
   zmienić broń, zapisać i wczytać; przedmiot nie może pozostać bez fizyki.
+- Zbroje NPC: QA306 Bloodwyn bez zbroi; zmiany munduru w Q102/rozdziałach,
+  wielokrotne zastosowanie tego samego modelu i odtworzenie po loadzie.
+  Zmiana twarzy NPC nie może zdejmować jego zbroi.
+- Dźwięki ZEN: rozmowy tłumu na statku Q101 mają cichnąć po rozmowie z Jornem,
+  przestraszony tłum po finale sceny; piła SQ125 po zakończeniu pracy. Zapisać
+  po wyłączeniu, wczytać/zmienić świat — wyłączony kanał nie wraca sam.
 - Kolejkowane teleporty: naturalne limity odległości Jorna/Ruperta w Q102,
   przygotowanie postaci w Q602 i manekiny domu; brak skoku do środka świata.
 - `comcheck musiczone` — tylko odczyt strefy/świata i flag koncertu. Wejście do nakładających się stref, wyjście, dzień/noc, koncert
@@ -127,12 +133,20 @@ do EXE/kopii moda podczas kompilacji; ostatnio dodano cutscene.
   potwierdził użytkownik; brak odbioru kolejnych zmian.
 - `CRAFTINGVIEW_UPDATE` korzysta z natywnego wyboru menu. Nie oznacza to pełnej
   emulacji prywatnego InformationManagera ani wszystkich hooków pod 0x660bb0.
-- Drugi parametr time.slw ma już kod zegara modelu i zapisu. Kompilacja/odbiór
+- Drugi parametr time.slw ma już kod zegara modelu i zapisu. Odbiór
   naturalnego zaklęcia i sceny Q306 pozostają warunkiem uznania działania w grze.
 
 - Pakiet voices oraz torchbindings z 2026-10-24 skompilował oba EXE kodem 0.
 
 - Strefy muzyki: oba EXE skompilowane; najnowsze ręczne komendy nadal bez odbioru.
+
+## STOP użytkownika — stan końcowy tej sesji
+
+Nowe prace zatrzymane na polecenie użytkownika. Postęp nadal 24/27 grup.
+Muzyka menu oraz wygląd craftingu potwierdzone przez użytkownika. Pozostały
+odbiór z listy powyżej nie jest zaliczony na podstawie samej kompilacji.
+Pakiet dźwięków ZEN i armor/spelllevel skompilował oba EXE kodem 0.
+Nie wykonano prób gry, testów automatycznych ani komend comcheck przez agenta.
 
 ---
 
@@ -254,14 +268,19 @@ panelu craftingu mają osobne potwierdzenie użytkownika.
   animacje okien, kolor/alpha tekstu, rotacja modeli i kolejność warstw 2D/3D.
 - [x] ENABLEMUSICZONE: realne enabled, priorytety/ellipsoidy ZEN i opcjonalny
   zapis stanu stref na świat; brak strefy wycisza tylko tło, z zachowaniem override.
+- [x] Trigger/Untrigger dźwięków ZEN: zatrzymanie kanału oraz opcjonalny zapis
+  aktywności i pozostałego opóźnienia. Q101 Smalltalk/Scared i SQ125 piła.
 - [ ] Muzyka świata: strefy, dzień/noc/walka, nadpisania, powrót po scenie i loadzie.
 - [ ] Dziennik: naturalne ukończenie zadań, w tym W gorącej wodzie kąpany, i load.
+- [x] NPC_CHANGEARMOR: końcowe AIVAR[48], NO_ARMOR=-1, idempotentny equip;
+  MDL_SetVisualBody również nie przełącza już założonej zbroi. 0 zachowuje zbroję.
 - [ ] Wyposażenie: warunki, idempotencja, kołczany, pochodnie, ręce, transfer/ostatnia sztuka.
 - [ ] Dom: wzory ścian i odtworzenie po loadzie.
 - [ ] Ustawienia zasięgu/skalowania, alternatywne loadingi i metadane zapisów.
 - [ ] Diagnostyka/konsola/schowek/telemetria; niższy priorytet od fabuły i zapisu.
 - [x] Okresowe buildy i poprawki kompilatora; oba EXE zlinkowane, logi zachowane.
-- [ ] Po STOP końcowy build aktualnego stanu i lista odbioru.
+- [x] Po STOP końcowy build aktualnego stanu kodem 0 i lista odbioru.
+  Nowe prace zatrzymane na polecenie użytkownika; kampania nadal niezweryfikowana.
 - [ ] Odbiór scen Q204/Q205/Q304/Q306/Q406/Q501/Q602/GQ001, przedmiotów
   KQ402/SQ202 oraz efektów SQ509.
 - [ ] Przejście rozdziałów, dróg gildyjnych i zakończeń.

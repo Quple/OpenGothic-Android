@@ -297,7 +297,22 @@ def dat_ir(path):
             calls.append(call)
             if not targets:
                 unresolved.append(call)
-        recent.append((op, operand))
+        # Normalize unary constant expressions (notably -(1) used for FF's
+        # endless count). They do not make the other callback arguments dynamic.
+        folded = False
+        if op in (30, 31, 32, 33) and recent:
+            prev_op, value = recent[-1]
+            if prev_op == 65 and value < len(dat.symbols):
+                symbol = dat.symbols[value]
+                value = symbol['value'][0] if symbol['flags'] & 1 and symbol['type'] == 2 and symbol['value'] else None
+            elif prev_op != 64:
+                value = None
+            if value is not None:
+                value = value if op == 30 else -value if op == 31 else int(not value) if op == 32 else ~value
+                recent[-1] = (64, value & 0xffffffff)
+                folded = True
+        if not folded:
+            recent.append((op, operand))
         recent = recent[-8:]
         pc += size
     return dat, calls, unresolved

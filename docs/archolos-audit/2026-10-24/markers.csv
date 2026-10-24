@@ -48,15 +48,14 @@ common/game/fightalgo.cpp,118,tr[0] = MV_NULL; //TODO
 common/game/gamescript.cpp,637,if(itMi_Gold!=nullptr){ // FIXME
 common/game/gamescript.cpp,653,if(itMi_Gold!=nullptr) { // FIXME
 common/game/gamescript.cpp,1386,// oth=npc; //FIXME: PC_Levelinspektor?
-common/game/gamescript.cpp,1472,// FIXME: actually set the spell level!
-common/game/gamescript.cpp,2017,// TODO
-common/game/gamescript.cpp,2018,"Log::i(""effect not implemented ["",visual.data(),""]"");"
-common/game/gamescript.cpp,2263,"Log::e(""not implemented call [wld_israining]"");"
-common/game/gamescript.cpp,2339,"Log::e(""not implemented call [mdl_applyrandomani]"");"
-common/game/gamescript.cpp,2351,"Log::e(""not implemented call [mdl_applyrandomanifreq]"");"
-common/game/gamescript.cpp,2367,"Log::e(""not implemented call [mdl_applyrandomfaceani]"");"
-common/game/gamescript.cpp,3154,"Log::e(""not implemented call [npc_isdetectedmobownedbyguild]"");"
-common/game/gamescript.cpp,3423,if(npc!=nullptr && mode>=0 && mode<=3){ //TODO: weapon flags
+common/game/gamescript.cpp,2016,// TODO
+common/game/gamescript.cpp,2017,"Log::i(""effect not implemented ["",visual.data(),""]"");"
+common/game/gamescript.cpp,2262,"Log::e(""not implemented call [wld_israining]"");"
+common/game/gamescript.cpp,2343,"Log::e(""not implemented call [mdl_applyrandomani]"");"
+common/game/gamescript.cpp,2355,"Log::e(""not implemented call [mdl_applyrandomanifreq]"");"
+common/game/gamescript.cpp,2371,"Log::e(""not implemented call [mdl_applyrandomfaceani]"");"
+common/game/gamescript.cpp,3158,"Log::e(""not implemented call [npc_isdetectedmobownedbyguild]"");"
+common/game/gamescript.cpp,3427,if(npc!=nullptr && mode>=0 && mode<=3){ //TODO: weapon flags
 common/gothic.cpp,1051,"Log::e(""not implemented call ["",v->c_str(),""]"");"
 common/gothic.cpp,1147,//TODO: scale
 common/graphics/drawcommands.cpp,370,cmd.dispatch(8096); // TODO: indirect

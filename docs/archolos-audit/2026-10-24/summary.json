@@ -9,7 +9,7 @@
   "dat_call_sites": 240563,
   "unresolved_bytecode_calls": 0,
   "callback_sites": 2529,
-  "resolved_callback_sites": 2118,
+  "resolved_callback_sites": 2490,
   "function_status": {
     "external_bound": 241,
     "script_defined": 37821,

@@ -4812,6 +4812,8 @@ int32_t Npc::activeSpellLevel() const {
     return int(castLevel)-int(CS_Cast_0)+1;
   if(CS_Invest_0<=castLevel && castLevel<=CS_Invest_Last)
     return int(castLevel)-int(CS_Invest_0)+1;
+  if(CS_Emit_0<=castLevel && castLevel<=CS_Emit_Last)
+    return int(castLevel)-int(CS_Emit_0)+1;
   return 0;
   }
 

@@ -16,11 +16,11 @@ override_function,FINAL,0,common/game/compatibility/directmemory.cpp:2314,incomp
 register_thiscall,7864512,0,common/game/compatibility/directmemory_engine.cpp:225,empty_body,
 register_thiscall,6290896,0,common/game/compatibility/directmemory_engine.cpp:226,empty_body,
 register_thiscall,4355760,0,common/game/compatibility/directmemory_engine.cpp:227,empty_body,
-register_thiscall,7566816,0,common/game/compatibility/directmemory_events.cpp:969,empty_body,
-safe,_TRIA_COPY,5,common/game/compatibility/directmemory_events.cpp:1081,empty_body,
-safe,_TRIA_COPYNPC,1,common/game/compatibility/directmemory_events.cpp:1082,empty_body,
-safe,_TRIA_NEXT,0,common/game/compatibility/directmemory_events.cpp:1083,empty_body,
-safe,_TRIA_UPDATEVISUAL,2,common/game/compatibility/directmemory_events.cpp:1084,empty_body,
+register_thiscall,7566816,0,common/game/compatibility/directmemory_events.cpp:979,empty_body,
+safe,_TRIA_COPY,5,common/game/compatibility/directmemory_events.cpp:1091,empty_body,
+safe,_TRIA_COPYNPC,1,common/game/compatibility/directmemory_events.cpp:1092,empty_body,
+safe,_TRIA_NEXT,0,common/game/compatibility/directmemory_events.cpp:1093,empty_body,
+safe,_TRIA_UPDATEVISUAL,2,common/game/compatibility/directmemory_events.cpp:1094,empty_body,
 bindExternal,WLD_PLAYEFFECT,134,common/game/gamescript.cpp:398,incomplete_marker_review,"if(aiProcessPolicy>=NpcProcessPolicy::AiFar2) return; if(isProjectile!=0 || damageType!=0 || damage!=0 || effectLevel!=0) { // TODO Log::i(""effect not implemented ["",visual.data(),""]""); return; } const VisualFx* vfx = Gothic::inst().loadVis"
 bindExternal,WLD_ISRAINING,5,common/game/gamescript.cpp:419,incomplete_marker_review,"static bool first=true; if(first){ Log::e(""not implemented call [wld_israining]""); first=false; } return false;"
 bindExternal,MDL_APPLYRANDOMANI,3,common/game/gamescript.cpp:429,incomplete_marker_review,"(void)npcRef; (void)s1; (void)s0; static bool first=true; if(first){ Log::e(""not implemented call [mdl_applyrandomani]""); first=false; }"

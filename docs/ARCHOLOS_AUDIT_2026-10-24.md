@@ -727,3 +727,58 @@ Nie stwierdzono brakującego externala w rozwiązanych celach callbacków.
 Końcowy archolos-checkpoint2-build-2026-10-24.log zakończył się kodem 0; oba EXE
 zlinkowane, dołączono comcheck cutscene i musiczone. git diff --check oraz
 odwrotna walidacja obu patchy bibliotek przeszły. Bez uruchamiania gry/testów.
+
+### WLD_SendUntrigger dla dźwięków ZEN
+
+WorldSound::execTriggerEvent zawsze ustawiał active=true, także dla Untrigger.
+Kroniki wysyłają WLD_SENDUNTRIGGER m.in. do Q101_SND_SMALLTALK (DIA_JORN_EXIT),
+Q101_SND_SCARED (Q101_SHIP_FINAL) i SQ125_SAWSOUND. Teraz Trigger uruchamia,
+a Untrigger wyłącza bieżący kanał i przyszłe wznowienia. Zatrzymanie obejmuje
+współdzielony slot efektu, a nie tylko referencję WSound.current. Odrzucono
+traktowanie pozostałych typów zdarzeń jako polecenia odtworzenia.
+
+Stan active i pozostałe opóźnienie losowych dźwięków ZEN zapisują się w opcjonalnym
+wpisie worlds/<świat>/sound-zones. Odtwarzanie sprawdza indeks i nazwę z ZEN,
+żeby nie zastosować starego wpisu do innego dźwięku po zmianie pliku świata.
+Stary zapis bez tego wpisu zachowuje stan początkowy z ZEN. Nie jest to zapis
+pozycji próbek w odtwarzanej kwestii. archolos-soundtriggers-build z datą
+2026-10-24 zakończył się kodem 0, oba EXE. Bez uruchamiania gry.
+
+Normalizacja stałych unary (w szczególności -(1)) zwiększyła rozpoznanie celów
+callbacków do 2490/2529, pozostawiając 39 dynamicznych. Licznik BL/BE bez zmian.
+
+### NPC_CHANGEARMOR: pominięty stan skryptowy i NO_ARMOR
+
+Oryginał w DAT kończy się zapisem SLF.AIVAR[48]=ARMOR. Dotychczasowy adapter
+zmieniał tylko wyposażenie i pomijał ten zapis, także dla braku żywego obiektu
+NPC. Wykonuje teraz końcowe przypisanie do przekazanej instancji, jeśli istnieje.
+88 miejsc wywołania w 47 funkcjach DAT korzysta z NPC_CHANGEARMOR.
+
+NO_ARMOR=-1 z QA306_REMOVENPC dla Bloodwyna usuwa bieżącą zbroję zamiast
+wracać bez zmiany. Dodatnia wartość używa idempotentnego equipItem, zamiast
+useItem przełączającego stan już założonej zbroi. Analogiczna poprawka dotyczy
+MDL_SETVISUALBODY. Wartość 0 pozostawia wyposażenie — taki argument przekazuje
+NPC_CHANGEFACE w autorytatywnym DAT. Adapter ChangeArmor nadal zachowuje
+bieżące ciało/głowę, a zapis/wczytanie AIVAR korzysta ze zwykłej serializacji VM.
+Pakiet archolos-armor-spelllevel-build-2026-10-24.log zakończył się kodem 0,
+oba EXE. Naturalny QA306 i zmiany munduru wymagają odbioru.
+
+Kontrakt NO_ARMOR potwierdzają DAT i referencja API:
+https://auronen.cokoliv.eu/gmc/zengin/scripts/externals/mdl/#mdl_setvisualbody
+
+### Poziom wywołania SPELL_CAST i zakończenie na STOP
+
+invokeSpell przekazuje activeSpellLevel zamiast stałego 0. Getter uwzględnia
+CS_Emit_0..CS_Emit_Last, tak samo jak istniejący wzór poziomu obrażeń pocisku.
+W tym DAT osiem SPELL_CAST przyjmuje jeden parametr int, ale nie odczytuje go
+po przypisaniu. Nie stwierdzono na tej podstawie naprawy obrażeń konkretnego
+zaklęcia CoM. Obsługa bezparametrowych funkcji i nadpisań pozostaje zachowana.
+
+Na polecenie STOP zatrzymano nowe implementacje. Rozpoznanie MDL_ApplyRandomAni/
+Freq pozostaje analizą: nie dodano kodu; funkcje nadal są atrapami. WLD_IsRaining
+również nadal zwraca false. Odbiór kampanii oraz pozostałe hooki/adresy nie są
+zakończone. Końcowy build i commit/push obejmują cały bieżący kod oraz raporty.
+
+archolos-stop-build-2026-10-24.log: kod 0, ninja: no work to do. Potwierdza
+aktualność obu wcześniej zlinkowanych EXE; ostatni Gothic2Notr.exe z 06:19:47.
+Końcowa kontrola diff i obu patchy przeszła.

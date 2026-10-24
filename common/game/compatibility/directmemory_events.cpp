@@ -906,12 +906,22 @@ void DirectMemory::setupQuiverFunctions() {
   // of the character from the members of oCNpc that the VM does not have. The visual stays, the armor is put on.
   safe("NPC_CHANGEARMOR", [npcOf](std::shared_ptr<zenkit::INpc> slf, int armor){
     auto* npc = npcOf(slf);
-    if(npc==nullptr || armor<=0)
-      return;
-    if(npc->itemCount(uint32_t(armor))==0)
-      npc->addItem(uint32_t(armor),1);
-    npc->useItem(uint32_t(armor),Item::NSLOT,true);
-    Log::d("Npc_ChangeArmor: ",npc->displayName());
+    if(npc!=nullptr) {
+      if(armor>0) {
+        if(npc->itemCount(uint32_t(armor))==0)
+          npc->addItem(uint32_t(armor),1);
+        npc->equipItem(uint32_t(armor));
+        }
+      else if(armor<0) {
+        if(auto* equipped = npc->currentArmor())
+          npc->unequipItem(equipped->clsId());
+        }
+      Log::d("Npc_ChangeArmor: ",npc->displayName());
+      }
+    // The original CoM body records the new armor even for NO_ARMOR (-1).
+    // Refresh/reinsert scripts rely on this, beyond the visible model change.
+    if(slf!=nullptr)
+      slf->aivar[48] = armor;
     });
 
   safe("MEM_GETANYWP", [](){

@@ -136,19 +136,43 @@ void WorldSound::save(Serialize& fout) const {
     fout.write(zone.name,uint8_t(zone.enabled));
   if(def!=nullptr)
     fout.write(def->name,uint8_t(def->enabled));
+
+  fout.setEntry("worlds/",owner.name(),"/sound-zones");
+  fout.write(uint32_t(worldEff.size()));
+  for(auto& sound:worldEff) {
+    const uint64_t remaining = sound.restartTimeout>owner.tickCount() ? sound.restartTimeout-owner.tickCount() : 0;
+    fout.write(sound.vobName,uint8_t(sound.active),remaining);
+    }
   }
 
 void WorldSound::load(Serialize& fin) {
   // Optional entry keeps older saves valid; ZEN defaults apply when absent.
-  if(!fin.setEntry("worlds/",owner.name(),"/music-zones"))
-    return;
-  uint32_t count = 0;
-  fin.read(count);
-  for(uint32_t i=0; i<count; ++i) {
-    std::string name;
-    uint8_t enabled = 0;
-    fin.read(name,enabled);
-    setZoneEnabled(name,enabled!=0);
+  if(fin.setEntry("worlds/",owner.name(),"/music-zones")) {
+    uint32_t count = 0;
+    fin.read(count);
+    for(uint32_t i=0; i<count; ++i) {
+      std::string name;
+      uint8_t enabled = 0;
+      fin.read(name,enabled);
+      setZoneEnabled(name,enabled!=0);
+      }
+    }
+  if(fin.setEntry("worlds/",owner.name(),"/sound-zones")) {
+    uint32_t count = 0;
+    fin.read(count);
+    for(uint32_t i=0; i<count; ++i) {
+      std::string name;
+      uint8_t active = 0;
+      uint64_t remaining = 0;
+      fin.read(name,active,remaining);
+      // ZEN order disambiguates duplicate names; do not apply an old slot to
+      // an unrelated sound after a changed world file.
+      if(i>=worldEff.size() || worldEff[i].vobName!=name)
+        continue;
+      worldEff[i].active = active!=0;
+      const auto now = owner.tickCount();
+      worldEff[i].restartTimeout = now+std::min(remaining,UINT64_MAX-now);
+      }
     }
   nextSoundUpdate = 0;
   }
@@ -306,10 +330,24 @@ void WorldSound::stopAllSounds() {
   }
 
 bool WorldSound::execTriggerEvent(const TriggerEvent& e) {
+  if(e.type!=TriggerEvent::T_Trigger && e.type!=TriggerEvent::T_Untrigger)
+    return false;
+  std::lock_guard<std::mutex> guard(sync);
   bool emitted=false;
   for(auto& i:worldEff)
     if(i.vobName==e.target) {
-      i.active = true;
+      i.active = e.type==TriggerEvent::T_Trigger;
+      i.restartTimeout = 0;
+      if(!i.active) {
+        // The effect vector shares the slot. Releasing just current would
+        // leave the source playing until its natural end (or forever in a loop).
+        if(i.current.val!=nullptr) {
+          i.current.val->active = false;
+          i.current.val->loop = false;
+          i.current.val->eff = Tempest::SoundEffect();
+          }
+        i.current = Sound();
+        }
       emitted = true;
       }
   return emitted;
