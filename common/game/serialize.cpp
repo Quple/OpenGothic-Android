@@ -2,6 +2,8 @@
 
 #include <cstring>
 #include <exception>
+#include <limits>
+#include <sstream>
 
 #include "savegameheader.h"
 #include "world/world.h"
@@ -12,6 +14,14 @@
 #include <Tempest/MemWriter>
 #include <Tempest/Log>
 #include <Tempest/Application>
+
+// the messages of the errors: the sizes are 64 bit, string_frm prints 32 bit only
+template<class ... Args>
+static std::string msgOf(const Args& ... a) {
+  std::ostringstream o;
+  (o << ... << a);
+  return o.str();
+  }
 
 size_t Serialize::writeFunc(void* pOpaque, uint64_t file_ofs, const void* pBuf, size_t n) {
   auto& self = *reinterpret_cast<Serialize*>(pOpaque);
@@ -74,8 +84,13 @@ Serialize::Serialize(Tempest::IDevice& fin) : fin(&fin) {
   impl.m_pRead            = Serialize::readFunc;
   impl.m_pIO_opaque       = this;
   impl.m_zip_type         = MZ_ZIP_TYPE_USER;
-  if(!mz_zip_reader_init(&impl, fin.size(), 0))
-    throw std::runtime_error("unable to read game archive");
+  archiveSize             = fin.size();
+  if(!mz_zip_reader_init(&impl, archiveSize, 0)) {
+    const auto err = mz_zip_get_error_string(mz_zip_get_last_error(&impl));
+    const std::string msg = msgOf("unable to read game archive: ", err, " (archive size ", archiveSize, " bytes)");
+    Tempest::Log::e("save-game: ", msg.c_str());
+    throw SaveGameError(msg.c_str());
+    }
   }
 
 Serialize::~Serialize() noexcept(false) {
@@ -145,19 +160,93 @@ bool Serialize::implSetEntry(std::string_view fname) {
     return true;
     }
   if(fin!=nullptr) {
+    // an entry is never larger than the program could have written in memory (the biggest one are the pictures and the Ikarus files)
+    static const uint64_t maxEntry = 1024ull*1024ull*1024ull;
+
     mz_uint32 id = mz_uint32(-1);
+    entryExists  = false;
+    entryIndex   = mz_uint32(-1);
+    entrySize    = 0;
+    entryPacked  = 0;
+    readOffset   = 0;
+    entryBuf.clear();
+
     if(mz_zip_reader_locate_file_v2(&impl, entryName.c_str(), nullptr, 0, &id)) {
       mz_zip_archive_file_stat stat = {};
-      mz_zip_reader_file_stat(&impl,id,&stat);
-      entryBuf.resize(size_t(stat.m_uncomp_size));
-      mz_zip_reader_extract_file_to_mem(&impl,entryName.c_str(),entryBuf.data(),entryBuf.size(),0);
-      } else {
-      entryBuf.clear();
+      if(!mz_zip_reader_file_stat(&impl,id,&stat)) {
+        const std::string msg = msgOf("unable to stat the entry '", entryName.c_str(), "' (index ", id, "): ",
+                       mz_zip_get_error_string(mz_zip_get_last_error(&impl)), "; stage '", stage.c_str(), "'");
+        Tempest::Log::e("save-game: ", msg.c_str());
+        throw SaveGameError(msg.c_str());
+        }
+      entryExists = true;
+      entryIndex  = id;
+      entrySize   = stat.m_uncomp_size;
+      entryPacked = stat.m_comp_size;
+
+      if(stat.m_uncomp_size>maxEntry) {
+        const std::string msg = msgOf("the entry is too large: ", describeEntry());
+        Tempest::Log::e("save-game: ", msg.c_str());
+        throw SaveGameError(msg.c_str());
+        }
+      if(stat.m_uncomp_size>0) {
+        entryBuf.resize(size_t(stat.m_uncomp_size));
+        // the check of the CRC is inside: a damaged entry must not become zeroes that are read as a valid data
+        if(!mz_zip_reader_extract_to_mem(&impl,id,entryBuf.data(),entryBuf.size(),0)) {
+          const auto err = mz_zip_get_error_string(mz_zip_get_last_error(&impl));
+          entryBuf.clear();
+          const std::string msg = msgOf("unable to extract the entry: ", err, "; ", describeEntry(),
+                         ", archive offset ", curOffset, " of ", archiveSize);
+          Tempest::Log::e("save-game: ", msg.c_str());
+          throw SaveGameError(msg.c_str());
+          }
+        }
       }
-    readOffset = 0;
     return !entryBuf.empty();
     }
   return false;
+  }
+
+size_t Serialize::remaining() const {
+  if(fin==nullptr || readOffset>=entryBuf.size())
+    return 0;
+  return entryBuf.size()-size_t(readOffset);
+  }
+
+std::string Serialize::describeEntry() const {
+  std::string ret = msgOf("stage '", stage, "', entry '", entryName, "'");
+  if(entryExists) {
+    const std::string d = msgOf(" (index ", entryIndex, ", ", entrySize, " bytes, ", entryPacked, " packed), read offset ", readOffset);
+    ret += d;
+    } else {
+    ret += " (the entry is not in the archive)";
+    }
+  return ret;
+  }
+
+void Serialize::failRead(size_t requested) const {
+  const std::string msg = msgOf("unable to read save-game file: ", requested, " bytes requested, only ", remaining(), " left; ",
+                 describeEntry(), ", save version ", curVer, "/", wldVer);
+  Tempest::Log::e("save-game: ", msg.c_str());
+  throw SaveGameError(msg.c_str());
+  }
+
+void Serialize::failMissingEntry() const {
+  const std::string msg = msgOf("the save-game does not have the entry '", entryName.c_str(), "'; stage '", stage.c_str(),
+                 "', save version ", curVer, "/", wldVer, ", ", mz_zip_reader_get_num_files(const_cast<mz_zip_archive*>(&impl)), " entries in the archive");
+  Tempest::Log::e("save-game: ", msg.c_str());
+  throw SaveGameError(msg.c_str());
+  }
+
+void Serialize::checkCount(uint64_t count, size_t itemSize, const char* what) {
+  if(itemSize==0)
+    itemSize = 1;
+  if(count>remaining()/itemSize) {
+    const std::string msg = msgOf("damaged size of the data: ", count, " ", what, " of ", itemSize, " bytes, only ", remaining(),
+                   " bytes left; ", describeEntry());
+    Tempest::Log::e("save-game: ", msg.c_str());
+    throw SaveGameError(msg.c_str());
+    }
   }
 
 uint32_t Serialize::implDirectorySize(std::string_view e) {
@@ -191,9 +280,13 @@ void Serialize::writeBytes(const void* buf, size_t sz) {
   }
 
 void Serialize::readBytes(void* buf, size_t sz) {
-  if(fin==nullptr || readOffset+sz>entryBuf.size())
-    throw std::runtime_error("unable to read save-game file");
-  std::memcpy(buf,&entryBuf[size_t(readOffset)],sz);
+  if(fin==nullptr)
+    throw std::runtime_error("unable to read save-game file: the archive is open for writing");
+  if(sz==0)
+    return;
+  if(sz>remaining())
+    failRead(sz);
+  std::memcpy(buf,entryBuf.data()+size_t(readOffset),sz);
   readOffset+=sz;
   }
 
@@ -206,6 +299,7 @@ void Serialize::implWrite(const std::string& s) {
 void Serialize::implRead(std::string& s) {
   uint32_t sz=0;
   implRead(sz);
+  checkCount(sz,1,"characters");
   s.resize(sz);
   if(sz>0)
     readBytes(&s[0],sz);
@@ -303,7 +397,9 @@ void Serialize::implWrite(const Tempest::Pixmap& p, const char* ext) {
   }
 
 void Serialize::implRead(Tempest::Pixmap& p) {
-  Tempest::MemReader r{&entryBuf[size_t(readOffset)],size_t(entryBuf.size()-readOffset)};
+  if(remaining()==0)
+    failRead(1);
+  Tempest::MemReader r{entryBuf.data()+size_t(readOffset),remaining()};
   p = Tempest::Pixmap(r);
   readOffset += r.cursorPosition();
   }

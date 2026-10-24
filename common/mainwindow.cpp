@@ -138,6 +138,8 @@ MainWindow::~MainWindow() {
   takeWidget(&video);
   takeWidget(&rootMenu);
   takeWidget(&modMenu);
+  // every child added by setupUi() is a member: removeAllWidgets() calls `delete` on whatever is left in the list
+  takeWidget(&errorScreen);
 #if defined(__MOBILE_PLATFORM__) && !defined(OPENGOTHIC_TOUCH_UI)
   takeWidget(&mobileUi);
 #endif
@@ -1166,11 +1168,19 @@ uint64_t MainWindow::tick() {
 
   auto st = Gothic::inst().checkLoading();
   if(st==Gothic::LoadState::Finalize || st==Gothic::LoadState::FailedLoad || st==Gothic::LoadState::FailedSave) {
+    const std::string failure = Gothic::inst().loadError();
     Gothic::inst().finishLoading();
-    if(st==Gothic::LoadState::FailedLoad)
+    if(st==Gothic::LoadState::FailedLoad) {
+      // the game was dropped by the start of loading: nothing to continue, back to the menu with the reason on the screen
       rootMenu.setMainMenu();
-    if(st==Gothic::LoadState::FailedSave)
+      errorScreen.report("Unable to load the save-game",
+                         failure.empty() ? std::string("unknown error") : failure);
+      }
+    if(st==Gothic::LoadState::FailedSave) {
       Gothic::inst().onPrint("unable to write savegame file");
+      if(!failure.empty())
+        errorScreen.report("Unable to write the save-game",failure);
+      }
     return 0;
     }
   else if(st!=Gothic::LoadState::Idle) {
@@ -1379,10 +1389,19 @@ void MainWindow::loadGame(std::string_view slot) {
   Gothic::inst().setBenchmarkMode(Benchmark::None);
   Gothic::inst().startLoad("LOADING.TGA",[slot=std::string(slot)](std::unique_ptr<GameSession>&& game){
     game = nullptr; // clear world-memory now
-    Tempest::RFile file(slot);
-    Serialize      s(file);
-    std::unique_ptr<GameSession> w(new GameSession(s));
-    return w;
+    try {
+      Tempest::RFile file(slot);
+      Serialize      s(file);
+      std::unique_ptr<GameSession> w(new GameSession(s));
+      return w;
+      }
+    catch(const std::bad_alloc&) {
+      throw;
+      }
+    catch(const std::exception& e) {
+      // the name of the file is the first thing to know about a damaged save-game
+      throw std::runtime_error("save-game '"+slot+"': "+e.what());
+      }
     });
 
   background = Texture2d();

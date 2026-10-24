@@ -172,7 +172,7 @@ void World::postInit() {
 
 void World::load(Serialize &fin) {
   fin.setContext(this);
-  fin.setEntry("worlds/",wname,"/world");
+  fin.requireEntry("worlds/",wname,"/world");
 
   uint32_t sz=0;
   fin.read(sz);

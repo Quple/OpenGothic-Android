@@ -121,9 +121,18 @@ GameSession::GameSession(Serialize &fin) {
   setupSettings();
 
   SaveGameHeader hdr;
-  fin.setEntry("header");
+  fin.setStage("header");
+  fin.requireEntry("header");
   fin.read(hdr);
   fin.setGlobalVersion(hdr.version);
+  Log::i("Loading the save-game: version ",hdr.version," (this program writes ",uint32_t(Serialize::Version::Current),"), world ",hdr.world,
+         ", game ",int(hdr.isGothic2));
+  if(hdr.version<Serialize::Version::MinVersion)
+    throw SaveGameError("the save-game is too old: version "+std::to_string(hdr.version)+", the oldest supported is "+
+                        std::to_string(uint32_t(Serialize::Version::MinVersion)));
+  if(hdr.version>Serialize::Version::Current)
+    throw SaveGameError("the save-game is made by a newer version of the program: version "+std::to_string(hdr.version)+
+                        ", this program reads up to "+std::to_string(uint32_t(Serialize::Version::Current)));
 
   {
   uint16_t wssSize=0;
@@ -131,12 +140,15 @@ GameSession::GameSession(Serialize &fin) {
   visitedWorlds.resize(wssSize);
   for(size_t i=0; i<wssSize; ++i)
     fin.read(visitedWorlds[i].name);
-  for(size_t i=0; i<wssSize; ++i)
+  for(size_t i=0; i<wssSize; ++i) {
+    fin.setStage("visited world "+visitedWorlds[i].name);
     visitedWorlds[i].load(fin);
+    }
   }
 
   std::string    wname;
-  fin.setEntry("game/session");
+  fin.setStage("game/session");
+  fin.requireEntry("game/session");
   fin.read(ticks,wrldTime,wrldTimePart,wname);
 
   cam.reset(new Camera());
@@ -147,19 +159,23 @@ GameSession::GameSession(Serialize &fin) {
     setWorld(std::unique_ptr<World>(new World(*this,wname,false,[&](int v){
       Gothic::inst().setLoadingProgress(int(v*0.55));
       })));
+    fin.setStage("world "+wname);
     wrld->load(fin);
     }
 
   Gothic::inst().setLoadingProgress(70);
 
+  fin.setStage("game/perc");
   if(fin.setEntry("game/perc"))
     vm->loadPerc(fin); else
     initPerceptions();
 
-  fin.setEntry("game/quests");
+  fin.setStage("game/quests");
+  fin.requireEntry("game/quests");
   vm->loadQuests(fin);
 
-  fin.setEntry("game/daedalus");
+  fin.setStage("game/daedalus");
+  fin.requireEntry("game/daedalus");
   vm->loadVar(fin);
 
   if(auto hero = wrld->player())
@@ -169,11 +185,13 @@ GameSession::GameSession(Serialize &fin) {
     // Ikarus and LeGo start again in a new process: the original engine calls the init functions of the scripts after
     // the loading of a savegame, and LeGo reads its handles from the file that it has put into the savegame
     initPerceptions(); // InitPerceptions of such mods starts Ikarus, which a loaded savegame skips in OpenGothic
+    fin.setStage("game/dma");
     vm->dmaLoad(fin);
     initScripts(false,true);
     }
 
-  fin.setEntry("game/camera");
+  fin.setStage("game/camera");
+  fin.requireEntry("game/camera");
   cam->load(fin,wrld->player());
   Gothic::inst().setLoadingProgress(96);
   }

@@ -286,7 +286,8 @@ void Npc::save(Serialize &fout, size_t id, std::string_view directory) {
   }
 
 void Npc::load(Serialize &fin, size_t id, std::string_view directory) {
-  fin.setEntry("worlds/",fin.worldName(),directory,id,"/data");
+  fin.setStage("npc");
+  fin.requireEntry("worlds/",fin.worldName(),directory,id,"/data");
 
   hnpc = std::make_shared<zenkit::INpc>();
   hnpc->user_ptr        = this;
@@ -344,7 +345,7 @@ void Npc::load(Serialize &fin, size_t id, std::string_view directory) {
   Vec3 phyPos = {};
   fin.read(phyPos);
 
-  fin.setEntry("worlds/",fin.worldName(),directory,id,"/visual");
+  fin.requireEntry("worlds/",fin.worldName(),directory,id,"/visual");
   visual.load(fin,*this);
   physic.setPosition(phyPos);
 

@@ -200,6 +200,21 @@ CommandLine::CommandLine(int argc, const char** argv) {
       if(i<argc)
         isBindlessSh = boolArg(argv[i]);
       }
+    else if(arg=="-safegpu") {
+      // safe GPU mode: auto (default), off, on, minimal
+      ++i;
+      if(i<argc) {
+        const std::string_view v = argv[i];
+        if(v=="off" || v=="0")
+          safeGpu = 0;
+        else if(v=="on" || v=="1")
+          safeGpu = 1;
+        else if(v=="minimal" || v=="2")
+          safeGpu = 2;
+        else
+          safeGpu = -1;
+        }
+      }
     else if(arg=="-vsm") {
       // not to document - debug only
       ++i;

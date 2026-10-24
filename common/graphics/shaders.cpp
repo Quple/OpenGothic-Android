@@ -12,6 +12,7 @@
 #include "resources.h"
 
 #include "shader.h"
+#include "safegpu.h"
 #include "utils/string_frm.h"
 
 using namespace Tempest;
@@ -25,6 +26,19 @@ static bool isLegacyAdreno(const char* name) {
   for(at+=6; *at!='\0' && (*at<'0' || *at>'9'); ++at) {}
   const int model = std::atoi(at);
   return model>0 && model<700;
+  }
+
+/// Mali: the compiler of the driver crashed (SIGSEGV in libGLES_mali.so, Mali-G57 MC2) in vkCreateComputePipelines of clouds_lut.comp.
+/// The shader asks textureQueryLevels() of samplers that it gets as arguments of a function. The variant without them has the same result, so
+/// every Mali takes it at once and the other GPUs keep the original.
+static bool isMali(const char* name) {
+  return std::strstr(name,"Mali")!=nullptr;
+  }
+
+/// every shader of the program is taken by name here: the name is kept in the lock of the safe GPU mode while the driver compiles it
+static GothicShader shaderByName(std::string_view name) {
+  SafeGpu::trace(name);
+  return GothicShader::get(name);
   }
 
 static bool hasBindless() {
@@ -43,12 +57,16 @@ Shaders* Shaders::instance = nullptr;
 
 Shaders::Shaders() {
   instance = this;
+  SafeGpu::init(Resources::device().properties().name);
+  // the lock of the safe GPU mode exists from here until all the shaders are compiled by the driver
+  auto lock = std::make_shared<SafeGpu::Scope>();
   setupOptions();
   compileKeyShaders();
-  deferredCompilation = std::async(std::launch::async, [this]() {
+  deferredCompilation = std::async(std::launch::async, [this,lock]() mutable {
     Workers::setThreadName("Shader compilation");
     auto time = Application::tickCount();
     compileShaders();
+    lock.reset(); // the driver has seen all the shaders and did not die
     time = Application::tickCount() - time;
     if(time>1000)
       Log::i("Shader compilation took: ",time/1000," seconds");
@@ -77,12 +95,13 @@ const Shaders::Options& Shaders::options() {
 
 void Shaders::setupOptions() {
   auto& gpu = Resources::device().properties();
-  opts.doBindless       = hasBindless() && CommandLine::inst().isBindless();
-  opts.doRtScene        = gpu.raytracing.rayQuery && CommandLine::inst().isRayQuery();
+  const bool minimal    = SafeGpu::isMinimal();   // the driver died again in the safe mode: only what every GPU can do
+  opts.doBindless       = hasBindless() && CommandLine::inst().isBindless() && !minimal;
+  opts.doRtScene        = gpu.raytracing.rayQuery && CommandLine::inst().isRayQuery() && !minimal;
   opts.doRayQuery       = opts.doRtScene && opts.doBindless;
-  opts.doMeshShading    = gpu.meshlets.meshShader && CommandLine::inst().isMeshShading();
-  opts.doSoftwareShadow = Shaders::isRtsmSupported() && CommandLine::inst().isSoftwareShadow();
-  opts.doVirtualShadow  = Shaders::isVsmSupported()  && CommandLine::inst().isVirtualShadow();
+  opts.doMeshShading    = gpu.meshlets.meshShader && CommandLine::inst().isMeshShading() && !minimal;
+  opts.doSoftwareShadow = Shaders::isRtsmSupported() && CommandLine::inst().isSoftwareShadow() && !minimal;
+  opts.doVirtualShadow  = Shaders::isVsmSupported()  && CommandLine::inst().isVirtualShadow() && !minimal;
   opts.doGi             = opts.doRayQuery ? CommandLine::inst().isRtGi() : GiMethod::None;
   opts.aaPreset         = CommandLine::inst().aaPreset();
 
@@ -124,7 +143,7 @@ void Shaders::compileShaders() noexcept {
   ambientLightSurf   = ambientLightShader("ambient_light_surf");
 
   irradiance         = computeShader("irradiance.comp.sprv");
-  cloudsLut          = computeShader("clouds_lut.comp.sprv");
+  cloudsLut          = cloudsLutShader();
   skyTransmittance   = postEffect("sky_transmittance");
   skyMultiScattering = postEffect("sky_multi_scattering");
   skyViewLut         = postEffect("sky_view_lut");
@@ -148,9 +167,9 @@ void Shaders::compileShaders() noexcept {
     state.setZTestMode    (RenderState::ZTestMode::Always);
     state.setZWriteEnabled(false);
 
-    auto sh      = GothicShader::get("triangle.vert.sprv");
+    auto sh      = shaderByName("triangle.vert.sprv");
     auto vsLight = device.shader(sh.data,sh.len);
-    sh           = GothicShader::get("sky_pathtrace.frag.sprv");
+    sh           = shaderByName("sky_pathtrace.frag.sprv");
     auto fsLight = device.shader(sh.data,sh.len);
     skyPathTrace = device.pipeline(Triangles, state, vsLight, fsLight);
   }
@@ -168,9 +187,9 @@ void Shaders::compileShaders() noexcept {
   state.setZTestMode    (RenderState::ZTestMode::Equal);
   state.setZWriteEnabled(false);
 
-  auto sh      = GothicShader::get("sun.vert.sprv");
+  auto sh      = shaderByName("sun.vert.sprv");
   auto vsLight = device.shader(sh.data,sh.len);
-  sh           = GothicShader::get("sun.frag.sprv");
+  sh           = shaderByName("sun.frag.sprv");
   auto fsLight = device.shader(sh.data,sh.len);
   sun          = device.pipeline(Triangles, state, vsLight, fsLight);
   }
@@ -184,23 +203,23 @@ void Shaders::compileShaders() noexcept {
 
   state.setZWriteEnabled(false);
 
-  auto sh      = GothicShader::get("light.vert.sprv");
+  auto sh      = shaderByName("light.vert.sprv");
   auto vsLight = device.shader(sh.data,sh.len);
-  sh           = GothicShader::get("light.frag.sprv");
+  sh           = shaderByName("light.frag.sprv");
   auto fsLight = device.shader(sh.data,sh.len);
   lights       = device.pipeline(Triangles, state, vsLight, fsLight);
   if(opts.doRtScene) {
     if(opts.doRayQuery) {
-      sh      = GothicShader::get("light_rq_at.frag.sprv");
+      sh      = shaderByName("light_rq_at.frag.sprv");
       fsLight = device.shader(sh.data,sh.len);
       } else {
-      sh      = GothicShader::get("light_rq.frag.sprv");
+      sh      = shaderByName("light_rq.frag.sprv");
       fsLight = device.shader(sh.data,sh.len);
       }
     lightsRq = device.pipeline(Triangles, state, vsLight, fsLight);
     }
   if(Shaders::isVsmSupported()) {
-    sh      = GothicShader::get("light_vsm.frag.sprv");
+    sh      = shaderByName("light_vsm.frag.sprv");
     fsLight = device.shader(sh.data,sh.len);
     lightsVsm = device.pipeline(Triangles, state, vsLight, fsLight);
     }
@@ -215,18 +234,18 @@ void Shaders::compileShaders() noexcept {
 
   cmaa2ProcessCandidates = computeShader("cmaa2_process_candidates.comp.sprv");
   {
-    auto sh = GothicShader::get("cmaa2_deferred_color_apply_2x2.vert.sprv");
+    auto sh = shaderByName("cmaa2_deferred_color_apply_2x2.vert.sprv");
     auto vs = device.shader(sh.data,sh.len);
-    sh = GothicShader::get("cmaa2_deferred_color_apply_2x2.frag.sprv");
+    sh = shaderByName("cmaa2_deferred_color_apply_2x2.frag.sprv");
     auto fs = device.shader(sh.data,sh.len);
     cmaa2DeferredColorApply2x2 = device.pipeline(Tempest::Points,RenderState(),vs,fs);
   }
 
   {
     RenderState state;
-    auto sh = GothicShader::get("gizmo.vert.sprv");
+    auto sh = shaderByName("gizmo.vert.sprv");
     auto vs = device.shader(sh.data,sh.len);
-    sh = GothicShader::get("gizmo.frag.sprv");
+    sh = shaderByName("gizmo.frag.sprv");
     auto fs = device.shader(sh.data,sh.len);
     gizmo = device.pipeline(Triangles,state,vs,fs);
   }
@@ -238,9 +257,9 @@ void Shaders::compileShaders() noexcept {
     state.setBlendDest    (RenderState::BlendMode::OneMinusSrcAlpha);
     state.setCullFaceMode (RenderState::CullMode::Front);
 
-    auto sh = GothicShader::get("light_imposter.vert.sprv");
+    auto sh = shaderByName("light_imposter.vert.sprv");
     auto vs = device.shader(sh.data,sh.len);
-    sh = GothicShader::get("light_imposter.frag.sprv");
+    sh = shaderByName("light_imposter.frag.sprv");
     auto fs = device.shader(sh.data,sh.len);
     lightImposter = device.pipeline(Triangles,state,vs,fs);
   }
@@ -260,10 +279,10 @@ void Shaders::compileShaders() noexcept {
     state.setBlendSource  (RenderState::BlendMode::SrcAlpha);
     state.setBlendDest    (RenderState::BlendMode::OneMinusSrcAlpha);
 
-    auto sh = GothicShader::get(string_frm("triangle_uv",".vert.sprv"));
+    auto sh = shaderByName(string_frm("triangle_uv",".vert.sprv"));
     auto vs = device.shader(sh.data,sh.len);
 
-    sh      = GothicShader::get(string_frm("pathtrace",".frag.sprv"));
+    sh      = shaderByName(string_frm("pathtrace",".frag.sprv"));
     auto fs = device.shader(sh.data,sh.len);
     rtPathtrace = device.pipeline(Triangles,state,vs,fs);
     }
@@ -273,15 +292,15 @@ void Shaders::compileShaders() noexcept {
     state.setCullFaceMode(RenderState::CullMode::NoCull);
     state.setZTestMode   (RenderState::ZTestMode::Less);
 
-    auto sh = GothicShader::get("probe_dbg.vert.sprv");
+    auto sh = shaderByName("probe_dbg.vert.sprv");
     auto vs = device.shader(sh.data,sh.len);
-    sh = GothicShader::get("probe_dbg.frag.sprv");
+    sh = shaderByName("probe_dbg.frag.sprv");
     auto fs = device.shader(sh.data,sh.len);
     probeDbg = device.pipeline(Triangles,state,vs,fs);
 
-    sh = GothicShader::get("probe_hit_dbg.vert.sprv");
+    sh = shaderByName("probe_hit_dbg.vert.sprv");
     vs = device.shader(sh.data,sh.len);
-    sh = GothicShader::get("probe_hit_dbg.frag.sprv");
+    sh = shaderByName("probe_hit_dbg.frag.sprv");
     fs = device.shader(sh.data,sh.len);
     probeHitDbg = device.pipeline(Triangles,state,vs,fs);
 
@@ -299,9 +318,9 @@ void Shaders::compileShaders() noexcept {
     state.setBlendDest    (RenderState::BlendMode::SrcAlpha);  // for debugging
     state.setZTestMode    (RenderState::ZTestMode::NoEqual);
     state.setZWriteEnabled(false);
-    sh = GothicShader::get("probe_ambient.vert.sprv");
+    sh = shaderByName("probe_ambient.vert.sprv");
     vs = device.shader(sh.data,sh.len);
-    sh = GothicShader::get("probe_ambient.frag.sprv");
+    sh = shaderByName("probe_ambient.frag.sprv");
     fs = device.shader(sh.data,sh.len);
     probeAmbient = device.pipeline(Triangles,state,vs,fs);
     }
@@ -312,9 +331,9 @@ void Shaders::compileShaders() noexcept {
     state.setZTestMode   (RenderState::ZTestMode::Less);
     state.setZWriteEnabled(false);
 
-    auto sh = GothicShader::get("surf_dbg.vert.sprv");
+    auto sh = shaderByName("surf_dbg.vert.sprv");
     auto vs = device.shader(sh.data,sh.len);
-    sh = GothicShader::get("surf_dbg.frag.sprv");
+    sh = shaderByName("surf_dbg.frag.sprv");
     auto fs = device.shader(sh.data,sh.len);
     surfDbg = device.pipeline(Triangles,state,vs,fs);
 
@@ -436,9 +455,9 @@ void Shaders::compileShaders() noexcept {
     state.setCullFaceMode(RenderState::CullMode::Front);
     state.setZTestMode   (RenderState::ZTestMode::LEqual);
 
-    auto sh = GothicShader::get("item.vert.sprv");
+    auto sh = shaderByName("item.vert.sprv");
     auto vs = device.shader(sh.data,sh.len);
-    sh = GothicShader::get("item.frag.sprv");
+    sh = shaderByName("item.frag.sprv");
     auto fs = device.shader(sh.data,sh.len);
     inventory = device.pipeline(Triangles,state,vs,fs);
   }
@@ -661,6 +680,8 @@ const RenderPipeline* Shaders::materialPipeline(const Material& mat, DrawCommand
 
   const char* bindless = bl ? "_bindless" : "_slot";
 
+  // the driver compiles the pipeline below: if it kills the process, the next start knows the shader
+  SafeGpu::Scope safeGpuLock;
   materials.emplace_front();
   auto& b = materials.front();
   b.alpha        = alpha;
@@ -671,10 +692,10 @@ const RenderPipeline* Shaders::materialPipeline(const Material& mat, DrawCommand
 
   auto& device = Resources::device();
   if(mat.isTesselated() && device.properties().tesselationShader && t==DrawCommands::Landscape && true) {
-    auto shVs = GothicShader::get(string_frm("main_", vsTok, typeVs, bindless, ".vert.sprv"));
-    auto shTc = GothicShader::get(string_frm("main_", vsTok, typeVs, bindless, ".tesc.sprv"));
-    auto shTe = GothicShader::get(string_frm("main_", vsTok, typeVs, bindless, ".tese.sprv"));
-    auto shFs = GothicShader::get(string_frm("main_", fsTok, typeFs, bindless, ".frag.sprv"));
+    auto shVs = shaderByName(string_frm("main_", vsTok, typeVs, bindless, ".vert.sprv"));
+    auto shTc = shaderByName(string_frm("main_", vsTok, typeVs, bindless, ".tesc.sprv"));
+    auto shTe = shaderByName(string_frm("main_", vsTok, typeVs, bindless, ".tese.sprv"));
+    auto shFs = shaderByName(string_frm("main_", fsTok, typeFs, bindless, ".frag.sprv"));
 
     auto vs = device.shader(shVs.data,shVs.len);
     auto tc = device.shader(shTc.data,shTc.len);
@@ -683,24 +704,24 @@ const RenderPipeline* Shaders::materialPipeline(const Material& mat, DrawCommand
     b.pipeline = device.pipeline(Triangles, state, vs, tc, te, fs);
     }
   else if(options().doMeshShading && t!=DrawCommands::Pfx) {
-    auto shMs = GothicShader::get(string_frm("main_", vsTok, typeVs, bindless, ".mesh.sprv"));
-    auto shFs = GothicShader::get(string_frm("main_", fsTok, typeFs, bindless, ".frag.sprv"));
+    auto shMs = shaderByName(string_frm("main_", vsTok, typeVs, bindless, ".mesh.sprv"));
+    auto shFs = shaderByName(string_frm("main_", fsTok, typeFs, bindless, ".frag.sprv"));
 
     auto ms = device.shader(shMs.data,shMs.len);
     auto fs = device.shader(shFs.data,shFs.len);
     b.pipeline = device.pipeline(state, Shader(), ms, fs);
     }
   else if(t!=DrawCommands::Pfx) {
-    auto shVs = GothicShader::get(string_frm("main_", vsTok, typeVs, bindless, ".vert.sprv"));
-    auto shFs = GothicShader::get(string_frm("main_", fsTok, typeFs, bindless, ".frag.sprv"));
+    auto shVs = shaderByName(string_frm("main_", vsTok, typeVs, bindless, ".vert.sprv"));
+    auto shFs = shaderByName(string_frm("main_", fsTok, typeFs, bindless, ".frag.sprv"));
 
     auto vs = device.shader(shVs.data,shVs.len);
     auto fs = device.shader(shFs.data,shFs.len);
     b.pipeline = device.pipeline(Triangles, state, vs, fs);
     }
   else {
-    auto shVs = GothicShader::get(string_frm("main_", vsTok, typeVs, ".vert.sprv"));
-    auto shFs = GothicShader::get(string_frm("main_", fsTok, typeFs, ".frag.sprv"));
+    auto shVs = shaderByName(string_frm("main_", vsTok, typeVs, ".vert.sprv"));
+    auto shFs = shaderByName(string_frm("main_", fsTok, typeFs, ".frag.sprv"));
 
     auto vs = device.shader(shVs.data,shVs.len);
     auto fs = device.shader(shFs.data,shFs.len);
@@ -725,17 +746,34 @@ RenderPipeline Shaders::postEffect(std::string_view vsName, std::string_view fsN
   stateFsq.setZTestMode    (ztest);
   stateFsq.setZWriteEnabled(false);
 
-  auto sh = GothicShader::get(string_frm(vsName,".vert.sprv"));
+  auto sh = shaderByName(string_frm(vsName,".vert.sprv"));
   auto vs = device.shader(sh.data,sh.len);
 
-  sh      = GothicShader::get(string_frm(fsName,".frag.sprv"));
+  sh      = shaderByName(string_frm(fsName,".frag.sprv"));
   auto fs = device.shader(sh.data,sh.len);
   return device.pipeline(Triangles,stateFsq,vs,fs);
   }
 
+/// The same bindings and the same result in both variants (see shader/sky/clouds_lut_safe.comp). The original keeps the code path of the
+/// other GPUs unchanged; the safe one is for Mali, for the safe GPU mode and for a driver that refuses the original with an exception.
+ComputePipeline Shaders::cloudsLutShader() {
+  auto& gpu = Resources::device().properties();
+  if(SafeGpu::isSafe() || isMali(gpu.name)) {
+    Log::i("clouds_lut: the safe variant for ",gpu.name,SafeGpu::isSafe() ? " (safe GPU mode)" : "");
+    return computeShader("clouds_lut_safe.comp.sprv");
+    }
+  try {
+    return computeShader("clouds_lut.comp.sprv");
+    }
+  catch(const std::exception& e) {
+    Log::e("clouds_lut: the driver refused the shader (",e.what(),"), the safe variant is used");
+    return computeShader("clouds_lut_safe.comp.sprv");
+    }
+  }
+
 ComputePipeline Shaders::computeShader(std::string_view name) {
   auto& device = Resources::device();
-  auto  sh     = GothicShader::get(name);
+  auto  sh     = shaderByName(name);
   return device.pipeline(device.shader(sh.data,sh.len));
   }
 
@@ -750,10 +788,10 @@ RenderPipeline Shaders::fogShader(std::string_view name) {
     state.setBlendDest(RenderState::BlendMode::OneMinusSrcAlpha);
     }
 
-  auto sh = GothicShader::get("triangle.vert.sprv");
+  auto sh = shaderByName("triangle.vert.sprv");
   auto vs = device.shader(sh.data,sh.len);
 
-  sh      = GothicShader::get(string_frm(name,".frag.sprv"));
+  sh      = shaderByName(string_frm(name,".frag.sprv"));
   auto fs = device.shader(sh.data,sh.len);
   return device.pipeline(Triangles,state,vs,fs);
   }
@@ -772,10 +810,10 @@ RenderPipeline Shaders::inWaterShader(std::string_view name, bool isScattering) 
     state.setBlendDest  (RenderState::BlendMode::SrcColor);
     }
 
-  auto sh = GothicShader::get("triangle.vert.sprv");
+  auto sh = shaderByName("triangle.vert.sprv");
   auto vs = device.shader(sh.data,sh.len);
 
-  sh      = GothicShader::get(string_frm(name,".frag.sprv"));
+  sh      = shaderByName(string_frm(name,".frag.sprv"));
   auto fs = device.shader(sh.data,sh.len);
   return device.pipeline(Triangles,state,vs,fs);
   }
@@ -789,13 +827,13 @@ RenderPipeline Shaders::reflectionShader(std::string_view name, bool hasMeshlets
   state.setBlendSource  (RenderState::BlendMode::One);
   state.setBlendDest    (RenderState::BlendMode::One);
 
-  auto sh = GothicShader::get("triangle.vert.sprv");
+  auto sh = shaderByName("triangle.vert.sprv");
   auto vs = device.shader(sh.data,sh.len);
-  sh      = GothicShader::get(name);
+  sh      = shaderByName(name);
   auto fs = device.shader(sh.data,sh.len);
 
   if(hasMeshlets) {
-    sh = GothicShader::get("water_reflection.mesh.sprv");
+    sh = shaderByName("water_reflection.mesh.sprv");
     vs = device.shader(sh.data,sh.len);
     }
 
@@ -811,9 +849,9 @@ RenderPipeline Shaders::ambientLightShader(std::string_view name) {
   state.setZTestMode    (RenderState::ZTestMode::NoEqual);
   state.setZWriteEnabled(false);
 
-  auto sh = GothicShader::get("triangle.vert.sprv");
+  auto sh = shaderByName("triangle.vert.sprv");
   auto vs = device.shader(sh.data,sh.len);
-  sh      = GothicShader::get(string_frm(name,".frag.sprv"));
+  sh      = shaderByName(string_frm(name,".frag.sprv"));
   auto fs = device.shader(sh.data,sh.len);
 
   return device.pipeline(Triangles, state, vs, fs);

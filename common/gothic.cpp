@@ -534,6 +534,7 @@ void Gothic::implStartLoadSave(std::string_view banner,
   if(!loadingFlag.compare_exchange_strong(zero,one)){
     return; // loading already
     }
+  loadFailure.clear();
 
   onStartLoading();
   auto g = clearGame().release();
@@ -544,30 +545,35 @@ void Gothic::implStartLoadSave(std::string_view banner,
       std::unique_ptr<GameSession> next;
       auto curState = one;
       auto err = (curState==LoadState::Loading) ? LoadState::FailedLoad : LoadState::FailedSave;
+      // the message is shown by the window, which reads it after it has seen the new state of loadingFlag
+      auto fail = [&](const char* what) {
+        Tempest::Log::e("loading error: ", what);
+        loadFailure = what;
+        loadingFlag.compare_exchange_strong(curState,err);
+        };
       try {
         next        = f(std::move(game));
         pendingGame = std::move(next);
         loadingFlag.compare_exchange_strong(curState,LoadState::Finalize);
         }
       catch(std::bad_alloc&){
-        Tempest::Log::e("loading error: out of memory");
-        loadingFlag.compare_exchange_strong(curState,err);
+        fail("out of memory");
         }
       catch(std::system_error& e){
-        Tempest::Log::e("loading error: ", e.what());
-        loadingFlag.compare_exchange_strong(curState,err);
+        fail(e.what());
         }
       catch(std::runtime_error& e){
-        Tempest::Log::e("loading error: ",e.what());
-        loadingFlag.compare_exchange_strong(curState,err);
+        fail(e.what());
         }
       catch(std::bad_function_call&){
-        Tempest::Log::e("loading error: bad_function_call");
-        loadingFlag.compare_exchange_strong(curState,err);
+        fail("bad_function_call");
         }
       catch(const std::exception&e) {
-        Tempest::Log::e("loading error: ", e.what());
-        loadingFlag.compare_exchange_strong(curState,err);
+        fail(e.what());
+        }
+      catch(...) {
+        // the thread is noexcept: without this an exception of another type ends the program
+        fail("unknown exception");
         }
       if(curState==LoadState::Saving) {
         if(game!=nullptr)

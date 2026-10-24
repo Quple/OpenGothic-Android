@@ -68,8 +68,10 @@ WorldObjects::~WorldObjects() {
 void WorldObjects::load(Serialize &fin) {
   {
   uint16_t v = 0;
-  fin.setEntry("worlds/",fin.worldName(),"/version");
+  fin.requireEntry("worlds/",fin.worldName(),"/version");
   fin.read(v);
+  if(v<Serialize::Version::MinVersion || v>Serialize::Version::Current)
+    throw SaveGameError("the world '"+std::string(fin.worldName())+"' of the save-game has an unsupported version: "+std::to_string(v));
   fin.setVersion(v);
   }
   itemArr.clear();
@@ -92,7 +94,7 @@ void WorldObjects::load(Serialize &fin) {
       npcInvalid[i]->load(fin,i,"/npc_invalid/");
     }
 
-  fin.setEntry("worlds/",fin.worldName(),"/items");
+  fin.requireEntry("worlds/",fin.worldName(),"/items");
   fin.read(sz);
   for(size_t i=0; i<sz; ++i) {
     auto it = std::make_unique<Item>(owner,fin,Item::T_World);
@@ -103,13 +105,13 @@ void WorldObjects::load(Serialize &fin) {
   for(auto& i:rootVobs)
     i->loadVobTree(fin);
 
-  fin.setEntry("worlds/",fin.worldName(),"/triggerEvents");
+  fin.requireEntry("worlds/",fin.worldName(),"/triggerEvents");
   fin.read(sz);
   triggerEvents.resize(sz);
   for(auto& i:triggerEvents)
     i.load(fin);
 
-  fin.setEntry("worlds/",fin.worldName(),"/routines");
+  fin.requireEntry("worlds/",fin.worldName(),"/routines");
   fin.read(sz);
   routines.resize(sz);
   for(auto& i:routines)

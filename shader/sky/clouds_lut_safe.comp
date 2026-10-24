@@ -1,0 +1,50 @@
+#version 450
+
+#extension GL_EXT_control_flow_attributes : enable
+#extension GL_GOOGLE_include_directive    : enable
+
+#include "sky_common.glsl"
+
+// Safe variant of clouds_lut.comp, for the drivers whose shader compiler crashes on the original (SIGSEGV in libGLES_mali.so,
+// Mali-G57, vkCreateComputePipelines). Same bindings, same result.
+// What the original does and this one does not:
+//  - textureQueryLevels(): the level of detail that it asks for (the number of levels) is always beyond the last level, so the sampler
+//    clamps it to the last one. A constant that is beyond any texture is the same level.
+//  - samplers as arguments of a function: the sampling is written in place.
+
+layout(local_size_x = 2) in;
+
+layout(binding = 0) uniform writeonly image2D result;
+
+layout(binding = 5) uniform sampler2D textureDayL0;
+layout(binding = 6) uniform sampler2D textureDayL1;
+layout(binding = 7) uniform sampler2D textureNightL0;
+layout(binding = 8) uniform sampler2D textureNightL1;
+
+// 2^20 texels is more than any texture of the game has: the last level of any mip chain
+const float lastLevel = 20.0;
+
+void main() {
+  const ivec2 dstUV     = ivec2(gl_GlobalInvocationID.xy);
+  const float nightPhase = gl_GlobalInvocationID.x==0 ? 0.0 : 1.0;
+
+  // the direction (0,1,0) of the original is constant
+  const vec3  cloudsAt = vec3(0,1,0);
+  const vec2  texc     = 2000.0*vec2(atan(cloudsAt.z,cloudsAt.y), atan(cloudsAt.x,cloudsAt.y));
+  const vec2  uv       = texc*0.3;
+
+  vec4  cloudDL1 = textureLod(textureDayL1,   uv, lastLevel);
+  vec4  cloudDL0 = textureLod(textureDayL0,   uv, lastLevel);
+  vec4  cloudNL1 = textureLod(textureNightL1, uv, lastLevel);
+  vec4  cloudNL0 = vec4(0); // stars
+
+  vec4 day   = (cloudDL0+cloudDL1)*0.5;
+  vec4 night = (cloudNL0+cloudNL1)*0.5;
+
+  // Clouds (LDR textures from original game) - need to adjust
+  day.a   = day.a*(1.0-nightPhase);
+  night.a = night.a*(nightPhase);
+
+  vec4 ret = mixClr(day,night);
+  imageStore(result, dstUV, ret);
+  }

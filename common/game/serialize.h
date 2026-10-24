@@ -11,6 +11,9 @@
 #include <cstdint>
 #include <type_traits>
 #include <ctime>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 
 #include <miniz.h>
 
@@ -29,6 +32,12 @@ class World;
 class FpLock;
 class ScriptFn;
 class SaveGameHeader;
+
+/// the save-game is damaged, truncated or is not a save-game of this program; the message names the stage, the entry and the offsets
+class SaveGameError : public std::runtime_error {
+  public:
+    using std::runtime_error::runtime_error;
+  };
 
 class Serialize {
   public:
@@ -59,11 +68,26 @@ class Serialize {
       return implSetEntry(s);
       }
 
+    /// the same as setEntry, but an entry that is not in the archive is an error of the save-game (and not a silent empty entry)
+    template<class ... Args>
+    void requireEntry(const Args& ... args) {
+      string_frm s(args...);
+      implSetEntry(s);
+      if(!entryExists)
+        failMissingEntry();
+      }
+
     template<class ... Args>
     uint32_t directorySize(const Args& ... args) {
       string_frm s(args...);
       return implDirectorySize(s);
       }
+
+    /// what is being loaded: it is a part of the message of an error
+    void setStage(std::string_view s) { stage = s; }
+    std::string_view currentEntry() const { return entryName; }
+    /// bytes of the current entry that are not read yet
+    size_t remaining() const;
 
     void setContext(World* ctx) { this->ctx=ctx; }
     std::string_view worldName() const;
@@ -173,6 +197,7 @@ class Serialize {
     void implRead (std::vector<bool>& s) {
       uint32_t sz=0;
       read(sz);
+      checkCount(sz,1,"flags");
       s.resize(sz);
       for(size_t i=0; i<s.size(); ++i) {
         bool b=false;
@@ -193,13 +218,14 @@ class Serialize {
     void implWriteVec(const std::vector<T>& s,std::true_type) {
       uint32_t sz=uint32_t(s.size());
       write(sz);
-      writeBytes(s.data(),sz*sizeof(T));
+      writeBytes(s.data(),size_t(sz)*sizeof(T));
       }
 
     template<class T>
     void implReadVec(std::vector<T>& s,std::false_type) {
       uint32_t sz=0;
       read(sz);
+      checkCount(sz,1,"elements");
       s.resize(sz);
       for(auto& i:s)
         read(i);
@@ -209,8 +235,9 @@ class Serialize {
     void implReadVec(std::vector<T>& s,std::true_type) {
       uint32_t sz=0;
       read(sz);
+      checkCount(sz,sizeof(T),"elements");
       s.resize(sz);
-      readBytes(s.data(),sz*sizeof(T));
+      readBytes(s.data(),size_t(sz)*sizeof(T));
       }
 
     // c-arrays
@@ -279,6 +306,12 @@ class Serialize {
     static size_t writeFunc(void *pOpaque, uint64_t file_ofs, const void *pBuf, size_t n);
     static size_t readFunc (void *pOpaque, uint64_t file_ofs, void *pBuf, size_t n);
 
+    /// the next `count` items of `itemSize` bytes at least must fit in the rest of the entry: a damaged size must not allocate gigabytes
+    void   checkCount(uint64_t count, size_t itemSize, const char* what);
+    [[noreturn]] void failRead(size_t requested) const;
+    [[noreturn]] void failMissingEntry() const;
+    std::string describeEntry() const;
+
     void   closeEntry();
     bool   implSetEntry(std::string_view e);
     uint32_t implDirectorySize(std::string_view e);
@@ -295,6 +328,12 @@ class Serialize {
     std::vector<uint8_t>     entryBuf;
     uint64_t                 curOffset = 0;
     uint64_t                 readOffset = 0;
+    uint64_t                 archiveSize = 0;
+    std::string              stage;
+    bool                     entryExists = false;
+    mz_uint32                entryIndex  = mz_uint32(-1);
+    uint64_t                 entrySize   = 0;       // size of the entry in the archive (uncompressed)
+    uint64_t                 entryPacked = 0;       // compressed size
     Tempest::ODevice*        fout      = nullptr;
     Tempest::IDevice*        fin       = nullptr;
   };

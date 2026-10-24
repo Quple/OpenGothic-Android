@@ -42,6 +42,8 @@ class CommandLine {
     GiMethod            isRtGi()           const { return isGi;         }
     bool                isMeshShading()    const { return isMeshSh;     }
     bool                isBindless()       const { return isBindlessSh; }
+    /// -safegpu: -1 - automatic (the state that the previous start has left), 0 - off, 1 - on, 2 - minimal
+    int                 safeGpuMode()      const { return safeGpu;      }
     bool                isVirtualShadow()  const { return isVsm;        }
     bool                isSoftwareShadow() const { return isRtSm;       }
     bool                doStartMenu()      const { return !noMenu;      }
@@ -84,6 +86,7 @@ class CommandLine {
     bool                isMeshSh     = true;
 #endif
     bool                isBindlessSh = true;
+    int                 safeGpu      = -1;
     bool                isVsm        = false;
     bool                isRtSm       = false;
     GiMethod            isGi         = GiMethod::None;

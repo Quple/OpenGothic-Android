@@ -146,6 +146,8 @@ class Gothic final {
     Tempest::Signal<void()> toggleGi, toggleVsm, toggleRtsm, togglePathtrace;
 
     LoadState    checkLoading() const;
+    /// why the last loading or saving failed; valid after checkLoading() returned FailedLoad or FailedSave
+    const std::string& loadError() const { return loadFailure; }
     bool         finishLoading();
     void         startLoad(std::string_view banner, const std::function<std::unique_ptr<GameSession>(std::unique_ptr<GameSession>&&)> f);
     void         startSave(Tempest::Texture2d&& tex, const std::function<std::unique_ptr<GameSession>(std::unique_ptr<GameSession>&&)> f);
@@ -248,6 +250,7 @@ class Gothic final {
     std::atomic_int                         loadProgress{0};
     std::thread                             loaderTh;
     std::atomic<LoadState>                  loadingFlag{LoadState::Idle};
+    std::string                             loadFailure;   // written by the loading thread before it changes loadingFlag
 
     std::unique_ptr<GameSession>            game, pendingGame;
     std::unique_ptr<FightAi>                fight;

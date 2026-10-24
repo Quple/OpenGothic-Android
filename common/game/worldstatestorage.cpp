@@ -20,7 +20,7 @@ void WorldStateStorage::save(Serialize &fout) const {
   }
 
 void WorldStateStorage::load(Serialize& fin) {
-  fin.setEntry("worlds/",name,".zip");
+  fin.requireEntry("worlds/",name,".zip");
   fin.read(storage);
   }
 

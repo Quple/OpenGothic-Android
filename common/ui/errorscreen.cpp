@@ -170,6 +170,8 @@ void ErrorScreen::report(std::string_view title, std::string_view details) {
   Entry e;
   e.title = std::string(title);
   e.text  = "\n"+std::string(details);
+  // what the program reports (a failed loading) is shown every time, unlike the repeated errors of the scripts
+  seen.erase(e.title);
   add(std::move(e));
   }
 
