@@ -1,258 +1,488 @@
-# Postęp: Ikarus / LeGo / Kroniki Myrtany (CoM)
+# Postęp: Kroniki Myrtany / Ikarus / LeGo
 
-Stan z 20.10.2026. Cel: Kroniki Myrtany w pełni grywalne w OpenGothic, przy zachowaniu zgodności z oryginalnym Gothic 1 i 2.
+Stan bieżący: 24.10.2026. Poprzedni raport zachowany w [PROGRESS_2026-10-20_ARCHIVE.md](PROGRESS_2026-10-20_ARCHIVE.md).
 
-Legenda:
+# Kroniki: bieżąca lista prac
 
-- `[x]` zrobione
-- `[x]` + *(potwierdzone)* zrobione i zbudowane, czeka na ręczną próbę użytkownika
-- `[ ]` do zrobienia
+Postęp: **24/27 pozycji**. Licznik dotyczy tej listy, nie procentu zgodności gry.
+`[x]` oznacza implementację w kodzie. Użytkownik zezwolił na okresowe kompilacje
+przed STOP; nowy pakiet nadal wymaga ręcznych prób. Agent nie uruchamia gry,
+testów ani komend comcheck. Muzyka menu ma osobne potwierdzenie użytkownika.
 
-Zasada zgodności: wszystko, co dotyczy Ikarus/LeGo/CoM, działa tylko w grach, które mają warstwę Ikarus/LeGo (`GameScript::hasDma()`) albo zarejestrowany hook. Czyste G1 i G2 zachowują dawne zachowanie.
+- [x] Muzyka menu Kronik; użytkownik potwierdził wyłącznie właściwy motyw.
+- [x] OGG i mapowanie muzyki stref świata.
+- [x] Priorytet plików moda w VDF/MOD.
+- [x] Kategorie ukończonych i niezaliczonych zadań dziennika.
+- [x] Zatrzymanie głosu pominiętej wypowiedzi trialogu.
+- [x] STOPALLSOUNDS dla efektów świata i globalnych.
+- [x] WLD_INSERTOBJECT dla obsługiwanych wizualizacji, z zapisem obiektów.
+- [x] Equip/Unequip bez zdejmowania przy ponownym wyposażeniu.
+- [x] NpcEquipBestWeaponByType i most hooka wyposażania NPC Kronik.
+- [x] GetSlotItem rozróżnia dłonie, schowaną broń i przedmioty animacji.
+- [x] DropFromSlot dla WEAPON_STATCHECK.
+- [x] APPLYHOUSEWALLTEXTURE: rzeczywiste materiały domu i powiązania GPU.
+- [x] ENABLELOADGAME: blokada ładowania, w tym quick-load.
+- [x] ENABLELOADSAVEGAME: blokada obu operacji.
+- [x] MEM_WriteString i pożyczany wskaźnik tekstu.
+- [x] Wywołania Ikarusa respektują nadpisania VM.
+- [x] Zabezpieczenia pamięci i uchwytów oraz sprzątanie slotów przedmiotów.
+- [x] Analizator źródeł/DAT, licznik miejsc wywołania, raport atrap/TODO.
+- [x] oCNpc::IsSpellActive, potrzebne dla światła w Q501.
+- [x] Ścieżki RemoveFromSlot używane przez pochodnię i chronione ogłuszenie.
+- [x] Przegląd CATINV i natywna adaptacja masek/stanu kategorii ekwipunku.
+- [x] Sprite'y map LeGo, Render modeli i wybór podglądu receptury w craftingu.
+- [x] Synchronizacja TRIA_FINISH przed zmianą rutyn/zamknięciem dialogu Q102.
+- [ ] Pozostałe hooki Kronik: kontrakty zdarzeń, rejestrów i stosu.
+- [ ] Pozostałe wywołania natywne/dynamiczne: implementacje i działające zamienniki.
+- [x] Kompilacje pakietów i poprawki kompilatora; oba EXE zlinkowane.
+- [ ] Ręczne próby zmian i weryfikacja kampanii.
 
-Szczegóły techniczne: [IKARUS.md](IKARUS.md), [ARCHOLOS_AUDIT.md](ARCHOLOS_AUDIT.md), [ARCHOLOS_TESTING.md](ARCHOLOS_TESTING.md), [ARCHOLOS_HANDOFF_CLAUDE.md](ARCHOLOS_HANDOFF_CLAUDE.md), [ARCHOLOS_HANDOFF_BACKLOG.md](ARCHOLOS_HANDOFF_BACKLOG.md).
+## Nowe komendy, wyłącznie do uruchomienia przez użytkownika
+
+Na zapisie roboczym. Źródło: `mods/devtools/lib/archoloschecks.js`; komendy trafią
+do EXE/kopii moda podczas następnej kompilacji.
+
+- `comcheck bestweapon` — warunki używania i idempotencja wyposażania.
+- `comcheck housewall 0..11|status|restore` — wzory ścian, w tym 11 świąteczny;
+  wewnątrz domu sprawdzić też zapis/wczytanie wybranego wzoru.
+- `comcheck scenelock load|save|both|off` — po próbie zawsze `off`.
+- `comcheck spellactive [SPL_LIGHT]` — przed rzuceniem, w trakcie i po wygaśnięciu;
+  sprawdzić naturalny warunek światła w ciemnym pokoju Q501.
+- `comcheck torch status|stow` — płonący model, zwrot jednej zgaszonej pochodni,
+  normalny klawisz oraz zapis/wczytanie.
+- `comcheck category 0..8|status` — maski przedmiotów, zachowanie kategorii własnej,
+  reset przy otwarciu handlu/skrzyni/przeszukiwania, przenoszenie ostatniej sztuki.
+- `comcheck map archolos|silbach|city|sewers|off` — tekstura, kwadratowe proporcje,
+  położenie i obrót kursora; dodatkowo naturalne użycie przedmiotu i mapy questowe.
+- `comcheck preview [przedmiot]|off` — 3D przez Render_AddItemPrio; zamknąć przed
+  zapisem/wczytaniem lub zmianą świata. Sprawdzić też naturalne okna craftingu.
+- `comcheck crafting` — tylko odczyt stanu. Przy naturalnym stanowisku sprawdzić
+  kilka receptur, ilości i „Wszystko”, składniki, wymagane/posiadane liczby,
+  zakładkę właściwości, wyjście i ponowne wejście. Następnie normalne wytworzenie.
+- Pod wodą: naturalnie podnieść przedmiot. Ma zniknąć ze świata, trafić raz do
+  ekwipunku i użyć wodnej animacji; po niej dalsze nurkowanie. Porównać z lądem.
+- Spowolnienie: naturalne rzucenie ze zwoju i runy, właściwy koszt many, efekt,
+  wygaśnięcie po 60 s i ponowne rzucenie; osobno scena Otisa w Q306. Sprawdzić
+  wspólne tempo animacji/ruchu/ciosów oraz powrót do normy. Zapisać w trakcie,
+  ponownie uruchomić proces, wczytać i zaczekać na pozostały czas efektu.
+- LeGo/zapis: zapisać osobno z zapaloną i schowaną pochodnią, zamknąć proces
+  i wczytać oba zapisy; model oraz liczba bez duplikatów. Sprawdzić również
+  trwałość obiektów PermMem i FrameFunctions po ponownym uruchomieniu.
+- Eliksir nurkowania: naturalnie wypić, nurkować dłużej niż zwykły zapas tlenu,
+  sprawdzić pasek, brak obrażeń podczas buffa, wygaśnięcie i ponowne nurkowanie.
+  Powtórzyć z zapisem/wczytaniem pod wodą; bez buffa zwykłe duszenie pozostaje.
+- `comcheck breath [NPC_INSTANCE]` i `comcheck slowdown [NPC_INSTANCE]` — odczyt
+  limitu/pozostałego powietrza, HP i żądanej skali modelu. Domyślnie bohater;
+  przy Slowdown wskazać trafionego NPC, a w scenie Otisa obserwować bohatera.
+- `comcheck attitude NPC_INSTANCE` — odczyt nastawienia bieżącego i stałego.
+  Porównać przed, podczas i po naturalnej walce Q205/Q306/Q602, także po loadzie.
+- `comcheck telekinesis` — odczyt fazy i kroków ruchu. Naturalnie przyciągnąć
+  luźny przedmiot: koszt many, ruch, ukończenie i opadanie. Przerwać rzucanie,
+  zmienić broń, zapisać i wczytać; przedmiot nie może pozostać bez fizyki.
+- Klawiatura Ikarusa: mapę LeGo zamknąć Escape, Enter, PPM i przypisanym
+  klawiszem mapy/ekwipunku. Przy zaklęciu zamka sprawdzić puszczenie akcji;
+  po Alt+Tab klawisze nie pozostają wciśnięte dla skryptów.
+- Obrażenia: ten sam czar z pierścieniem maga i bez, przeciwnicy z ochroną oraz
+  odpornością na magię; broń penetrująca nie może trwale odejmować pancerza.
+  Oddzielnie strzały i magiczna broń w walkach, które mają kończyć się ogłuszeniem.
+- Drużyna: naturalna walka z towarzyszem, zmiana celu po pokonaniu przeciwnika
+  i przeciwnik za przeszkodą; towarzysze nie wybierają siebie nawzajem.
+- Otwieranie zamków: zwojem wybrać zamkniętą skrzynię lub drzwi; otwarty obiekt,
+  ławka i ognisko nie mogą zasłaniać właściwego celu. Kluczowy zamek bez kodu ma
+  odmówić otwarcia. Przerwać inwestowanie many, zapisać/wczytać i dokończyć ten
+  sam zamek; odgadnięte znaki pozostają, zwój znika dopiero po powodzeniu.
+- `comcheck trialog` — tylko odczyt. Q102: naturalnie wybrać „Idę z Jornem” oraz
+  w oddzielnym przebiegu „Idę z Fabio”, normalnie i z pomijaniem kwestii. Po końcu
+  TRIA_RUNNING=0, TRIA_CPTR=0, bez błędu ZS_TALK_END; kamera, rutyny, dziennik
+  i możliwość następnej rozmowy mają wrócić do poprawnego stanu.
+
+## Ograniczenia najnowszego pakietu
+
+- Zmiana ścian jest adaptacją konkretnej funkcji CoM. Nie oznacza pełnej emulacji
+  zCResource CacheIn/CacheOut/zmiany nazwy dla dowolnego moda.
+- Sprite'y obsługują pozycję, obrót, UV, priorytet i jednolity kolor, jak mapy CoM.
+  Gradienty kolorów wierzchołków i pozostałe blend modes są jawnie zgłaszane.
+- Render modeli korzysta z InventoryRenderer. Nie emuluje dowolnego świata
+  renderowania Gothica, dowolnej rotacji przekazanej do oCItem::Render ani całej
+  semantyki nakładania wielu warstw 2D/3D.
+- Zapis odtwarza konkretnie SPL_LIGHT i aktywne time.slw; nie jest to ogólna
+  serializacja wszystkich efektów, faz cząstek i dźwięków.
+- Nie potwierdzono pełnego craftingu, wszystkich questów ani braku critical error.
+- Buildy: archolos-compat/time/light/diagnostics/attitude/memory/timers/screenfx/
+  telekinesis-build z datą 2026-10-24 zakończyły się kodem 0. Pakiet klawiatury
+  również skompilował oba EXE; brak uruchomionych prób gry.
+- `CRAFTINGVIEW_UPDATE` korzysta z natywnego wyboru menu. Nie oznacza to pełnej
+  emulacji prywatnego InformationManagera ani wszystkich hooków pod 0x660bb0.
+- Drugi parametr time.slw ma już kod zegara modelu i zapisu. Kompilacja/odbiór
+  naturalnego zaklęcia i sceny Q306 pozostają warunkiem uznania działania w grze.
 
 ---
 
-## Priorytety do grywalnych Kronik (stan 20.10.2026)
+# Kroniki: szczegółowy pozostały zakres — 24.10.2026
 
-1. **Zapisy i wczytywanie** (najważniejsze, bo psuje wszystko po wczytaniu): naprawione dwa błędy rdzenia (argumenty rekurencji `locals()` w ZenKit, tablice zmiennych skryptu w pamięci). Do sprawdzenia przez grę: wielokrotne wczytania w jednej sesji, wczytanie po zmianie świata i powrót, quicksave, zapis w trakcie sceny.
-2. **Sceny fabularne** z listy odbiorów: Q204, Q205 (omdlenie bohatera), Q304, Q306 (turniej), Q406, Q602/GQ001. Każda przejść z logiem; błędy skryptów i `not implemented` w logu wskazują brakujące elementy.
-3. **Vobowie szukani po nazwie** (`MEM_SearchVobByName`, 583 wywołania): warstwa zna tylko movery. Raport w zakładce Debug, Ikarus (`vob names searched by the scripts ... not found`) pokazuje nazwy bez odpowiednika w świecie; to są dekoracje i skrzynie przełączane przez skrypty (`KM_*`, `KQ406_CRATE_*`).
-4. **Sloty ekwipunku silnika** (`GetSlotItem` zwraca 0, `PutInSlot`/`RemoveFromSlot` tylko dla kołczanów): potrzebne przy scenach z bronią w rękach i sprzedaży.
-5. **Towarzysze w walce** (`OCNPC__GETNEXTENEMY_REPLACEHOOK`, wybór wroga): wpływ na walki z drużyną.
-6. **Crafting**: podgląd receptur w oknie (`CRAFTINGVIEW_UPDATE`, `OCITEMCONTAINER__DRAWITEMINFO_HOOK`); dziś receptury działają jako zwykłe wybory dialogu.
-7. Polskie znaki w polu tekstowym, tekstura ścian domu, muzyka i osiągnięcia (`KmLib`): kosmetyka, na końcu.
+Postęp: **24/27 grup**, nie procent zgodności gry. To pełny znany backlog z kodu,
+aktualnego DAT i wcześniejszych raportów; nie dowód wykrycia każdego błędu kampanii.
+Agent nie uruchamia gry, testów ani komend comcheck. Użytkownik zezwolił na okresowe
+kompilacje przed STOP. Nowy pakiet wymaga odbioru w grze. Tylko muzyka menu ma
+osobne potwierdzenie użytkownika.
 
-Zrobione 20.10.2026 (czeka na ręczną próbę): **Trialoge LeGo natywnie** (`TRIA_NEXT` i pochodne: dialogi trzech i więcej postaci; LeGo zamieniał surową pamięć obiektów NPC, więc `TRIA_Next` rzucał wyjątek i dialog stał; teraz polecenia dla `self` idą do mówiącego, a menu dialogu przyjmuje jego kwestie i czeka na nie), `CHANGEVOBCOLLISION` (widoczność i kolizja nazwanych vobów: zwykłe vob, movery, moby; stan zapisywany w `game/dmavobs` i przywracany po wczytaniu i zmianie świata), skrzynie z listą zawartości ze spacjami po przecinku (brakowało wszystkiego poza pierwszym przedmiotem), `DIACAM_DISABLE/ENABLE` (kamera dialogu wyłączona w scenach z własnymi kamerami), `ENABLESAVEGAME/ENABLELOADSAVEGAME` (zapis zablokowany w scenach), gracz stoi w miejscu przez cały `ISINCAMERA` (nie tylko gdy kamera ma flagę), pominięcie linii dialogu w kamerze nie ucina dźwięku (`OCNPC__STOPRUNNINGOU_REPLACEKILLOUSOUND`), limit 30 s dla `AI_WaitTillEnd` (scena nie wisi, gdy postać utknie; wpis w logu), `LOG_MOVETOTOP`, polskie znaki w polu tekstowym, komendy `comcheck vob`, `comcheck queue`, `comcheck faint`.
+## Priorytet: fabuła, awarie i zapis
 
----
+- [x] Kod synchronizacji TRIA_FINISH i blokady przedwczesnego zamknięcia pustego menu Q102.
+- [x] Kod DIACAM_UPDATE/StartDialogCam i odtworzenia kadru po kamerze scenki.
+- [ ] Odbiór Q102: Jorn/Fabio, pomijanie, kolejna rozmowa, rutyny i dziennik.
+- [x] Most OCNPC__GETNEXTENEMY_REPLACEHOOK: drużyna i widoczność, także bieżący cel.
+- [x] Descriptor: wejściowe ARYDAMAGE, bonus pierścienia przed ochroną zamiast
+  dodatkowej utraty HP z FDAMAGETOTAL. Dane zaklęcia i ponowny odczyt dontKill.
+- [ ] Odbiór wyboru przeciwnika oraz obrażeń: pancerz/penetracja/pierścienie,
+  strzały, magia, upadek i walki bez zabijania.
+- [x] Nastawienie tymczasowe NPC działa w odczycie i decyzjach AI; permanentny
+  odczyt pozostaje oddzielny. Odbiór Q205/Q306/Q602 i uspokojenia po walce.
+- [ ] Kolejki AI przy długich scenach, anulowaniu, zniknięciu NPC i zmianie świata;
+  limity awaryjne nie są dowodem prawidłowego wykonania sceny.
+- [x] Kod fazy przed zapisem: _BW_SAVEGAME przed snapshotem świata/Daedalusa,
+  TORCHLOADFIX_CHECKTORCH i końcowy zapis gotowych plików wirtualnych LeGo.
+- [ ] PermMem/FF/destruktory, callbacki, napisy, widoki, referencje do NPC/przedmiotów.
+- [ ] Restart procesu, wiele loadów, sloty/quicksave, zmiana świata i powrót.
+- [ ] Aktywne efekty czasowe po zapisie/wczytaniu.
+- [x] Stabilne referencje napisów memory_instance, walidacja pustych symboli
+  i NPC teleportacji; timer świata synchronizowany przed callbackami FF.
+- [x] ScreenFX wybiera klatkę modulo liczby tekstur, bez dostępu poza tablicę.
+- [x] Zabezpieczenia SB_TOSTRING przed pustą strukturą i nieprawidłowym buforem;
+  STR_FROMCHAR sprawdza granicę przed odczytem znaku.
+- [ ] Dalszy przegląd dereferencji i synchronizacji surowych zapisów z silnikiem.
 
-## 1. Rdzeń warstwy zgodności (`common/game/compatibility`)
+## Zaklęcia, zamki i postacie
 
-- [x] Interpreter x86 `Cpu32` (wywołania `thiscall`/`cdecl`/`stdcall`, stos, rejestry) dla kodu Ikarusa
-- [x] Pamięć 32-bitowa `Mem32` z regionami typowanymi (callbacki odczytu i zapisu po indeksie elementu)
-- [x] Poprawna kolejność argumentów wywołań (GCC liczy argumenty od prawej do lewej, naprawione przez inicjalizację w nawiasach klamrowych)
-- [x] `DirectMemory`: centralna klasa, pliki `directmemory_*.cpp` (silnik, zdarzenia, hooki, UI, pliki)
-- [x] Instancje `C_NPC`/`C_ITEM` widziane przez wskaźniki Ikarusa (`MEM_InstToPtr`, `_@`, `MEM_PtrToInst`)
-- [x] Pola `oCNpc`/`oCItem` jako aliasy pól `C_NPC`/`C_ITEM`
-- [x] Lustro `zCParser`, `zCPar_Symbol`, wartości zmiennych skryptowych (także stringi zbudowane przez skrypty)
-- [x] `MEM_ReplaceFunc` jako prawdziwe przekierowanie (wcześniej nieskończona rekurencja przy zapisie)
-- [x] Nadpisywanie funkcji VM (`override_function`, parametry tekstowe jako `std::string_view`)
-- [x] Pętle Ikarusa (`repeat`, `while`, `break`, `continue`, `mem_goto`)
-- [x] Wyjątki VM z pełnym stosem wywołań w logu
-- [x] Rozmiar ekranu widziany przez skrypty (800x600, całkowite PSIZEX/PSIZEY, naprawiony `fracf: Denominator is 0` w paskach LeGo)
-- [x] Odczyt `MEM_ReadInt`/`MEM_WriteInt` na końcu bloku nie wychodzi poza bufor (dostęp bajt po bajcie przez granicę bloku, 64-bitowe porównania zakresów)
-- [x] `InstanceHandles`: 8192 sloty, najpierw wolne i martwe (nikt ich już nie trzyma), dopiero potem nadpisanie najstarszego żywego z logiem błędu
-- [x] Wyjątek `BAR_DELETE`/`FREE` (LeGo woła `Bar_Delete(var int)` z instancją): `DaedalusVm::pop_int` zwraca indeks symbolu instancji, jak oryginalny silnik
-- [x] `OCNPC.FOCUS_VOB` i `OCNPC.INTERACTMOB` mają własne pola (`compat_focus_vob`, `compat_interact_mob`), nie nadpisują `VOICEPITCH`/`SPAWNDELAY`
-- [x] `INTERACTMOB` gracza odświeżany z rzeczywistego moba
-- [ ] Stabilna tożsamość uchwytów obiektów między zapisami i światami (dziś tylko ponowne użycie slotów martwych obiektów)
-- [ ] `OCNPC.BITFIELD` aliasuje `mission`: pełny wpływ na ruch i stany
-- [ ] Pola `_ZCVOB_*`, `MAG_BOOK`, model, wygląd, wyposażenie
-- [ ] Zapis macierzy rotacji ma obracać rzeczywisty obiekt (nie tylko pamięć emulowana)
-- [ ] Odczyt członków VM i surowe `MEM_ReadInt(ptr+offset)` spójne dla wszystkich pól
-- [ ] Życie uchwytów mobów i odtwarzanie referencji po usunięciu obiektu
-- [ ] `qsort`, `FINAL` w LeGo; pełna semantyka destruktorów i locals
-- [ ] Nieznane wywołanie nie może zostawiać przypadkowego starego wyniku jako sukcesu (uczciwa diagnostyka)
+- [x] MAG_BOOK/SetOwner dla oryginalnego SPELL_CAST_SLOWDOWN.
+- [x] Zegar modelu time.slw dla animacji, root motion, zdarzeń i okien walki;
+  weak owner efektu, przywrócenie skali, zapis zegara i aktywnych time.slw.
+- [ ] Odbiór spowolnienia: koniec, ponowne rzucenie, load i Otis Q306, także
+  zmiana świata/wyjście postaci; zwykły czar 60 s, Otis 2 s, efekt narkotyku 30 s.
+- [x] Pozostały czas SPL_LIGHT zapisuje się osobno i odtwarza bez ponownego rzutu.
+- [ ] IsSpellActive/światło Q501: przed, w trakcie, po wygaśnięciu i po loadzie;
+  nadal brak ogólnej serializacji wszystkich efektów i faz pojedynczych cząstek.
+- [x] Most SPELL_PICKLOCK_FOCUS i filtr TARGET_TYPE_MOB zgodny z callbackiem.
+- [x] Postęp otwierania należy do skrzyni/drzwi, z opcjonalnym compat-lock w zapisie;
+  obrót 256 tymczasowych slotów nie zeruje już odgadniętych znaków.
+- [ ] Odbiór zaklęcia zamka, ClearKeyBuffer, wytrychy i magia: talent/bonus,
+  klucze, kod, zapis kodu, cel i poprawne zużycie zwoju.
+- [x] Kod wodnego podnoszenia i DoTakeVob dla przedmiotów.
+- [x] BUFF_DIVE10_TICK: limit i pozostały tlen 30000/31000 ms, faktyczne obrażenia,
+  HUD, regeneracja poza wodą i opcjonalny wpis zapisu compat-breath.
+- [ ] Odbiór podnoszenia i buffa pod wodą, wygaśnięcia i zapisu/wczytania.
+- [x] BODY_VISUALNAME/HEAD_VISUALNAME oraz osobne BITFIELD z numerami tekstur dla
+  NPC_CHANGEFACE i B_REFRESHATINSERT; TELEPORTHEROTOPOS zmienia realną pozycję.
+- [x] SPELL_LOGIC_TELEKINESIS, NEW_TELEKINESIS, SPELL_CAST_TELEKINESIS oraz
+  SPELL_TELEKINESIS_FOCUS_REMOVER: rzeczywisty przedmiot, mana, ruch i fizyka.
+- [ ] Odbiór telekinezy: przedmiot, koszt, dokończenie/anulowanie, zapis i load.
+- [x] Kody klawiszy Ikarusa: poprawna konwersja z ustawień INI, cyfry/F1–F15,
+  mysz, puszczenie klawiszy przy utracie fokusu i ClearKeyBuffer.
+- [ ] Odbiór map LeGo (Escape/Enter/PPM), zaklęcia zamka i skrótów CoM.
 
-## 2. Zapisy i trwałość (PermMem)
+## Pozostała semantyka bibliotek
 
-- [x] Wirtualne pliki WinAPI (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`, `GetLastError`) w pamięci, przechowywane w zapisie OpenGothic (`game/dma`)
-- [x] Zapis, wczytanie i restart gry zachowują dane LeGo (PermMem)
-- [x] Po wczytaniu uruchamiane są `INITPERCEPTIONS` i `Init_Global`/`Init_<świat>` dla modów z warstwą DMA
-- [x] Hooki zmiany poziomu LeGo nie traktują zmiany poziomu jako wczytania
-- [x] Zapis nie wiesza gry (naprawiona rekurencja `MEM_ReplaceFunc`)
-- [x] Zapis w trakcie czekania (kolejka AI) i restart procesu
-- [ ] Odbiór zapisu poza tym, co potwierdzone: PermMem destruktory, FF, widoki, ciągi, referencje NPC/przedmiotów, aktywne efekty czasowe
-- [ ] Wielokrotne wczytania w jednej sesji, wiele slotów, quicksave
-- [ ] Zmiana świata i powrót, usuwanie i odtwarzanie obiektów, brak wiszących wskaźników
-- [ ] `ReadSavegame`/`_BR_SETSELECTEDSLOT`: callback jest deklarowany, ale nie jest emitowany
-- [ ] Zgodność starych zapisów po każdej zmianie serializacji (obecnie `Serialize::Current` = 56, starsze wczytywane warunkowo)
+- [x] QSORT_G2: domyślny komparator unsigned pierwszego pola i całe rekordy,
+  w tym osiem bajtów tabeli offset/symbol. Nieznany komparator zgłasza brak obsługi.
+- [ ] Używane niestandardowe komparatory: udowodnić cele i zaimplementować potrzebne.
+- [ ] Finalizacja/destruktory LeGo podczas delete/clear/load, bez mylenia z FINAL.
+  FINAL jest optymalizatorem bytecode i ma zero bezpośrednich wywołań w tym DAT.
+- [ ] Dynamiczne adresy/callbacki: ustalić konkretne cele, argumenty, wyniki i kontekst.
+- [ ] Faktycznie potrzebne instrukcje x86 i kontrakty flag/rejestrów/stosu.
+- [ ] Alias VM kontra surowa pamięć: poprawny layout, odczyt i zapis do realnego obiektu.
+- [x] SetPositionWorld sprawdza cały bufor vec3, a zapisy pozycji odrzucają NaN/Inf.
+- [x] Usuwanie starego przedmiotu nie zeruje symbolu przepiętego na nowy obiekt;
+  brak symbolu dla przejściowej instancji nie powoduje dereferencji nullptr.
+- [x] CHANGEVOBCOLLISION zmienia również fizykę drzwi/obiektów interaktywnych;
+  odtworzona fizyka zachowuje właściciela obiektu. Odbiór przejść fabularnych.
+- [x] OCNPC.BITFIELD oddzielone od C_NPC.MISSION; zgodne maski tekstur.
+- [ ] Pozostałe flagi OCNPC.BITFIELD: skutki zapisów dla realnego obiektu i trwałość.
+- [ ] Potrzebne ścieżki waynetu i list vobów; nie pełna emulacja silnika na zapas.
+- [ ] KmLib InitializeMenu/Gamestart/Always i eksporty usług gry; LoadLibrary/
+  GetProcAddress są zastępcze. GetStat/IncrementStat/UnlockAchievement oraz trwałość.
 
-## 3. Czas, świat, wyszukiwanie
+## Natywny interfejs, prezentacja i odbiór
 
-- [x] `zTimer` (`MEM_Timer`): czas klatki i czas całkowity aktualizowane co klatkę
-- [x] `oCWorldTimer` (`MEM_WorldTimer`): `SCALETIME`, `CHANGETIMESPEED`, `STOPTIMEATHOUR`, `RESUMETIME` zmieniają czas gry w OpenGothic *(potwierdzone próbą `comcheck time`)*
-- [x] `MEM_SearchVobByName` dla moverów (zadania szukają ich po nazwie)
-- [x] Lista NPC świata (`voblist_npcs`)
-- [x] `Wld_SetObjectRoutine`
-- [x] `Wld_RemoveItem`, `Mob_CreateItems`
-- [ ] `WAYNET` (lista waypointów) nadal fałszywy wskaźnik
-- [ ] Ogólna lista vobów (nie tylko NPC), wyszukiwanie po nazwie dla NPC, przedmiotów, skrzyń, dekoracji
-- [ ] `Wld_InsertObject`, rzeczywiste `RemoveVob`, `SetVobName`, tworzenie i usuwanie obiektów zadań
-- [ ] `MEM_InsertVob` (używane tylko przez kołczany, które są wyłączone)
-- [ ] `TIMESTEP`, pauza i spowolnienie czasu klatek w silniku
+- [ ] CATINV: kategorie/strony, stosy/ostatnia sztuka, kontenery, zwłoki, handel,
+  blokady i decyzje skryptowe. Wykazać pokrycie natywnym UI dla każdego starego hooka.
+- [ ] Crafting: warunki, grupy składników, wynik, liczby, koszty, brak zasobów,
+  ilości/Wszystko, zakładki, anulowanie i normalne wykonanie.
+- [ ] InformationManager: imię psa/nazwa wina, polskie znaki, kasowanie/Escape/powrót;
+  pełny prywatny widget Gothica nie jest emulowany.
+- [ ] Scenki: menu/HUD/sterowanie/napisy podczas kamery i plansz końcowych.
+- [ ] Sprite/Render: gradienty, dodatkowe blend modes, zagnieżdżone widoki,
+  animacje okien, kolor/alpha tekstu, rotacja modeli i kolejność warstw 2D/3D.
+- [ ] Muzyka świata: strefy, dzień/noc/walka, nadpisania, powrót po scenie i loadzie.
+- [ ] Dziennik: naturalne ukończenie zadań, w tym W gorącej wodzie kąpany, i load.
+- [ ] Wyposażenie: warunki, idempotencja, kołczany, pochodnie, ręce, transfer/ostatnia sztuka.
+- [ ] Dom: wzory ścian i odtworzenie po loadzie.
+- [ ] Ustawienia zasięgu/skalowania, alternatywne loadingi i metadane zapisów.
+- [ ] Diagnostyka/konsola/schowek/telemetria; niższy priorytet od fabuły i zapisu.
+- [x] Okresowe buildy i poprawki kompilatora; oba EXE zlinkowane, logi zachowane.
+- [ ] Po STOP końcowy build aktualnego stanu i lista odbioru.
+- [ ] Odbiór scen Q204/Q205/Q304/Q306/Q406/Q501/Q602/GQ001, przedmiotów
+  KQ402/SQ202 oraz efektów SQ509.
+- [ ] Przejście rozdziałów, dróg gildyjnych i zakończeń.
 
-## 4. Hooki silnika (zdarzenia gry oddane skryptom)
+## Wszystkie rozpoznane pozostałe adresy
 
-Emitowane i odebrane przez hooki Kronik/LeGo:
+Poniższe tabele opisują brak ogólnego handlera/mostu albo atrapę. Zamienniki natywne
+mogą już pokrywać część zachowania: crafting, wejście tekstowe, nurkowanie, focus,
+CATINV i HUD. Wymagają przeglądu semantyki. Liczby są statyczne, nie pomiarami gry.
 
-- [x] `ChangeLevel` (początek i koniec), `WriteSavegame`, `ReadSavegame` (osobną drogą)
-- [x] `OCNPCINVENTORY__INSERT` (podniesienie przedmiotu), `ChangeAttribute` (skrypt może zmienić wartość)
-- [x] Klawisze (`KeyEvent`, stan klawiszy), `ZoneMusicChanged`, `CreateFallDamage`
-- [x] `OnDamage`, `OnDamageScript`, `SpellSetup`, `MobCanOpen`
-- [x] Kamery scen filmowych (`CsCamera` trigger/untrigger)
-- [x] Ekran statusu postaci (`StatusScreenShow`/`Close` + teksty `UPDATE_MENU_ITEM`)
-- [x] `BarUpdateResolution`
-- [x] `OCNPC__EVDROPVOB_HOOK`: ważny przedmiot (`ITEM_IMPORTANT`) nie wypada z ekwipunku gracza *(potwierdzone)*
-- [x] `LOCKINVENTORY`: ekwipunek zamyka się po otwarciu, gdy skrypt ustawi blokadę *(potwierdzone próbą `comcheck inventory`)*
-- [x] `ITEMIMPORTANTFLAG_CHECKSELLINGITEMS`: ważnych przedmiotów nie da się sprzedać handlarzowi *(potwierdzone)*
-- [x] `HIDEFOCUSFORPARTYMEMBERS_*`: towarzysze (`AIVAR[15]`) poza focusem gracza z bronią i bez paska HP *(potwierdzone próbą `comcheck party`)*
-- [x] `EV_FINISHINGMOVE_HOOK`: dobijanie ważnej postaci; zdrowie zostaje na 1 przez hook `ChangeAttribute` (postać nie ginie) *(potwierdzone)*
-- [x] Zabójca dobitej postaci (`OTHER` w `ZS_DEAD`, doświadczenie gracza) jest ustawiany także przy dobijaniu *(niepotwierdzone)*
-- [x] Dobijanie ważnej postaci gra tylko `T_NO` bez animacji dobijania; naprawiony `ANIISACTIVE` (`zCModel::IsAnimationActive`) *(potwierdzone)*
-- [ ] `OCNPC__GETNEXTENEMY_REPLACEHOOK`: celowo niewdrożone (poprawka błędu oryginalnego silnika, własny wybór wroga OpenGothic działa inaczej); do ponownej oceny, jeśli pojawią się objawy
-- [ ] `OCNPC__DROPUNCONSCIOUS_HOOK` (Q205, Q306: broń gracza po utracie przytomności); wymaga emulacji slotów rąk i `RemoveFromSlot`/`EquipWeapon`
-- [ ] `OCNPCSTATES_CHANGEROUTINE_HOOK`, odświeżanie NPC po zmianie rutyny
-- [ ] `OCAIHUMAN__PC_DIVING_HOOK` (zbieranie pod wodą): OpenGothic już pozwala podnosić przedmioty w `BS_DIVE` (`Npc::takeItem`); sprawdzić w grze, czy hook jest potrzebny
-- [x] `SETDIALOGUETOLDPROPERTY` (`oCInfoManager::GetInformation` + `OCINFO.TOLD`): skrypt może oznaczyć dialog jako opowiedziany lub pozwolić go powtórzyć *(potwierdzone)*
-- [x] `HANDLE_SETPROPERPICKLOCKSTRLEN`: długość kombinacji wytrycha skracana przez talent i bonus (`GETPICKLOCKSTRLEN`) *(potwierdzone)*
-- [x] `SPELL_PICKLOCK_FOCUS` pokryty natywnym focusem czaru (`eventSpellFocus`), `ClearKeyBuffer` nie jest potrzebny
-- [x] Zwój czaru otwierania zamków (`SPL_PICKLOCK`) jest zużywany tylko, gdy czar otworzył zamek; przy zbyt krótkim przytrzymaniu postęp zostaje w zamku, zwój zostaje *(potwierdzone)*
-- [ ] `_FIXEQUIPBESTWEAPONS` (po jakimś zdarzeniu wołane `oCNpc::EquipBestWeapon` dla broni białej i dystansowej postaci nieimmortalnych): sprawdzić w grze, czy NPC mają dobrą broń
-- [ ] Pochodnie CoM: skrypty mają własny system pod klawiszem `keyTorch` (`TORCH_KEYEVENT`: `GetSlotItem(ZS_LEFTHAND)`, `TORCH_EQUIP` = `CreateInvItem` + `oCNpc::Equip`, `TORCHLOADFIX_CHECKTORCH`), a OpenGothic ma natywne pochodnie; `GetSlotItem` zwraca 0, więc oba systemy mogą się dublować. Wymaga próby w grze: co robi klawisz pochodni z pochodnią w ekwipunku
-- [x] `_EVT_QUIVER_EQUIP`/`_EVT_QUIVER_UNEQUIP` (kołczany): hooki `oCNpc::EquipItem`/`UnequipItem` z `Inventory::setSlot` dla broni dystansowej *(czeka na próbę: `comcheck ranged bow`)*
-- [x] Kategorie ekwipunku w zwykłej wersji jak w Kronikach: nazwa kategorii (z `TXT_INV_CAT` ze skryptów) w skrzynce na lewo od złota, Shift+→/← i Shift+D/A zmieniają kategorię bez zawijania, tylko gdy skrypty mają `TXT_INV_CAT`; interfejs dotykowy bez zmian (przyciski kategorii) *(potwierdzone)*. Hooki `CATINV_*` (ok. 25) nie są emulowane
-- [ ] `CRAFTINGVIEW_UPDATE`, `OCINFORMATIONMANAGER__UPDATE_HOOK`, `ZCVIEWDIALOGCHOICE__HANDLEEVENT_HOOK`, `OCITEMCONTAINER__DRAWITEMINFO_HOOK`
-- [x] `OCAIHUMAN__MOVING_REPLACECHECKINGGLOBALCUTSCENE`: gracz nie porusza się podczas końcowych plansz (`ISINFINALBOARDS`); kamery scen (`ISINCAMERA`) blokuje sam OpenGothic *(niepotwierdzone)*
-- [ ] Kosmetyka scen CoM, odczytana z DAT, bez wpływu na fabułę: `ZCVIEW__DIALOGMESSAGECXY_HOOK` (napisy w scenach z kamerą idą do zwykłego widoku ekranu zamiast okna dialogu, żółte dla postaci z imieniem, białe bez imienia; na końcowych planszach żółte i bez tekstu), `OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE` (HUD ukryty w scenach), `CGAMEMANAGER__MENUENABLED_REPLACECHECKINGGLOBALCUTSCENE` (menu wyłączone w scenach)
-- [ ] `INVTRANSPARENCYHACK_HOOK`, `APPLYSOMESETTINGS_HOOK`, `APPLYSOMESETTINGSEND_HOOK`, `UPDATELOADINGTEXTURE`
-- [ ] `PATCHSAVEGAMEVERSION_HOOK`, `PATCHSAVEGAMEWORLD_HOOK`: tylko wpisują wersję gry i nazwę świata do slotu zapisu w menu oryginalnego silnika (kosmetyka listy zapisów), OpenGothic ma własną listę zapisów
-- [ ] `TELEMETRY_ONTRADELEFTHOOK`, `TELEMETRY_ONTRADERIGHTHOOK`, `ZERROR_SETTARGET_HOOK`, `HANDLERESULTSTRING_MARVINMODE_REPLACEHOOK`
-- [ ] `_CC_HOOK` (konsola CC), `_SPRITE_DORENDER`
+### Adresy bez handlera: 30
 
-## 5. Wywołania natywne Ikarusa (adresy silnika)
+| Adres | Wywołujący/rejestrujący | Callback | Miejsca wywołań wrappera |
+| --- | --- | --- | --- |
+| 0x5d3cf0 | ZCRENDERER_DRAWTILE |  | 0 |
+| 0x606ad0 | ZCVISUAL_LOADVISUAL |  | 1 |
+| 0x64d8e0 | ZRND_D3D_DRAWLINE |  | 0 |
+| 0x6b6490 | HIDEFOCUSFORPARTYMEMBERS_UPDATESTATUSREPLACEHOOK2 |  | 0 |
+| 0x6d0000 | ZCVOB_SETCOLL |  | 2 |
+| 0x709630 | CATINV_DELETELISTSORTFROMPOOL |  | 4 |
+| 0x70a150 | CATINV_SWITCHCONTAINER |  | 2 |
+| 0x70ade0 | CATINV_RESET |  | 2 |
+| 0x70b570 | CATINV_RESET |  | 2 |
+| 0x7110a0 | CATINV_CONTAINERINSERT;CATINV_NPCINVINSERT |  | 0 |
+| 0x711120 | CATINV_RIGHT;CATINV_SETMAXOFFSET |  | 1 |
+| 0x762b40 | CATINV_PREVENTCLOSEDEADINV |  | 0 |
+| 0x7813f0 | CATINV_CONTAINERREMOVE;CATINV_NPCINVREMOVE |  | 2 |
+| 0x7a5e80 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7a6060 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7a6070 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7a63c0 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7a75b0 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7a9a10 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7aa030 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7aa140 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7abad0 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7abd10 | CATINV_DRAWCATEGORY |  | 0 |
+| 0x7b4870 | GLOBALLOCK |  | 2 |
+| 0x7b4876 | GLOBALALLOC |  | 1 |
+| 0x7b4a5c | CLOSECLIPBOARD |  | 2 |
+| 0x7b4a62 | SETCLIPBOARDDATA |  | 1 |
+| 0x7b4a68 | EMPTYCLIPBOARD |  | 1 |
+| 0x7b4a6e | OPENCLIPBOARD |  | 2 |
+| 0x7d0f48 | CATINV_DELAYMOBCAMERA |  | 0 |
 
-- [x] `TriggerChangeLevel`, `SetPositionWorld`, `GetModel`, `StartAnimation`, `CASTFROMINTF`/`TOINTF`
-- [x] Obiekty `zCInput` i zdarzenia klawiszy
-- [x] `zSinCosApprox`
-- [x] `UPDATE_MENU_ITEM` (teksty menu statusu)
-- [x] `zCModel::IsAnimationActive` (`ANIISACTIVE`)
-- [x] `oCNpc::CloseInventory`, `zCEventMessage::SetDeleted` (używane przez hooki)
-- [x] `RemoveVob`, `SetVobName`, `ApplySomeSettings` (obecnie puste wywołania bez skutku)
-- [ ] `GetSlotItem` (zwraca 0), `EquipWeapon` (nop), `PutInSlot`, `RemoveFromSlot`, `DropFromSlot`, `Equip`, `UnequipItem`, `EquipBestWeapon`, `DropAllInHand`
-- [ ] `OCNPC_ISSPELLACTIVE`, `SPELL_CAST_SLOWDOWN`
-- [ ] `STOPALLACTIVESOUNDS`, `STOPALLSOUNDS`
-- [x] `0x688a70` (Q204 `ARAXOSJOINTEST_COLLISION`, Q304 `TRAPCUTSCENE_SETCHASMDETECTION_ONFRAME`): wołane z `this` = postać i parametrem FALSE, wyłącza "wykrywanie przepaści" (oryginalny silnik zatrzymuje postać na krawędzi); OpenGothic nie ma takiego wykrywania, więc jawny pusty handler, bez efektu. Do potwierdzenia w scenie Q304 (czy strażnicy wpadają w pułapkę) i Q204 *(niepotwierdzone)*
-- [ ] `zCVob::SetColl` (`ZCVOB_SETCOLL`)
-- [ ] `GETPARMVALUE`, `DIACAM_UPDATE`, `ZCVISUAL_LOADVISUAL`
-- [ ] `CLOSEINVENTORY` jako pełna operacja silnika (dziś tylko sygnał zamknięcia menu)
-- [ ] Renderer: `ZRND_*`, `ZCRENDERER_DRAWTILE`, `OCITEM_RENDER`, `PRINT_GETFONTNAME`
-- [ ] `APPLYHOUSEWALLTEXTURE` (3 adresy), `zCTexture::Load` (zwraca 0)
-- [ ] `Console::Register` (`CC_AUTOCOMPLETE`), schowek (`OpenClipboard` i pokrewne), `GlobalAlloc`/`GlobalLock`
-- [ ] `IsBindedToggled`, `GetState` (`CATINV_DELAYMOBCAMERA`)
+### Hooki bez ogólnego mostu: 43
 
-## 6. Zewnętrzne funkcje skryptowe (externale)
+| Adres | Wywołujący/rejestrujący | Callback | Miejsca wywołań wrappera |
+| --- | --- | --- | --- |
+| 0x4276b0 | CATINV_INIT | APPLYSOMESETTINGS_HOOK | 1 |
+| 0x42926a | INIT_SIGHTSCALING | APPLYSOMESETTINGSEND_HOOK | 1 |
+| 0x42a2d0 | INITALTERNATIVELOADINGSCREENS | UPDATELOADINGTEXTURE | 1 |
+| 0x42abe7 | CUTSCENESYSTEM_INIT | CGAMEMANAGER__MENUENABLED_REPLACECHECKINGGLOBALCUTSCENE | 1 |
+| 0x4344a3 | INIT_FEATURES_GAMESTART | HANDLERESULTSTRING_MARVINMODE_REPLACEHOOK | 1 |
+| 0x437d9f | PATCHSAVEGAMEWORLD | PATCHSAVEGAMEWORLD_HOOK | 1 |
+| 0x437e55 | PATCHSAVEGAMEVERSION | PATCHSAVEGAMEVERSION_HOOK | 1 |
+| 0x44e056 | STARTLOGFILE | ZERROR_SETTARGET_HOOK | 3 |
+| 0x660bb0 | INIT_CRAFTINGVIEW_GAMESTART;INIT_FEATURES_GAMESTART | CRAFTINGVIEW_UPDATE;OCINFORMATIONMANAGER__UPDATE_HOOK | 2 |
+| 0x68b6ce | CATINV_INIT | CATINV_HANDLEEVENTEBX | 1 |
+| 0x68b9d0 | INIT_ITEMIMPORTANTFLAG | TELEMETRY_ONTRADELEFTHOOK | 1 |
+| 0x68bba6 | INIT_ITEMIMPORTANTFLAG | TELEMETRY_ONTRADERIGHTHOOK | 1 |
+| 0x68eba0 | INIT_FEATURES_GAMESTART | ZCVIEWDIALOGCHOICE__HANDLEEVENT_HOOK | 1 |
+| 0x699c60 | INIT_GATHERINGITEMSUNDERWATER | OCAIHUMAN__PC_DIVING_HOOK | 1 |
+| 0x69b947 | INIT_HIDEFOCUSFORPARTYMEMBERS | HIDEFOCUSFORPARTYMEMBERS_UPDATESTATUSREPLACEHOOK2 | 1 |
+| 0x69d415 | CATINV_INIT | CATINV_DELAYMOBCAMERA | 1 |
+| 0x6c31d6 | CUTSCENESYSTEM_INIT | OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE | 1 |
+| 0x6cfdf8 | LEGO_INITGAMESTART | _CC_HOOK | 1 |
+| 0x706e03 | CATINV_INIT | CATINV_DRAWCATEGORY | 1 |
+| 0x7086d0 | CATINV_INIT | CATINV_OPEN | 1 |
+| 0x708f4d | CATINV_INIT | CATINV_CLOSE | 1 |
+| 0x7093d6 | CATINV_INIT | CATINV_CONTAINERINSERT | 1 |
+| 0x709487 | CATINV_INIT | CATINV_CONTAINERREMOVE | 1 |
+| 0x7096e9 | CATINV_INIT | CATINV_CLAMPCATEGORY | 1 |
+| 0x709763 | CATINV_INIT | CATINV_RIGHT | 1 |
+| 0x709b26 | CATINV_INIT | CATINV_LEFT | 1 |
+| 0x70aa5f | CATINV_INIT | CATINV_HANDLEEVENTEDI | 1 |
+| 0x70af44 | CATINV_INIT | CATINV_MANIPULATECREATELIST | 1 |
+| 0x70b228 | CATINV_INIT | CATINV_HANDLEEVENTEDI | 1 |
+| 0x70b6b5 | CATINV_INIT | CATINV_MANIPULATECREATELIST | 1 |
+| 0x70b8ad | CATINV_INIT | CATINV_HANDLEEVENTEDI | 1 |
+| 0x70b9bd | CATINV_INIT | CATINV_PREVENTCLOSEDEADINV | 1 |
+| 0x70cc37 | CATINV_INIT | CATINV_NPCINVREMOVEITEM | 1 |
+| 0x70cd22 | CATINV_INIT | CATINV_NPCINVREMOVEBYPTR | 1 |
+| 0x70cfa8 | CATINV_INIT | CATINV_NPCINVREMOVE | 1 |
+| 0x70f251 | CATINV_INIT | CATINV_HANDLEEVENTNPCINVENTORY | 1 |
+| 0x733837 | INIT_HIDEFOCUSFORPARTYMEMBERS | HIDEFOCUSFORPARTYMEMBERS_UPDATESTATUSREPLACEHOOK3 | 1 |
+| 0x733ea4 | INIT_HIDEFOCUSFORPARTYMEMBERS | HIDEFOCUSFORPARTYMEMBERS_UPDATESTATUSREPLACEHOOK | 1 |
+| 0x733eb7 | INIT_HIDEFOCUSFORPARTYMEMBERS | HIDEFOCUSFORPARTYMEMBERS_UPDATESTATUSREPLACEHOOK | 1 |
+| 0x762a18 | CATINV_INIT | CATINV_DEADRESETCATEGORY | 1 |
+| 0x76e0f3 | INIT_OCNPCSTATES_CHANGEROUTINE_ERROR | OCNPCSTATES_CHANGEROUTINE_HOOK | 0 |
+| 0x7a6060 | INIT_INVTRANSPARENCYHACK | INVTRANSPARENCYHACK_HOOK | 1 |
+| 0x7a9240 | CUTSCENESYSTEM_INIT | ZCVIEW__DIALOGMESSAGECXY_HOOK | 1 |
 
-- [x] `AI_WaitTillEnd` (znaczniki synchronizacji w kolejkach, wzajemne czekanie, `clear()` zwalnia czekających)
-- [x] `AI_DropItem`, `AI_AimAt`, `AI_ShootAt`, `AI_StopAim`, `AI_Snd_Play`, `AI_StopFX`
-- [x] `Mob_CreateItems`, `Wld_RemoveItem` (zwraca `int`)
-- [x] `Wld_SetObjectRoutine`
-- [x] `AI_Function` (LeGo): parser `CALL ...` (I/N/S/SS/NSII), kontekst `SELF`, wynik zdjęty ze stosu
-- [x] `DaedalusVm::invoke_function` w ZenKit (lokalny patch)
-- [ ] `Wld_InsertObject` (jedyny wywoływany nieobsłużony external)
-- [ ] 76 deklaracji bez rozpoznanych wywołań (nie są listą blockerów: `NPC_MemoryEntry`, `Mis_*`, `Doc_*`, `TA_*` i inne; ocenić potrzebę dla CoM)
-- [ ] `Log_MoveToTop` (nadal logowany jako niezaimplementowany), `_Render_Init`, `Mdl_ApplyRandomAni*` (celowe puste)
+### Proste atrapy: 4
 
-## 7. Sloty, ręce, wyposażenie
+| Adres | Wywołujący/rejestrujący | Callback | Miejsca wywołań wrappera |
+| --- | --- | --- | --- |
+| 0x44df50 | STARTLOGFILE |  | 3 |
+| 0x4cc470 | CATINV_KEYBINDINGISTOGGLED |  | 2 |
+| 0x4d4d30 | CATINV_DELAYMOBCAMERA |  | 0 |
+| 0x7375e0 | OCNPC__DROPUNCONSCIOUS_HOOK |  | 0 |
 
-- [ ] Sloty: `PutInSlot`, `RemoveFromSlot`, `DropFromSlot`, `GetSlotItem` (pochodnia)
-- [ ] Pochodnie: zajętość rąk, odtworzenie po wczytaniu
-- [x] Kołczany: `MEM_InsertVob`/`MEM_DeleteVob`/`OCNPC_PutInSlot`/`OCNPC_RemoveFromSlot` jako dekoracja modelu (`MdlVisual::setDecor`, nie znika po trafieniu), `INIT_QUIVERS_ALWAYS` obejście po załadowaniu NPC, odświeżanie liczby strzał przez `QUIVERS_FF` skryptu *(czeka na próbę)*
-- [ ] Wybór najlepszej broni, rzeczy po utracie przytomności
-- [ ] Zajętość rąk przy sprzedaży, upuszczeniu, magii
+## Pola natywnych obiektów: 20 kandydatów do przeglądu
 
-## 8. Walka, magia, zamki
+Brak jawnego powiązania nie jest samodzielnym dowodem awarii: kontekst może być
+transient memory_instance albo cały wywołujący może mieć działający override.
 
-- [x] Czar otwierania zamków z Kronik: focus na skrzyni (`Focus_Magic`, `syncFocusMage`)
-- [x] Strzelanie: `AI_AimAt`/`AI_ShootAt`/`AI_StopAim`, pocisk powstaje i zużywa amunicję (log: `PROJECTILE CONFIRMED`; trafienia i widoczność nie mierzone)
-- [x] `OnDamage`/`OnDamageScript`, obrażenia od upadku
-- [ ] Deskryptor obrażeń jest niepełny; `FDAMAGETOTAL`, pancerz, penetracja, pierścienie, strzały, magia, nieśmiertelność
-- [ ] Skracanie kodu zamka przez talent/bonus, aktualny mob, klucze, wymagania
-- [ ] Telekineza, nurkowanie, spowolnienie (`OCNPC_ISSPELLACTIVE`)
-- [ ] Wybór przeciwnika dla towarzyszy (patrz 4)
+| Pole | Odniesienia operandów w DAT | Wywołujący |
+| --- | --- | --- |
+| OCITEM._ZCVOB_TRAFOOBJTOWORLD | 11 | NEW_TELEKINESIS;SPELL_LOGIC_TELEKINESIS |
+| OCITEM._ZCVOB_BBOX3D_MINS | 9 | NEW_TELEKINESIS;SPELL_LOGIC_TELEKINESIS |
+| OCITEM._ZCVOB_BBOX3D_MAXS | 9 | NEW_TELEKINESIS;SPELL_LOGIC_TELEKINESIS |
+| OCNPC._ZCVOB_BITFIELD | 6 | MAKEHEROGHOST;_TRIA_COPY |
+| OCNPC._ZCVOB_TRAFOOBJTOWORLD | 6 | SPELL_LOGIC_TELEKINESIS;TELEPORTHEROTOPOS |
+| OCITEM._ZCVOB_BITFIELD | 4 | SPELL_CAST_TELEKINESIS |
+| OCNPC._ZCVOB_HOMEWORLD | 3 | MEM_INSERTVOB |
+| OCNPC._ZCVOB_VISUALALPHA | 3 | MAKEHEROGHOST;_TRIA_COPY |
+| OCNPC.ENEMY | 2 | MEMINT_OLDWRITEINT;MEMINT_PREPAREASSIGNMENTS |
+| OCNPC.MODEL_SCALE | 2 | _TRIA_COPY |
+| OCNPC.MDS_NAME | 2 | _TRIA_COPY |
+| OCNPC.INSTANZ | 2 | TELEMETRY_ONTRADELEFTHOOK;TELEMETRY_ONTRADERIGHTHOOK |
+| OCITEM.INSTANZ | 2 | TELEMETRY_ONTRADELEFTHOOK;TELEMETRY_ONTRADERIGHTHOOK |
+| OCNPC.INVENTORY2_VTBL | 1 | CATINV_OPEN |
+| OCNPC.INVENTORY2_INVENTORY_COMPARE | 1 | CATINV_NPCCONTAINERISEMPTY |
+| OCNPC._VTBL | 1 | PARSERSYMBOLISNPC |
+| OCNPC.INVENTORY2_OCITEMCONTAINER_CONTENTS | 1 | ITEMIMPORTANTFLAG_CHECKSELLINGITEMS |
+| OCNPC.INVENTORY2_OCITEMCONTAINER_SELECTEDITEM | 1 | ITEMIMPORTANTFLAG_CHECKSELLINGITEMS |
+| OCNPC.DIVETIME | 1 | BUFF_DIVE10_TICK |
+| OCNPC.DIVECTR | 1 | BUFF_DIVE10_TICK |
 
-## 9. Dialogi, UI, wpisywany tekst
+## Wszystkie dynamiczne miejsca DAT: 41
 
-- [x] Wpisywanie odpowiedzi (`?Nazwa`, `INFOMANAGERANSWER`) z klawiatury fizycznej i ekranowej; tylko w grach z Ikarus/LeGo *(niepotwierdzone po ostatnich poprawkach)*
-- [x] Nakładka UI (widoki, teksty, czcionki, tekstury LeGo) rysowana nad grą
-- [x] Napisy na ekranie, wpisy dziennika
-- [x] Ekran statusu postaci z tekstami CoM
-- [x] Wybory dialogu czekają na kolejki akcji postaci (limit 10 s); tylko w grach z Ikarus/LeGo
-- [x] `player.openTrade(npc)` w modach JS i `comcheck trader`: okno handlu bez dialogu
-- [ ] Polskie znaki w polu tekstowym (dziś ASCII 32–126, limit 24 bajtów) z właściwym kodowaniem fontów/VM
-- [ ] Crafting: widok receptur, warunki, składniki, wynik, liczba sztuk, anulowanie
-- [ ] `CATINV_*`: kategorie ekwipunku, strony, przenoszenie i stosy, reset po śmierci
-- [ ] Informacje o przedmiotach, boss UI, status, dziennik (`LOG_MOVETOTOP`)
-- [ ] Rozmiar ekranu 800x600 stały: zdarzenie rozdzielczości tylko raz (zmiana okna, skali, HUD)
-- [ ] Sprite, `Render/Draw3D`, zagnieżdżone widoki, animacje okien, alpha i kolor tekstu
-- [ ] `GetFontName`, przezroczystość ekwipunku, tekstury ekranu ładowania, skalowanie widzenia
-- [ ] Konsola CC, autouzupełnianie, schowek
+| Wywołujący | Mechanizm | Adres bytecode |
+| --- | --- | --- |
+| CALL__THISCALL | CALL__STDCALL | 0x242d |
+| CALL__FASTCALL | CALL__THISCALL | 0x2482 |
+| MEM_SWAPBYTES | CALL__CDECL | 0x25d7 |
+| MEM_CLEAR | CALL__CDECL | 0x26a3 |
+| LOADLIBRARY | CALL__STDCALL | 0x2973 |
+| GETPROCADDRESS | CALL__STDCALL | 0x2a13 |
+| VIRTUALPROTECT | CALL__STDCALL | 0x2af4 |
+| MEM_MESSAGEBOX | CALL__STDCALL | 0x2b81 |
+| MEMINT_QSORT | CALL__CDECL | 0x32a0 |
+| STR_FROMCHAR | CALL__THISCALL | 0x35fe |
+| STR_COMPARE | CALL__CDECL | 0x390a |
+| STR_LOWER | CALL__THISCALL | 0x40cc |
+| MEM_FINDPARSERSYMBOL | CALL__THISCALL | 0x415b |
+| MEM_GETBUFFERCRC32 | CALL__CDECL | 0x66b4 |
+| MEM_SEARCHVOBBYNAME | CALL__THISCALL | 0x678d |
+| MEM_SEARCHALLVOBSBYNAME | CALL__THISCALL | 0x6826 |
+| MEM_RENAMEVOB | CALL__THISCALL | 0x68af |
+| MEMINT_VOBGETEM | CALL__FASTCALL | 0x6907 |
+| MEM_TRIGGERVOB | CALL__THISCALL | 0x699b |
+| MEM_UNTRIGGERVOB | CALL__THISCALL | 0x6a28 |
+| MEM_APPLYGOTHOPT | CALL__THISCALL | 0x6fc1 |
+| MEM_GETSYSTEMTIME | CALL__CDECL | 0x7473 |
+| MEM_GETPERFORMANCECOUNTER | CALL__STDCALL | 0x74d2 |
+| MEMINT_SENDTOSPY_IMPLEMENTATION | CALL__THISCALL | 0x789e |
+| MEM_ALLOC_ | CALL__CDECL | 0x84ab |
+| MEM_FREE_ | CALL__CDECL | 0x8521 |
+| _FLT_BUILD_FUNC | CALL__CDECL | 0x874d |
+| HOOKENGINEF | HOOKENGINEI | 0xd675 |
+| HOOKENGINE | HOOKENGINEI | 0xd6a6 |
+| HOOKENGINES | HOOKENGINE | 0xd6cd |
+| REPLACEENGINEFUNCI | HOOKENGINEI | 0xd9fa |
+| KMLIB_INITIALIZEMENU | CALL__CDECL | 0x200a5 |
+| KMLIB_INITIALIZEGAMESTART | CALL__CDECL | 0x200c0 |
+| KMLIB_INITIALIZEALWAYS | CALL__CDECL | 0x200db |
+| PC_SCOPE | CALL__CDECL | 0x2012d |
+| GETCLIPBOARDDATA | CALL__STDCALL | 0x23f4b |
+| GETKEYSTATE | CALL__STDCALL | 0x24613 |
+| OCINFOMANAGER_GETINFOUNIMPORTANT | CALL__THISCALL | 0x25a7b |
+| GAMESERVICES_UNLOCKACHIEVEMENT | CALL__CDECL | 0x297f0 |
+| GAMESERVICES_GETSTAT | CALL__CDECL | 0x2981f |
+| GAMESERVICES_INCREMENTSTAT | CALL__CDECL | 0x29864 |
 
-## 10. Sceny, kamera, dźwięk
+## Deklaracje externali bez bezpośrednich wywołań: 76
 
-- [x] Hooki kamer scen filmowych (`OnTrigger`/`OnUntrigger`)
-- [x] Scena palaczy (Q-scena `smokers`, `comcheck scene smokers`) potwierdzona przez użytkownika
-- [x] Zmiana poziomu i teleport z poziomu skryptów
-- [x] `AI_PlayAni` z `CALL ...` i parametrami (pętla zdarzeń kolejki)
-- [ ] Sceny trzech i więcej NPC z `TRIA_WAIT`, przedmiotem i ruchem; zagnieżdżone `AI_Function`; anulowanie i przerwanie sceny
-- [ ] `StartDialogCam`, sprawdzanie globalnej cutscenki przez HUD, ruch i menu; powrót kamery
-- [ ] Sceny do odbioru: Q204, Q205, Q304, Q306, Q406, Q602/GQ001; `Wld_RemoveItem` w KQ402/SQ202; `AI_StopFX` w SQ509; naturalne `AI_Snd_Play`
-- [ ] Aktywne animacje, ładowanie visuali, zatrzymywanie aktywnych dźwięków
+Nie są automatycznie wymaganymi implementacjami Kronik. Potrzeba musi wynikać
+z rozpoznanego wywołania pośredniego; brak krawędzi BE nie wyklucza takiego użycia.
 
-## 11. KmLib, muzyka, usługi
+| Deklaracja | Miejsca wywołania |
+| --- | --- |
+| PRINTMULTI | 0 |
+| SETPERCENTDONE | 0 |
+| NPC_MEMORYENTRY | 0 |
+| NPC_MEMORYENTRYGUILD | 0 |
+| NPC_HASNEWS | 0 |
+| NPC_GETNEWSWITNESS | 0 |
+| NPC_GETNEWSOFFENDER | 0 |
+| NPC_GETNEWSVICTIM | 0 |
+| NPC_ISNEWSGOSSIP | 0 |
+| NPC_DELETENEWS | 0 |
+| NPC_GETGUILDATTITUDE | 0 |
+| WLD_DETECTPLAYER | 0 |
+| WLD_DETECTNPCEXATT | 0 |
+| NPC_CREATESPELL | 0 |
+| NPC_LEARNSPELL | 0 |
+| NPC_GIVEITEM | 0 |
+| NPC_HASDETECTEDNPC | 0 |
+| NPC_GETCOMRADES | 0 |
+| NPC_ISNEAR | 0 |
+| NPC_KNOWSPLAYER | 0 |
+| NPC_SETKNOWSPLAYER | 0 |
+| NPC_ISAIMING | 0 |
+| NPC_STARTITEMREACTMODULES | 0 |
+| NPC_HASOFFERED | 0 |
+| AI_PLAYCUTSCENE | 0 |
+| AI_CANSEENPC | 0 |
+| AI_GOTOSOUND | 0 |
+| NPC_AREWESTRONGER | 0 |
+| NPC_ISNEXTTARGETAVAILABLE | 0 |
+| NPC_ISVOICEACTIVE | 0 |
+| NPC_GIVEINFO | 0 |
+| TAL_CONFIGURE | 0 |
+| NPC_ISWAYBLOCKED | 0 |
+| AI_WHIRLAROUNDTOSOURCE | 0 |
+| AI_TURNTOSOUND | 0 |
+| AI_QUICKLOOK | 0 |
+| AI_DEFEND | 0 |
+| AI_COMBATREACTTODAMAGE | 0 |
+| AI_ASK | 0 |
+| AI_ASKTEXT | 0 |
+| AI_WAITFORQUESTION | 0 |
+| AI_SND_PLAY3D | 0 |
+| SND_GETDISTTOSOURCE | 0 |
+| SND_ISSOURCENPC | 0 |
+| SND_ISSOURCEITEM | 0 |
+| MIS_GETSTATUS | 0 |
+| MIS_SETSTATUS | 0 |
+| MIS_ONTIME | 0 |
+| MIS_ADDMISSIONENTRY | 0 |
+| MIS_REMOVEMISSION | 0 |
+| NPC_CHECKAVAILABLEMISSION | 0 |
+| NPC_CHECKRUNNINGMISSION | 0 |
+| NPC_CHECKOFFERMISSION | 0 |
+| AI_PLAYFX | 0 |
+| WLD_INSERTNPCANDRESPAWN | 0 |
+| NPC_OWNEDBYGUILD | 0 |
+| AI_TAKEMOB | 0 |
+| AI_DROPMOB | 0 |
+| DOC_OPEN | 0 |
+| DOC_FONT | 0 |
+| DOC_PRINT | 0 |
+| DOC_MAPCOORDINATES | 0 |
+| TA | 0 |
+| TA_CS | 0 |
+| TA_BEGINOVERLAY | 0 |
+| TA_ENDOVERLAY | 0 |
+| TA_REMOVEOVERLAY | 0 |
+| RTN_EXCHANGE | 0 |
+| WLD_ASSIGNROOMTONPC | 0 |
+| WLD_GETPLAYERPORTALOWNER | 0 |
+| WLD_GETFORMERPLAYERPORTALOWNER | 0 |
+| NPC_ISPLAYERINMYROOM | 0 |
+| NPC_WASPLAYERINMYROOM | 0 |
+| NPC_GETPORTALOWNER | 0 |
+| HLP_CUTSCENEPLAYED | 0 |
+| GAME_INITENGINTL | 0 |
 
-- [ ] `LoadLibrary`/`GetProcAddress` dają pozorne uchwyty: adapter używanych funkcji KmLib
-- [ ] `InitializeMenu`, `InitializeGamestart`, `InitializeAlways`
-- [ ] `MusicSystem_OverrideTrack`, `MusicSystem_DisableTrackOverride`, przywrócenie muzyki po scenie i wczytaniu
-- [ ] `GameServices_UnlockAchievement`, `GetStat`, `IncrementStat` (deterministyczny wynik i trwałość)
+## Dane i ograniczenia
 
-## 12. Stabilność i diagnostyka
-
-- [x] Crash przy zamykaniu gry (`RectAllocator::decref` Tempest): ikony dotykowe trzymają jedną referencję do końca procesu
-- [x] Oddawanie sprite'ów ekwipunku i kontrolera przed niszczeniem okna
-- [x] Log hooków (które hooki Kronik zostały osiągnięte, które nie są obsłużone)
-- [x] Logi nakładek animacji (`Mdl_ApplyOverlayMds`/`RemoveOverlayMds`), kolejki AI dla animacji `T_PET*`, `T_NO`, `CALL ...`
-- [x] Disasembler `tools/ikarus/disasm.py` do funkcji `GOTHIC.DAT`, których nie ma w dekompilacji
-- [x] Analizator `tools/ikarus/analyze.py` (statyczny, częściowo nieaktualny)
-- [x] Ostrzeżenia ZenKit "Accessing member ... without an instance set" zawierają teraz nazwę funkcji skryptu (patch w `patches/`)
-- [x] Zapis widoków LeGo: `zCFont::GetFontName` i `CALL_RetValAszString` (tekst `zSTRING` zwrócony przez wywołanie silnika, wcześniej zawsze pusty przez łatanie kodu parsera w `MEMINT_StrAssign`) działają natywnie; zniknęły wyjątki `OCNPC.ENEMY` i `STR_SubStr` przy zapisie i wczytaniu *(potwierdzone)*
-- [x] Zapis do pozycji stosu poza kodem skryptu nie wywala gry (log `DMA: the write to the position of the stack outside the code`) *(potwierdzone: crash przy wczytaniu zniknął)*
-- [ ] Przy wczytaniu `PermMem` zostają ostrzeżenia `FIXME: unsafe jump ... _PM_SAVESTRUCTTOINST` i `address translation failure` (obiekty `GCPRINTS`: teksty na ekranie z wskaźnikami do widoków); callback zapisu do `zCParser` traktuje każdy zapis w regionie jak skok skryptu, ustalić, które pola `zCParser` są naprawdę zapisywane
-- [x] Źródło ostrzeżeń na starcie świata ustalone z logu i uznane za nieszkodliwe: `RESTORENPCNAMES` czyta `AIVAR[79]` postaci, których nie ma jeszcze w świecie (0, tak jak w oryginale), `INIT_ITEMGROUPS_MEAT` zapisuje `HP` w instancjach grup przedmiotów (konstruktor instancji i tak ustawia to pole), `SPELL_TELEKINESIS_FOCUS_REMOVER` odpala się przed pojawieniem się bohatera
-- [ ] `ApplyHouseWallTexture: Null ptr` na starcie świata: zmiana tekstury ścian domu gracza wymaga wymiany tekstury materiału w rendererze (`zCTexture::Load` i ponowne wczytanie danych); kosmetyka, bez wpływu na fabułę
-- [ ] Symbole i offset w `crash.log` (dziś tylko nazwy funkcji)
-- [ ] Przejrzeć 10-sekundowy limit oczekiwania dialogu na kolejki (arbitralny)
-
-## 13. Narzędzia do ręcznych prób (`comcheck`, mod Developer tools)
-
-- [x] `comcheck text`, `wait [s]`, `cancel`, `drop [przedmiot]`, `chest [vob] [przedmiot] [ilość]`
-- [x] `comcheck ranged [bow|crossbow|aim|shoot|stop|status|clear]`
-- [x] `comcheck scene smokers`
-- [x] `comcheck time [stop]`, `comcheck inventory [off]`
-- [x] `comcheck trader`, `comcheck party [off]`, `comcheck finish [flag]`, `comcheck lock [kod|off|items|talent N|bonus N]` (skrzynie, talent i bonus wytrycha, zwoje)
-- [x] API modów JS: `debug.call`, `debug.setSymbol`, `debug.parkNpc`, `debug.placeOnGround`, `debug.setInfoKnown`, `npc.openTrade`, `npc.aiVar`/`setAiVar`, `npc.flags`/`setFlags`, `npc.rangedShots`
-- [x] Narzędzia do prób zapisów: `comcheck state` (migawka do porównania przed zapisem i po wczytaniu), `item`, `clock`, `world`, `wp`, `tp`, `heal`, `god`, `xp`, `attr`; API `world.changeLevel(zen, waypoint)`
-- [x] Spawn postaci i dodawanie przedmiotów w zakładce Debug (F10)
-- [ ] Komendy przygotowujące sceny dla kolejnych zadań (Q204, Q205, Q304, Q306, Q406, Q602) bez zapisów odbiorowych
-
-## 14. Zgodność z G1 i G2 oraz repozytorium
-
-- [x] Dialogi: oczekiwanie na kolejki i odpowiedzi `?...` tylko w grach z warstwą Ikarus/LeGo
-- [x] Hooki gry (upuszczanie, sprzedaż, ekwipunek, focus kompanów, dobijanie, czas świata) tylko po zarejestrowaniu hooka przez mod
-- [x] Zmiany ZenKit trzymane jako patch w `patches/zenkit-opengothic.patch` (submoduł jest upstreamowy, brak forka): `invoke_function`, `pop_int` instancji, pola `compat_*` w `INpc`
-- [x] Zapisy w wersji 56, nowe akcje AI dopisane na końcu (stare numery zachowane)
-- [x] Patch ZenKit nakładany automatycznie przez CMake (`cmake/zenkitpatch.cmake`): czysty klon, build na Androida i CI nie wymagają ręcznych kroków (sprawdzone na czystej kopii źródeł ZenKit: pierwsza konfiguracja nakłada, druga nic nie robi; pełna konfiguracja czystego klona z podmodułami nie była robiona)
-- [ ] Fork ZenKit z tymi zmianami (żeby submoduł wskazywał na commit dostępny w sieci); patch przestaje być potrzebny
-- [ ] Przegląd zgodności zapisów G1/G2 po zmianach serializacji (nowe pola tylko z wersjonowaniem)
-- [ ] Ręczna regresja czystego G1 i G2 (dialogi, handel, ekwipunek, walka)
-
-## 15. Przechodniość Kronik (nadrzędny cel)
-
-- [ ] Ręczna regresja wszystkich rozdziałów, dróg gildyjnych, zakończeń i zadań pobocznych
-- [ ] Porównanie z oryginalną grą w tej samej wersji danych (`GAME_VERSION=23`, `BUILD_VERSION=142565`, Ikarus `10202`, LeGo `2.7.0`)
-- [ ] Lista zapisów odbiorowych dla każdej mechaniki
-- [ ] Brak znanych blockerów fabuły i utraty zapisów
-
-Nie podajemy procentu ukończenia na podstawie liczby obsłużonych hooków i adresów: liczba miejsc wywołania w DAT nie mówi, ile razy dana funkcja zostanie wykonana w grze.
+DAT SHA256: `7fba1af724ae528836a2537573b0d36024cd8a92d493e15a11c8e159ef44d54e`. Przejrzano 206709 symboli
+i 240563 statycznych wywołań BL/BE. Nierozpoznane bezpośrednie
+cele bytecode: 0. To nie rozstrzyga semantyki handlerów
+ani przechodniości gry. Szczegóły wykonanych zmian: ARCHOLOS_AUDIT_2026-10-24.md.

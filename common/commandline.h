@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "game/constants.h"
 
@@ -30,6 +31,8 @@ class CommandLine {
     std::u16string      cutscenePath() const;
     std::u16string      cutscenePath(ScriptLang lang) const;
     std::u16string_view modPath() const { return gmod; }
+    std::string         commandLine() const;
+    std::string         parameterValue(std::string_view name) const;
     std::u16string      nestedPath(const std::initializer_list<const char16_t*> &name, Tempest::Dir::FileType type) const;
 
     bool                isDevMode()        const { return devmode;      }
@@ -61,6 +64,7 @@ class CommandLine {
     std::u16string      gpath, gmod;
     std::u16string      gscript;
     std::u16string      gcutscene;
+    std::vector<std::string> arguments;
     int                 saveSlot = -1;
 #ifdef OPENGOTHIC_TOUCH_UI
     bool                showErrors   = true;

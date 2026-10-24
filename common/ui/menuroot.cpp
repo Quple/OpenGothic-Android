@@ -37,6 +37,13 @@ void MenuRoot::initSettings() {
     Log::d("TODO: apply_options_video");
     });
 
+  Gothic::inst().setObjectDistanceMenu({});
+  if(auto* symbol = vm->find_symbol_by_name("MENUITEM_VOB_SIGHT_CHOICE")) {
+    const auto item = vm->init_instance<zenkit::IMenuItem>(symbol);
+    if(item->type==zenkit::MenuItemType::CHOICEBOX && item->on_chg_set_option=="zVobFarClipZScale")
+      Gothic::inst().setObjectDistanceMenu(item->text[0]);
+    }
+
   for(auto& i:menuStack)
     i->resetVm(vm.get());
   if(current!=nullptr)

@@ -182,6 +182,9 @@ GameSession::~GameSession() {
   }
 
 void GameSession::save(Serialize &fout, std::string_view name, const Pixmap& screen) {
+  // LeGo's archive callback and CoM's torch check may update script globals.
+  // Run them before taking either the world or the Daedalus snapshot.
+  vm->dmaBeforeSave();
   SaveGameHeader hdr;
   hdr.version   = Serialize::Version::Current;
   hdr.name      = name;

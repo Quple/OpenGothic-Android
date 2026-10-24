@@ -4,6 +4,7 @@
 #include <functional>
 #include <future>
 #include <cctype>
+#include <cmath>
 
 #include <Tempest/Log>
 #include <Tempest/Painter>
@@ -185,6 +186,7 @@ void World::load(Serialize &fin) {
 
   wobj.load(fin);
   npcPlayer = wobj.findHero();
+  globFx->load(fin);
   }
 
 void World::save(Serialize &fout) {
@@ -197,6 +199,7 @@ void World::save(Serialize &fout) {
     }
 
   wobj.save(fout);
+  globFx->save(fout);
   }
 
 uint32_t World::npcId(const Npc *ptr) const {
@@ -445,6 +448,8 @@ Focus World::findFocus(const Npc &pl, const Focus& def) {
 
   WorldObjects::SearchOpt optNpc {policy.npc_range1,  policy.npc_range2,  policy.npc_azi,  collAlgo, collType, opt};
   WorldObjects::SearchOpt optMob {policy.mob_range1,  policy.mob_range2,  policy.mob_azi,  collAlgo};
+  if(bool(collType&TARGET_TYPE_MOB))
+    optMob.collectType = collType;
   WorldObjects::SearchOpt optItm {policy.item_range1, policy.item_range2, policy.item_azi, collAlgo, collType};
 
   if(pl.weaponState()==WeaponState::NoWeapon) {
@@ -647,6 +652,20 @@ void World::removeNpc(Npc& npc) {
 
 Item *World::addItem(size_t itemInstance, std::string_view at) {
   return wobj.addItem(itemInstance,at);
+  }
+
+Vob* World::addObject(std::string_view visual, std::string_view at) {
+  const auto* point = findPoint(at,false);
+  if(point==nullptr) {
+    Tempest::Log::e("Wld_InsertObject: spawn point not found: ",at);
+    return nullptr;
+    }
+  Tempest::Matrix4x4 transform;
+  transform.identity();
+  transform.translate(point->position());
+  const auto dir = point->direction();
+  transform.rotateOY(float(std::atan2(dir.x,dir.z)*180.0/M_PI));
+  return wobj.addScriptObject(visual,transform);
   }
 
 Item* World::addItem(const zenkit::VItem& vob) {

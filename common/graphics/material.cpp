@@ -11,10 +11,10 @@ static Tempest::Color toColor(zenkit::Color v) {
   }
 
 Material::Material(const zenkit::Material& m, bool enableAlphaTest) {
-  tex = Resources::loadTexture(m.texture);
+  tex = Resources::loadTextureWorld(m.texture);
   if(tex==nullptr) {
     if(!m.texture.empty()) {
-      tex = Resources::loadTexture("DEFAULT.TGA");
+      tex = Resources::loadTextureWorld("DEFAULT.TGA");
       } else {
       tex = Resources::loadTexture(toColor(m.color));
       enableAlphaTest &= (m.color.a!=255);
@@ -45,9 +45,9 @@ Material::Material(const zenkit::Material& m, bool enableAlphaTest) {
   }
 
 Material::Material(const zenkit::VisualDecal& decal) {
-  tex = Resources::loadTexture(decal.name);
+  tex = Resources::loadTextureWorld(decal.name);
   if(tex==nullptr && !decal.name.empty())
-    tex = Resources::loadTexture("DEFAULT.TGA");
+    tex = Resources::loadTextureWorld("DEFAULT.TGA");
   loadFrames(decal.name, decal.texture_anim_fps);
 
   alpha        = loadAlphaFunc(decal.alpha_func, zenkit::MaterialGroup::UNDEFINED, decal.alpha_weight, tex, true);
@@ -55,7 +55,7 @@ Material::Material(const zenkit::VisualDecal& decal) {
   }
 
 Material::Material(const zenkit::IParticleEffect& src) {
-  tex = Resources::loadTexture(src.vis_name_s);
+  tex = Resources::loadTextureWorld(src.vis_name_s);
   loadFrames(src.vis_name_s, src.vis_tex_ani_fps);
 
   //TODO: visTexAniIsLooping

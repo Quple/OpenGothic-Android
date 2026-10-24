@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "count_kind": "static_call_sites",
+  "primary": "dat",
+  "source_files": 5087,
+  "source_definitions": 52042,
+  "source_call_sites": 238532,
+  "dat_symbols": 206709,
+  "dat_call_sites": 240563,
+  "unresolved_bytecode_calls": 0,
+  "function_status": {
+    "external_bound": 241,
+    "script_defined": 37834,
+    "overridden_review_semantics": 111,
+    "missing_external": 76
+  },
+  "called_function_status": {
+    "external_bound": 216,
+    "script_defined": 5537,
+    "overridden_review_semantics": 100
+  },
+  "native_status": {
+    "dynamic_expression": 75,
+    "caller_overridden_review_semantics": 46,
+    "registered_review_semantics": 186,
+    "missing_native": 84,
+    "registered_trivial": 12,
+    "missing_hook_bridge": 92,
+    "special_event_adapter_review_semantics": 4,
+    "hook_declared_review_semantics": 72
+  },
+  "native_status_by_origin": {
+    "dat": {
+      "dynamic_expression": 41,
+      "caller_overridden_review_semantics": 20,
+      "registered_review_semantics": 68,
+      "missing_native": 35,
+      "special_event_adapter_review_semantics": 2,
+      "missing_hook_bridge": 44,
+      "hook_declared_review_semantics": 36,
+      "registered_trivial": 4
+    },
+    "ikarus": {
+      "dynamic_expression": 12,
+      "caller_overridden_review_semantics": 7,
+      "registered_review_semantics": 11,
+      "missing_native": 11,
+      "registered_trivial": 2
+    },
+    "lego": {
+      "registered_review_semantics": 47,
+      "missing_native": 13,
+      "dynamic_expression": 4,
+      "missing_hook_bridge": 5,
+      "special_event_adapter_review_semantics": 2,
+      "hook_declared_review_semantics": 6,
+      "caller_overridden_review_semantics": 4
+    },
+    "mod": {
+      "caller_overridden_review_semantics": 15,
+      "registered_review_semantics": 60,
+      "dynamic_expression": 18,
+      "missing_hook_bridge": 43,
+      "hook_declared_review_semantics": 30,
+      "missing_native": 25,
+      "registered_trivial": 6
+    }
+  },
+  "limitations": [
+    "Counts do not measure runtime frequency or campaign playability.",
+    "Registrations and overrides need semantic review; partial adapters may exist.",
+    "Dynamic calls/callbacks are not resolved into graph edges.",
+    "Source hooks need an event and register/stack contract review.",
+    "Library source versions may differ from libraries embedded in DAT."
+  ],
+  "dat_sha256": "7fba1af724ae528836a2537573b0d36024cd8a92d493e15a11c8e159ef44d54e"
+}

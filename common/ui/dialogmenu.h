@@ -176,11 +176,6 @@ class DialogMenu : public Tempest::Widget {
     State                               state=State::Idle;
     Entry                               current;
     Tempest::SoundEffect                currentSnd;
-    struct Lingering final {
-      Tempest::SoundEffect snd;
-      uint64_t             time = 0;
-      };
-    std::vector<Lingering>              lingering;   // the sound of a line that was skipped in a camera of a cutscene: it goes on
     bool                                curentIsPl=false;
     bool                                dlgTrade=false;
     int32_t                             mobsiState=-1;

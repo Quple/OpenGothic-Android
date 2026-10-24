@@ -2,6 +2,7 @@
 
 #include "game/constants.h"
 #include "game/gamescript.h"
+#include "game/globaleffects.h"
 #include "gothic.h"
 #include "world/objects/npc.h"
 #include "world/world.h"
@@ -15,7 +16,7 @@ namespace {
 
 enum Prop : int {
   Valid, Id, Name, Instance, Level, Health, MaxHealth, Mana, MaxMana, Strength, Dexterity, Experience, Dead, GuildOf,
-  IsPlayer, X, Y, Z, Position, Rotation, Puppet, InstanceId, WeaponState_, WeaponItem, Overlays, Armor, RangedItem, Unconscious, Talking, RangedShots
+  IsPlayer, X, Y, Z, Position, Rotation, Puppet, InstanceId, WeaponState_, WeaponItem, Overlays, Armor, RangedItem, Unconscious, Talking, RangedShots, CompatibilityState
   };
 
 constexpr const char* HiddenId    = "__id";
@@ -71,6 +72,15 @@ JSValue get(JSContext* ctx, JSValueConst obj, int prop) {
     case Unconscious: return JS_NewBool(ctx,npc->isUnconscious());
     case Talking:     return JS_NewBool(ctx,npc->isTalk());
     case RangedShots:  return JS_NewUint32(ctx,npc->rangedShotCount());
+    case CompatibilityState: {
+      JSValue state = JS_NewObject(ctx);
+      JS_SetPropertyStr(ctx,state,"diving",JS_NewBool(ctx,npc->isDive()));
+      JS_SetPropertyStr(ctx,state,"diveElapsedMs",JS_NewInt32(ctx,npc->diveTime()));
+      JS_SetPropertyStr(ctx,state,"diveLimitMs",JS_NewInt32(ctx,npc->diveTimeLimit()));
+      auto* effects = npc->world().globalFx();
+      JS_SetPropertyStr(ctx,state,"requestedModelScale",JS_NewFloat64(ctx,effects==nullptr ? 1.0 : double(effects->modelTimeScale(*npc))));
+      return state;
+      }
     case WeaponState_: return JS_NewInt32(ctx,int32_t(npc->weaponState()));
     case WeaponItem: {
       const size_t it = npc->meleeWeaponInstance();
@@ -547,6 +557,7 @@ void game::installNpc(JSContext* ctx) {
   getter(ctx,proto,"unconscious",Unconscious);
   getter(ctx,proto,"talking",    Talking);
   getter(ctx,proto,"rangedShots",RangedShots);
+  getter(ctx,proto,"compatibilityState",CompatibilityState);
 
   js::fn(ctx,proto,"setHealth", setHealth,1);
   js::fn(ctx,proto,"heal",      heal,1);

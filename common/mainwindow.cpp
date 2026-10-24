@@ -22,6 +22,7 @@
 #include "world/objects/item.h"
 #include "game/serialize.h"
 #include "game/globaleffects.h"
+#include "game/definitions/musicdefinitions.h"
 #include "utils/gthfont.h"
 #include "utils/haptics.h"
 #include "scripting/gameapi.h"
@@ -172,6 +173,7 @@ void MainWindow::setupUi() {
 
   Gothic::inst().onDialogPipe  .bind(&dialogs,&DialogMenu::openPipe);
   Gothic::inst().onDialogGuest .bind(&dialogs,&DialogMenu::addGuest);
+  Gothic::inst().onDialogCameraReset.bind(this,&MainWindow::requestDialogCamera);
   Gothic::inst().onOpenTrade   .bind(&inventory,&InventoryMenu::trade);
   Gothic::inst().isNpcInDialogFn = std::bind(&DialogMenu::isNpcInDialog, &dialogs, std::placeholders::_1);
 
@@ -192,6 +194,9 @@ void MainWindow::showDocument(const DocumentMenu::Show& doc) {
   }
 
 void MainWindow::paintEvent(PaintEvent& event) {
+  // This frame's fence was waited before dispatchPaintEvent. Each in-flight
+  // frame owns its preview meshes so resetting cannot free GPU-used buffers.
+  dmaModels[cmdId].reset();
   Painter p(event);
   auto world = Gothic::inst().world();
   auto st    = Gothic::inst().checkLoading();
@@ -275,8 +280,7 @@ void MainWindow::paintEvent(PaintEvent& event) {
           if(showManaBar)
             drawBar(p,barMana, w()-10, h()-10, mp, AlignRight | AlignBottom);
           if(showSwimBar) {
-            uint32_t gl = pl->guild();
-            auto     v  = float(pl->world().script().guildVal().dive_time[gl]);
+            auto     v  = float(pl->diveTimeLimit())/1000.f;
             if(v>0) {
               auto t = float(pl->diveTime())/1000.f;
               drawBar(p,barMisc,w()/2,h()-10, (v-t)/(v), AlignHCenter | AlignBottom);
@@ -360,6 +364,14 @@ void MainWindow::mouseDownEvent(MouseEvent &event) {
 #endif
   if(event.button<sizeof(mouseP))
     mouseP[event.button]=true;
+  if(auto* world = Gothic::inst().world(); world!=nullptr && !rootMenu.isActive() && !video.isActive() && !dialogs.wantsText()) {
+    const auto code = KeyCodec::scriptKeyCode(event.button);
+    if(code>0 && size_t(code)<dmaKeysDown.size() && !dmaKeysDown[size_t(code)]) {
+      dmaKeysDown[size_t(code)] = true;
+      world->script().dmaKeyState(code,true);
+      world->script().dmaKey(code);
+      }
+    }
   auto act     = keycodec.tr(event);
   auto mapping = keycodec.mapping(event);
   player.onKeyPressed(act,KeyEvent::K_NoKey,mapping);
@@ -373,6 +385,12 @@ void MainWindow::mouseUpEvent(MouseEvent &event) {
     androidControls.physical(Mobile::Key::Escape,false);
   return;
 #endif
+  const auto code = KeyCodec::scriptKeyCode(event.button);
+  if(code>0 && size_t(code)<dmaKeysDown.size()) {
+    dmaKeysDown[size_t(code)] = false;
+    if(auto* world = Gothic::inst().world())
+      world->script().dmaKeyState(code,false);
+    }
   auto act     = keycodec.tr(event);
   auto mapping = keycodec.mapping(event);
   player.onKeyReleased(act,mapping);
@@ -487,7 +505,7 @@ void MainWindow::keyDownEvent(KeyEvent &event) {
 
   // the mods of Ikarus and LeGo hook the keys of the game (oCGame::HandleEvent), once for a press
   if(auto* w = Gothic::inst().world(); w!=nullptr && !rootMenu.isActive() && !video.isActive() && !dialogs.wantsText()) {
-    const int32_t code = KeyCodec::keyToCode(event.key);
+    const int32_t code = KeyCodec::scriptKeyCode(event.key);
     if(code>0 && code<int32_t(dmaKeysDown.size()) && !dmaKeysDown[size_t(code)]) {
       dmaKeysDown[size_t(code)] = true;
       w->script().dmaKeyState(code,true);
@@ -606,7 +624,7 @@ void MainWindow::keyUpEvent(KeyEvent &event) {
     }
   Scripting::game::keyEvent(event,false);
   {
-  const int32_t code = KeyCodec::keyToCode(event.key);
+  const int32_t code = KeyCodec::scriptKeyCode(event.key);
   if(code>0 && code<int32_t(dmaKeysDown.size())) {
     dmaKeysDown[size_t(code)] = false;
     if(auto* w = Gothic::inst().world())
@@ -693,8 +711,10 @@ void MainWindow::focusEvent(FocusEvent &event) {
     dMouse = Point();
     }
 #endif
-  if(!event.in)
+  if(!event.in) {
+    clearInput();
     return;
+    }
   dMouse = Point();
 
   if(SystemApi::isFullscreen(hwnd()))
@@ -866,7 +886,7 @@ void MainWindow::drawTouchBars(Painter& p, Npc& pl) {
   drawBar(p,barHp,w()/2-half,y,width,hp,AlignLeft | AlignBottom);
   const int xr = w()/2+half-width;
   if(pl.isDive()) {
-    const float total = float(pl.world().script().guildVal().dive_time[pl.guild()]);
+    const float total = float(pl.diveTimeLimit())/1000.f;
     const float left  = total>0 ? (total-float(pl.diveTime())/1000.f)/total : 0.f;
     drawBar(p,barMisc,xr,y,width,left,AlignLeft | AlignBottom);
     } else {
@@ -894,7 +914,7 @@ void MainWindow::drawDmaOverlay(Tempest::Painter& p) {
     return;
 
   dmaOverlay.clear();
-  world->script().dmaOverlay(dmaOverlay);
+  world->script().dmaOverlay(dmaOverlay,w(),h());
   if(dmaOverlay.empty())
     return;
 
@@ -910,7 +930,26 @@ void MainWindow::drawDmaOverlay(Tempest::Painter& p) {
     const auto color = brushColor(it.color);
     if(color.a()<=0.01f)
       continue;
-    if(it.kind==GameScript::DmaOverlayItem::Image) {
+    if(it.kind==GameScript::DmaOverlayItem::Model) {
+      if(it.model!=nullptr && it.model->user_ptr!=nullptr) {
+        const auto* item = reinterpret_cast<const Item*>(it.model->user_ptr);
+        const auto width = int(it.w*sx), height = int(it.h*sy);
+        if(width>0 && height>0)
+          dmaModels[cmdId].drawItem(int(it.x*sx),int(it.y*sy),width,height,*item);
+        }
+      } else if(it.kind==GameScript::DmaOverlayItem::Triangle) {
+      if(const auto* tex = Resources::loadTexture(it.name)) {
+        const auto blend = it.blend==1 ? Painter::NoBlend : it.blend==3 ? Painter::Add : Painter::Alpha;
+        p.setBrush(Brush(*tex,color,blend));
+        const auto& a = it.vertices[0];
+        const auto& b = it.vertices[1];
+        const auto& c = it.vertices[2];
+        const float tw = float(tex->w()), th = float(tex->h());
+        p.drawTriangle(a.x*sx,a.y*sy,a.u*tw,a.v*th,
+                       b.x*sx,b.y*sy,b.u*tw,b.v*th,
+                       c.x*sx,c.y*sy,c.u*tw,c.v*th);
+        }
+      } else if(it.kind==GameScript::DmaOverlayItem::Image) {
       const int x = int(it.x*sx), y = int(it.y*sy), iw = int(it.w*sx), ih = int(it.h*sy);
       if(iw<=0 || ih<=0)
         continue;
@@ -1189,6 +1228,10 @@ bool MainWindow::sceneLocksUi() const {
   return sceneLockTime>0 && sceneLockTime<120000;
   }
 
+void MainWindow::requestDialogCamera() {
+  dialogCameraReset = true;
+  }
+
 void MainWindow::tickCamera(uint64_t dt) {
   {
   auto* w = Gothic::inst().world();
@@ -1202,6 +1245,14 @@ void MainWindow::tickCamera(uint64_t dt) {
     return;
 
   auto&      camera       = *pcamera;
+  if(dialogCameraReset && !camera.isCutscene()) {
+    dialogCameraReset = false;
+    auto* world = Gothic::inst().world();
+    if(dialogs.isActive() && !camera.isFree() && world!=nullptr && !world->script().dmaDialogCameraOff()) {
+      camera.setMode(Camera::Dialog);
+      dialogs.dialogCamera(camera);
+      }
+    }
   const auto ws           = pl!=nullptr ? pl->weaponState() : WeaponState::NoWeapon;
   const bool meleeFocus   = (ws==WeaponState::Fist ||
                              ws==WeaponState::W1H  ||
@@ -1314,6 +1365,10 @@ void MainWindow::startGame(std::string_view slot) {
   }
 
 void MainWindow::loadGame(std::string_view slot) {
+  if(auto* w = Gothic::inst().world(); w!=nullptr && w->script().dmaLoadDisabled()) {
+    Log::i("The scripts of the mod do not allow loading now (ENABLELOADGAME)");
+    return;
+    }
   if(Gothic::inst().checkLoading()==Gothic::LoadState::Idle) {
     setGameImpl(nullptr);
     }
@@ -1395,6 +1450,7 @@ void MainWindow::onVideo(std::string_view fname) {
   }
 
 void MainWindow::onStartLoading() {
+  dialogCameraReset = false;
   player   .clearInput();
   inventory.onWorldChanged();
   dialogs  .onWorldChanged();
@@ -1478,6 +1534,12 @@ void MainWindow::setGameImpl(std::unique_ptr<GameSession> &&w) {
 void MainWindow::clearInput() {
   player.clearInput();
   std::memset(mouseP,0,sizeof(mouseP));
+  if(auto* world = Gothic::inst().world()) {
+    for(size_t code=1; code<dmaKeysDown.size(); ++code)
+      if(dmaKeysDown[code])
+        world->script().dmaKeyState(int(code),false);
+    }
+  dmaKeysDown.reset();
   }
 
 void MainWindow::setFullscreen(bool fs) {
@@ -1491,7 +1553,10 @@ void MainWindow::render(){
 
     static bool once=true;
     if(once) {
-      Gothic::inst().emitGlobalSoundWav("GAMESTART.WAV");
+      // CoM supplies its own menu recording. The vanilla startup WAV is a
+      // long musical cue on the SFX device, independent of the music player.
+      if(!Gothic::musicDef().hasRecordedMusic())
+        Gothic::inst().emitGlobalSoundWav("GAMESTART.WAV");
       once=false;
       }
 
@@ -1530,6 +1595,7 @@ void MainWindow::render(){
       return;
       }
     Resources::resetRecycled(cmdId);
+    Resources::updateTextureQuality(Gothic::settingsGetF("INTERNAL","texDetailIndex"));
 
     if(video.isActive()) {
       video.paint(device,cmdId);
@@ -1557,6 +1623,9 @@ void MainWindow::render(){
     {
     auto enc = cmd.startEncoding(device);
     renderer.draw(swapchain[swapchain.currentImage()],enc,cmdId,uiMesh[cmdId],numMesh[cmdId],inventory,video);
+    if(!dmaModels[cmdId].isEmpty() && !video.isActive() && !document.isActive() &&
+       !chapter.isActive() && !rootMenu.isActive() && Gothic::inst().checkLoading()==Gothic::LoadState::Idle)
+      renderer.drawUiItems(swapchain[swapchain.currentImage()],enc,dmaModels[cmdId]);
 #ifdef OPENGOTHIC_TOUCH_UI
     // The last pass: controls stay above menus, video and 3D inventory
     enc.setViewport(0,0,w(),h());
@@ -1885,7 +1954,7 @@ void MainWindow::updateMobileOverlay() {
     hud.diving      = pl->isDive();
     hud.manaVisible = ws==WeaponState::Mage || pl->attribute(ATR_MANA)<pl->attribute(ATR_MANAMAX);
 
-    const auto diveTime = float(pl->world().script().guildVal().dive_time[pl->guild()]);
+    const auto diveTime = float(pl->diveTimeLimit())/1000.f;
     hud.oxygen = diveTime>0 ? 1.f-float(pl->diveTime())/(1000.f*diveTime) : 0.f;
 
     for(const auto& b:androidControls.buttons()) {

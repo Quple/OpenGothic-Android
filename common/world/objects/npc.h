@@ -173,6 +173,8 @@ class Npc final {
     void       puppetSetHealth(int32_t hp);
 
     void       setWalkMode(WalkBit m);
+    void       setWalkStopChasm(bool enabled) { walkStopChasmEnabled = enabled; }
+    bool       walkStopChasm() const { return walkStopChasmEnabled; }
     WalkBit    walkMode() const;
     void       tick(uint64_t dt);
     void       tickAnimationTags();
@@ -295,6 +297,8 @@ class Npc final {
     int32_t    experienceNext() const;
     int32_t    learningPoints() const;
     int32_t    diveTime() const;
+    int32_t    diveTimeLimit() const;
+    void       setDiveBreath(int32_t limit, int32_t remaining);
 
     void      setAttitude(Attitude att);
     Attitude  attitude() const { return permAttitude; }
@@ -410,11 +414,13 @@ class Npc final {
     Item*     getItem    (size_t id);
     Item*     addItem    (size_t id, size_t amount);
     Item*     addItem    (std::unique_ptr<Item>&& i);
-    Item*     takeItem   (Item& i);
+    Item*     takeItem   (Item& i, bool animate = true);
     void      onWldItemRemoved(const Item& itm);
     void      delItem    (size_t id, uint32_t amount);
     void      useItem    (size_t item);
     void      useItem    (size_t item, uint8_t slotHint, bool force);
+    void      equipItem  (size_t item);
+    void      equipBestWeapon(ItmFlags category);
     void      setCurrentItem(size_t item);
     void      unequipItem(size_t item);
     void      addItem    (size_t id, Interactive& chest, size_t count=1);
@@ -423,6 +429,10 @@ class Npc final {
     void      sellItem   (size_t id, Npc& to,            size_t count=1);
     void      buyItem    (size_t id, Npc& from,          size_t count=1);
     void      dropItem   (size_t id,                     size_t count=1);
+    Item*     itemInSlot (std::string_view slot);
+    bool      dropFromSlot(std::string_view slot);
+    bool      isSpellActive(int32_t spell) const;
+    const std::shared_ptr<zenkit::IItem>& torchItem() const;
     void      clearInventory();
     void      notifyItemTaken(Item* it);
     Item*     currentArmor();
@@ -640,6 +650,9 @@ class Npc final {
     DynamicWorld::NpcItem          physic;
 
     WalkBit                        wlkMode                 =WalkBit::WM_Run;
+    bool                           walkStopChasmEnabled     =true;
+    int32_t                        compatDiveLimit          =-1;
+    int32_t                        compatDiveRemaining      =0;
     int32_t                        trGuild                 =GIL_NONE;
     int32_t                        talentsSk[TALENT_MAX_G2]={};
     int32_t                        talentsVl[TALENT_MAX_G2]={};

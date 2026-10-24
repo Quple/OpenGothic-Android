@@ -1,5 +1,10 @@
 # Ikarus and LeGo
 
+Current DAT/source audit and remaining gaps: [24 October 2026](ARCHOLOS_AUDIT_2026-10-24.md).
+See [the audit tool documentation](../tools/ikarus/README.md) for `--dat`, static
+call counts, complete disassembly and semantic-review reports. Counts below are
+historical and do not certify current campaign compatibility.
+
 Ikarus and LeGo are libraries of scripts for Gothic 2. They read and write the memory of the original program
 (`MEM_ReadInt`, `_^`, `_@`), call its functions by their addresses in `Gothic2.exe` (`CALL__thiscall`) and replace its
 code (`HookEngine`). The mods that use them, for example *The Chronicles of Myrtana: Archolos* (CoM), cannot run in

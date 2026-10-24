@@ -48,7 +48,7 @@ class Dat:
         for i in range(count):
             named = self.u32()
             name = self.line() if named else ""
-            self.u32()
+            vary = self.u32()
             props = self.u32()
             n, typ, flags = props & 0xFFF, (props >> 12) & 0xF, (props >> 16) & 0x3F
             for _ in range(5):
@@ -67,7 +67,8 @@ class Dat:
                 elif typ in (5, 6, 7):
                     value = self.u32()
             parent = self.u32()
-            self.symbols.append({"name": name, "type": typ, "flags": flags, "count": n, "value": value, "parent": parent})
+            self.symbols.append({"name": name, "type": typ, "flags": flags, "count": n, "value": value, "parent": parent,
+                                 "return_type": vary if typ == 5 else None})
         size = self.u32()
         self.code = self.d[self.p:self.p + size]
 
@@ -79,12 +80,47 @@ class Dat:
 
     def functions(self):
         out = [(s["value"], i) for i, s in enumerate(self.symbols)
-               if s["type"] in (5, 7) and isinstance(s["value"], int) and s["value"] > 0 and not (s["flags"] & 0x4)]
+               if s["type"] in (5, 6, 7) and isinstance(s["value"], int) and not (s["flags"] & (4 | 8))
+               and (s["type"] != 5 or s["flags"] & 1)]
         return sorted(out)
+
+    def write_disassembly(self, path):
+        """Dump the whole bytecode in one pass; include aliases and zero-call functions."""
+        labels = {}
+        for address, index in self.functions():
+            labels.setdefault(address, []).append(self.sym(index))
+        pc = 0
+        with open(path, 'w', encoding='utf-8') as out:
+            while pc < len(self.code):
+                if pc in labels:
+                    out.write('\n== ' + ', '.join(labels[pc]) + f' at {pc:#x}\n')
+                op = self.code[pc]
+                if op not in OPS:
+                    raise ValueError(f'Unknown opcode {op} at {pc:#x}')
+                size = 6 if op == 245 else 5 if op in (61, 62, 64, 65, 67, 75, 76, 80) else 1
+                if pc + size > len(self.code):
+                    raise ValueError(f'Truncated instruction at {pc:#x}')
+                arg = ''
+                if size >= 5:
+                    value = struct.unpack_from('<I', self.code, pc+1)[0]
+                    if op == 61:
+                        arg = f' {value:#x} ' + ', '.join(labels.get(value, []))
+                    elif op in (62, 65, 67, 80, 245):
+                        arg = ' ' + self.sym(value)
+                        if op == 245:
+                            arg += f'[{self.code[pc+5]}]'
+                    elif op == 64:
+                        arg = ' ' + str(struct.unpack_from('<i', self.code, pc+1)[0])
+                    else:
+                        arg = f' {value:#x}'
+                out.write(f'{pc:08x} {OPS[op]:9}{arg}\n')
+                pc += size
 
     def disasm(self, name):
         name = name.upper()
-        idx = next((i for i, s in enumerate(self.symbols) if s["name"].upper() == name and s["type"] == 5), None)
+        idx = next((i for i, s in enumerate(self.symbols)
+                    if s["name"].upper() == name and s["type"] in (5, 6, 7)
+                    and isinstance(s["value"], int) and not (s["flags"] & (4 | 8))), None)
         if idx is None:
             print("no function", name)
             return
@@ -118,6 +154,7 @@ class Dat:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(errors='backslashreplace')
     dat = Dat(sys.argv[1])
     for fn in sys.argv[2:]:
         dat.disasm(fn)

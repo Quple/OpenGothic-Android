@@ -58,11 +58,15 @@ void InstanceStorage::Id::set(const Tempest::Matrix4x4* mat) {
   if(owner==nullptr)
     return;
 
-  auto data = reinterpret_cast<Matrix4x4*>(owner->dataCpu.data() + rgn.begin);
-  std::memcpy(data, mat, rgn.asize);
-
-  for(size_t i=0; i<rgn.asize; i+=blockSz)
-    bitSet(owner->durty, (rgn.begin+i)/blockSz);
+  auto* dst = owner->dataCpu.data() + rgn.begin;
+  const auto* src = reinterpret_cast<const uint8_t*>(mat);
+  for(size_t i=0; i<rgn.asize; i+=blockSz) {
+    const size_t size = std::min(blockSz,rgn.asize-i);
+    if(std::memcmp(dst+i,src+i,size)==0)
+      continue;
+    std::memcpy(dst+i,src+i,size);
+    bitSet(owner->durty,(rgn.begin+i)/blockSz);
+    }
   }
 
 void InstanceStorage::Id::set(const Tempest::Matrix4x4& obj, size_t offset) {
@@ -113,6 +117,7 @@ InstanceStorage::InstanceStorage() {
   }
 
 InstanceStorage::~InstanceStorage() {
+  join();
   {
     std::unique_lock<std::mutex> lck(sync);
     uploadFId = Resources::MaxFramesInFlight;
@@ -207,11 +212,8 @@ bool InstanceStorage::commit(Encoder<CommandBuffer>& cmd, uint8_t fId) {
   }
 
 void InstanceStorage::join() {
-  while(true) {
-    std::unique_lock<std::mutex> lck(sync);
-    if(uploadFId<0)
-      break;
-    }
+  std::unique_lock<std::mutex> lck(sync);
+  uploadDone.wait(lck,[this](){ return uploadFId<0; });
   }
 
 InstanceStorage::Id InstanceStorage::alloc(const size_t size) {
@@ -307,7 +309,7 @@ void InstanceStorage::uploadMain() {
   Workers::setThreadName("InstanceStorage upload");
   while(true) {
     std::unique_lock<std::mutex> lck(sync);
-    uploadCnd.wait(lck);
+    uploadCnd.wait(lck,[this](){ return uploadFId>=0; });
     if(uploadFId==Resources::MaxFramesInFlight)
       break;
     if(uploadFId<0)
@@ -315,5 +317,7 @@ void InstanceStorage::uploadMain() {
 
     patchGpu[uploadFId].update(patchCpu);
     uploadFId = -1;
+    lck.unlock();
+    uploadDone.notify_all();
     }
   }

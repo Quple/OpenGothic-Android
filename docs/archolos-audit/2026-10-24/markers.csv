@@ -1,0 +1,123 @@
+file,line,excerpt
+common/bink/video.cpp,4,// TODO: fix clang warnings
+common/bink/video.cpp,1161,"throw std::runtime_error(""not implemented"");"
+common/bink/video.cpp,1319,"throw VideoDecodingException(""not implemented block type"");"
+common/bink/video.cpp,2098,"// TODO: handle split-radix permute in a more optimal way, probably in-place"
+common/camera.cpp,811,// TODO: DialogCams.zen
+common/commandline.cpp,262,"throw GothicNotFoundException(""gothic not found!""); // TODO: user-friendly message-box"
+common/dmusic/hydra.cpp,223,const uint16_t time = 61550; //FIXME
+common/dmusic/patternlist.cpp,77,noteValue += chordOffset+4; //FIXME
+common/game/compatibility/cpu32.cpp,121,"Log::e(""ASMINT: unimplemented instruction: "", int32_t(op));"
+common/game/compatibility/cpu32.cpp,160,//TODO: propper stack maintanance
+common/game/compatibility/cpu32.cpp,194,"Log::e(""ASMINT: unimplemented instruction: "", int32_t(op));"
+common/game/compatibility/cpu32.cpp,210,"Log::e(""ASMINT: unimplemented instruction: "", int32_t(op));"
+common/game/compatibility/cpu32.cpp,257,//TODO: better representation of *.dll in memory
+common/game/compatibility/directmemory.cpp,103,"Log::d(""TODO: memory_instance::get_string "", sym.name());"
+common/game/compatibility/directmemory.cpp,179,"Log::e(""not implemented call [_RENDER_INIT]"");"
+common/game/compatibility/directmemory.cpp,238,//TODO: propper hook-engine
+common/game/compatibility/directmemory.cpp,638,(*p)[5] = BAD_BUILTIN_PTR; //TODO: pick-lock spells
+common/game/compatibility/directmemory.cpp,690,mem_world.WAYNET       = BAD_BUILTIN_PTR; //TODO: add implement some proxy to waynet
+common/game/compatibility/directmemory.cpp,997,// TODO: currSortedSymbolTableAddress
+common/game/compatibility/directmemory.cpp,998,// TODO: currParserStackAddress
+common/game/compatibility/directmemory.cpp,1001,p.stack_stack = 0; //TODO: map insteructions into mem32?
+common/game/compatibility/directmemory.cpp,1025,"Log::e(""FIXME: unsafe jump: the write to "",reinterpret_cast<void*>(uint64_t(mem32.lastWriteAddress())),"", pc "",vm.pc(),"" to "",p.stack_stackptr,"" from `\"""","
+common/game/compatibility/directmemory.cpp,1183,"Log::e(""ikarus: write to symbol "", sym.name(),"" table is not implemented"");"
+common/game/compatibility/directmemory.cpp,1222,// TODO: pointer to value
+common/game/compatibility/directmemory.cpp,1251,//TODO
+common/game/compatibility/directmemory.cpp,1753,//FIXME: map function into memory for real!
+common/game/compatibility/directmemory.cpp,1784,"Log::d(""TODO: memint_stackpushvar"");"
+common/game/compatibility/directmemory.cpp,1855,// TODO: allow writes to mapped memory
+common/game/compatibility/directmemory.cpp,1936,"Log::d(""suppress LoadLibrary: "", name);"
+common/game/compatibility/directmemory.cpp,1943,"Log::d(""suppress GetProcAddress: "",name);"
+common/game/compatibility/directmemory.cpp,2036,"Log::e(""LeGo: QSORT_G2 of elements of "",eltSize,"" bytes is not implemented"");"
+common/game/compatibility/directmemory.cpp,2125,"Log::d(""not implemented call [HookEngineI] ("", reinterpret_cast<void*>(uint64_t(address)),"
+common/game/compatibility/directmemory.cpp,2135,"// Log::e(""not implemented call [ZCCONSOLE__REGISTER] ("", prefix, "" -> "", name, "")"");"
+common/game/compatibility/directmemory.cpp,2148,"Log::e(""LeGo: 'final' is not implemented"");"
+common/game/compatibility/mem32.cpp,449,continue; //TODO: binary-search
+common/game/compatibility/mem32.cpp,489,// TODO: binary-search
+common/game/compatibility/phoenix.cpp,81,v.Color    = 0xFFFFFFFF;  // TODO: Apply color from material!
+common/game/definitions/sounddefinitions.cpp,22,std::string buf(name); // FIXME
+common/game/definitions/spelldefinitions.cpp,23,for(auto& i:spl) { // TODO: optimize
+common/game/dialogtest.cpp,1328,// the placeholders of the scripts (RESERVED_INFO_nn of the character $INSTANCE_HELP) are not dialogs
+common/game/dialogtest.cpp,1533,"if(t.find(""not implemented call"")!=std::string::npos) {"
+common/game/dialogtest.cpp,1835,std::vector<uint32_t> todo;
+common/game/dialogtest.cpp,1836,todo.push_back(uint32_t(info->information));
+common/game/dialogtest.cpp,1838,while(!todo.empty() && guard++<24) {
+common/game/dialogtest.cpp,1839,const uint32_t fn = todo.front();
+common/game/dialogtest.cpp,1840,todo.erase(todo.begin());
+common/game/dialogtest.cpp,1857,todo.push_back(uint32_t(c.function));
+common/game/fightalgo.cpp,118,tr[0] = MV_NULL; //TODO
+common/game/gamescript.cpp,556,if(itMi_Gold!=nullptr){ // FIXME
+common/game/gamescript.cpp,572,if(itMi_Gold!=nullptr) { // FIXME
+common/game/gamescript.cpp,1304,// oth=npc; //FIXME: PC_Levelinspektor?
+common/game/gamescript.cpp,1390,// FIXME: actually set the spell level!
+common/game/gamescript.cpp,1917,// TODO
+common/game/gamescript.cpp,1918,"Log::i(""effect not implemented ["",visual.data(),""]"");"
+common/game/gamescript.cpp,2163,"Log::e(""not implemented call [wld_israining]"");"
+common/game/gamescript.cpp,2239,"Log::e(""not implemented call [mdl_applyrandomani]"");"
+common/game/gamescript.cpp,2251,"Log::e(""not implemented call [mdl_applyrandomanifreq]"");"
+common/game/gamescript.cpp,2267,"Log::e(""not implemented call [mdl_applyrandomfaceani]"");"
+common/game/gamescript.cpp,2977,return att; //TODO: temp attitudes
+common/game/gamescript.cpp,3051,"Log::e(""not implemented call [npc_isdetectedmobownedbyguild]"");"
+common/game/gamescript.cpp,3320,if(npc!=nullptr && mode>=0 && mode<=3){ //TODO: weapon flags
+common/game/globaleffects.cpp,172,// todo: separated time-scale
+common/gothic.cpp,1048,"Log::e(""not implemented call ["",v->c_str(),""]"");"
+common/gothic.cpp,1144,//TODO: scale
+common/graphics/drawcommands.cpp,368,cmd.dispatch(8096); // TODO: indirect
+common/graphics/effect.cpp,194,// FIXME
+common/graphics/material.cpp,61,//TODO: visTexAniIsLooping
+common/graphics/material.cpp,120,// FIXME: no such materials in game found
+common/graphics/mdlvisual.cpp,794,bs = BS_AIMNEAR; //TODO: BS_AIMFAR
+common/graphics/mesh/animationsolver.cpp,496,"std::snprintf(name,sizeof(name),format,std::string(spell).c_str()); //FIXME"
+common/graphics/mesh/pose.cpp,153,if(lay.size()>0) //TODO
+common/graphics/mesh/pose.cpp,154,"Log::d(""WARNING: "",__func__,"" animation adjustment is not implemented"");"
+common/graphics/mesh/submesh/packedmesh.cpp,815,"//TODO: ensure, that first node is a box node"
+common/graphics/mesh/submesh/packedmesh.cpp,881,//TODO: quad packing in leaf nodes
+common/graphics/mesh/submesh/packedmesh.cpp,888,"//TODO: ensure, that first node is a box node"
+common/graphics/mesh/submesh/packedmesh.cpp,903,v.w = 0; //TODO: texcoords
+common/graphics/mesh/submesh/packedmesh.cpp,979,v.w = 0; //TODO: texcoords
+common/graphics/pfx/pfxbucket.cpp,214,"// TODO: pfx.shpDistribType, pfx.shpDistribWalkSpeed;"
+common/graphics/pfx/pfxbucket.cpp,232,// TODO
+common/graphics/pfx/pfxbucket.cpp,632,v.bits0 |= uint32_t(0) << 3; // TODO: trails
+common/graphics/renderer.cpp,157,shadow.directLightPso = &shaders.vsmDirectLight; //TODO: naming
+common/graphics/renderer.cpp,441,required = false; //TODO: support vsm in gi code
+common/graphics/renderer.cpp,443,required = false; //TODO: support vsm in gi code
+common/graphics/renderer.cpp,645,//FIXME: those also needed to be refactor away
+common/graphics/renderer.cpp,677,frustrum[SceneGlobals::V_Vsm] = frustrum[SceneGlobals::V_Shadow1]; //TODO: remove
+common/graphics/renderer.cpp,1673,//TODO: swrt ?
+common/graphics/renderer.cpp,2322,cmd.dispatchThreads(maxSurfels); //TODO: indirect
+common/graphics/renderer.cpp,2483,cmd.dispatch(1024); // TODO: dispath indirect?
+common/graphics/renderer.cpp,2722,"cmd.setBinding(4, ssao.ssaoBlur, Sampler::nearest(ClampMode::ClampToEdge)); //TODO: remove once splatting is working"
+common/graphics/shaders.cpp,490,return false; //TODO: splatting
+common/graphics/shaders.cpp,525,state.setZTestMode(RenderState::ZTestMode::Greater); //FIXME
+common/graphics/shaders.cpp,528,// state.setZTestMode(RenderState::ZTestMode::Always); //FIXME
+common/graphics/shaders.cpp,529,state.setZTestMode(RenderState::ZTestMode::Greater); //FIXME
+common/mainwindow.cpp,176,"Gothic::inst().isNpcInDialogFn = std::bind(&DialogMenu::isNpcInDialog, &dialogs, std::placeholders::_1);"
+common/physics/collisionworld.cpp,257,//TODO: utilize cb.m_flags ?
+common/physics/dynamicworld.cpp,20,const float DynamicWorld::worldHeight = 20000; //TODO: remove
+common/resources.cpp,219,// TODO: This should return a buffer!
+common/resources.cpp,365,//TODO: __cpp_lib_generic_unordered_lookup
+common/resources.cpp,596,// TODO: reuse code from Resources::implLoadMeshMain
+common/ui/gamemenu.cpp,1302,padd = 100; // TODO: find out exact padding formula
+common/ui/gamemenu.cpp,1886,// TODO: inline marvin commands
+common/ui/menuroot.cpp,37,"Log::d(""TODO: apply_options_video"");"
+common/utils/keycodec.cpp,354,"// TODO: don't use ""Primary"" as a placeholder here."
+common/world/collisionzone.cpp,127,"Tempest::Log::d(""TODO: CollisionZone capsule collision"");"
+common/world/objects/interactive.cpp,42,// TODO: These might be movable
+common/world/objects/interactive.cpp,507,// TODO: hero only?
+common/world/objects/interactive.cpp,807,return false; // TODO: same for npc
+common/world/objects/npc.cpp,432,if(act.target==nullptr) //FIXME: target is null after loading
+common/world/objects/npc.cpp,2214,"visual.interrupt(); // TODO: put down in pipeline, at Pose and merge with setAnimAngGet"
+common/world/objects/vob.cpp,195,// FIXME
+common/world/objects/vob.cpp,203,// FIXME
+common/world/objects/vob.cpp,209,// FIXME
+common/world/objects/vob.cpp,218,// FIXME
+common/world/objects/vob.cpp,233,// Per-zone far-plane blending is not implemented yet.
+common/world/triggers/abstracttrigger.cpp,130,"Log::d(""TODO: trigger["",name(),""]"");"
+common/world/triggers/codemaster.cpp,17,"Tempest::Log::d(""zCCodeMaster::untriggeredCancels is not implemented. Vob: \"""", vobName, ""\"""");"
+common/world/triggers/cscamera.cpp,78,//TODO: lower bound
+common/world/triggers/cscamera.cpp,109,"Log::d(""Object camera not implemented, \"""", name() , ""\"""");"
+common/world/triggers/earthquake.cpp,12,"Log::d(""TODO: earthquake, \"""", name() , ""\"""");"
+common/world/waymatrix.cpp,271,"// TODO: good index, not sort by 'x' :)"
+common/world/world.cpp,378,// TODO: portals
+common/world/world.cpp,1141,if(room->guild==GIL_PUBLIC) //FIXME: proper portal implementation

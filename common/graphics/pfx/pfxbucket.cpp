@@ -32,7 +32,7 @@ float PfxBucket::ParState::lifeTime() const {
 std::mt19937 PfxBucket::rndEngine;
 
 bool PfxBucket::Draw::isEmpty() const {
-  return (pfxGpu.byteSize()==0);
+  return (pfxGpu.byteSize()==0 || count==0);
   }
 
 PfxBucket::PfxBucket(const ParticleFx &decl, PfxObjects& parent, const SceneGlobals& scene, VisualObjects& visual)
@@ -679,6 +679,49 @@ uint32_t PfxBucket::mkTrailColor(float clA) const {
 void PfxBucket::preFrameUpdate(const SceneGlobals& scene, uint8_t fId) {
   auto& device = Resources::device();
 
+  item[fId].count = pfxCpu.size();
+  itemTrl[fId].count = trlCpu.size();
+#ifdef __ANDROID__
+  // Keep simulation and emitter timing intact; compact only render data.
+  // Retain capacity so a changing live count does not allocate every frame.
+  auto upload = [&](Draw& draw, const std::vector<PfxState>& data) {
+    draw.count = data.size();
+    if(data.empty() || (draw.pMain==nullptr && draw.pShadow==nullptr))
+      return;
+    auto& ssbo = draw.pfxGpu;
+    const size_t bytes = data.size()*sizeof(PfxState);
+    if(ssbo.byteSize()<bytes) {
+      const size_t capacity = ((data.size()+63)/64)*64;
+      Resources::recycle(std::move(ssbo));
+      ssbo = device.ssbo(BufferHeap::Upload, Uninitialized, capacity*sizeof(PfxState));
+      }
+    ssbo.update(data);
+    };
+
+  if(!decl.isDecal()) {
+    pfxDrawCpu.clear();
+    for(size_t i=0; i<particles.size(); ++i) {
+      if(particles[i].life==0)
+        continue;
+      const auto& p = pfxCpu[i];
+      // Covers quad and triangular billboards in all orientations.
+      const float radius = 3.f*(std::abs(p.size.x)+std::abs(p.size.y)+std::abs(p.size.z));
+      bool visible = scene.frustrum[SceneGlobals::V_Main].testPoint(p.pos, radius);
+      if(item[fId].pShadow!=nullptr) {
+        for(uint8_t v=SceneGlobals::V_Shadow0; !visible && v<=SceneGlobals::V_ShadowLast; ++v) {
+          if(scene.shadowMap[v]->size()!=Size(1,1))
+            visible = scene.frustrum[v].testPoint(p.pos, radius);
+          }
+        }
+      if(visible)
+        pfxDrawCpu.push_back(p);
+      }
+    upload(item[fId], pfxDrawCpu);
+    upload(itemTrl[fId], trlCpu);
+    return;
+    }
+#endif
+
   if(item[fId].pMain!=nullptr || item[fId].pShadow!=nullptr) {
     // hidden staging under the hood
     auto& ssbo = item[fId].pfxGpu;
@@ -727,7 +770,7 @@ void PfxBucket::drawTranslucent(Tempest::Encoder<Tempest::CommandBuffer>& cmd, c
 
 void PfxBucket::drawCommon(Tempest::Encoder<Tempest::CommandBuffer>& cmd, const SceneGlobals& scene, const Draw& itm,
                            SceneGlobals::VisCamera view, Material::AlphaFunc func, bool trl) {
-  if(itm.pfxGpu.isEmpty())
+  if(itm.pfxGpu.isEmpty() || itm.count==0)
     return;
 
   if(decl.visMaterial.alpha!=func)
@@ -780,5 +823,5 @@ void PfxBucket::drawCommon(Tempest::Encoder<Tempest::CommandBuffer>& cmd, const 
   cmd.setBinding(L_Scene, scene.uboGlobal[view]);
   cmd.setBinding(L_Pfx,   itm.pfxGpu);
   cmd.setPipeline(*pso);
-  cmd.draw(nullptr, 0, 6, 0, itm.pfxGpu.byteSize()/sizeof(PfxState));
+  cmd.draw(nullptr, 0, 6, 0, itm.count);
   }

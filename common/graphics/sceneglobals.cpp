@@ -1,6 +1,7 @@
 #include "sceneglobals.h"
 
 #include "graphics/shaders.h"
+#include "graphics/renderdistance.h"
 #include "graphics/sky/sky.h"
 #include "worldview.h"
 
@@ -43,6 +44,25 @@ SceneGlobals::SceneGlobals() {
   }
 
 SceneGlobals::~SceneGlobals() {
+  }
+
+bool SceneGlobals::isViewEnabled(VisCamera v) const {
+  if(v==V_Vsm)
+    return vsmEnabled;
+  if(v<=V_ShadowLast)
+    return shadowMap[v]->size()!=Tempest::Size(1,1);
+  return true;
+  }
+
+bool SceneGlobals::isObjectVisible(const Tempest::Vec3& position, float radius) const {
+  if(!RenderDistance::sphereVisible((position-originLwc).quadLength(),radius,objectDistance))
+    return false;
+  if(frustrum[V_Main].testPoint(position,radius))
+    return true;
+  for(uint8_t v=V_Shadow0; v<=V_ShadowLast; ++v)
+    if(isViewEnabled(VisCamera(v)) && frustrum[v].testPoint(position,radius))
+      return true;
+  return vsmEnabled && frustrum[V_Vsm].testPoint(position,radius);
   }
 
 bool SceneGlobals::isShadowView(VisCamera v) {
@@ -170,7 +190,6 @@ void SceneGlobals::setTime(uint64_t time) {
 
 void SceneGlobals::commitUbo(uint8_t fId) {
   UboGlobal perView[V_Count];
-  uboGlobalPf[fId][V_Main].update(&uboGlobalCpu);
 
   for(size_t i=V_Shadow0; i<V_Count; ++i) {
     auto& ubo = perView[i];
@@ -183,7 +202,9 @@ void SceneGlobals::commitUbo(uint8_t fId) {
     }
 
   for(size_t i=0; i<V_Count; ++i) {
-    uboGlobalPf[fId][i].update(&perView[i]);
+    // Software shadows also consume the virtual-view globals.
+    if(i==V_Vsm || isViewEnabled(VisCamera(i)))
+      uboGlobalPf[fId][i].update(&perView[i]);
     }
   }
 
@@ -194,6 +215,8 @@ void SceneGlobals::prepareGlobals(Tempest::Encoder<Tempest::CommandBuffer>& cmd,
   cmd.setFramebuffer({});
   auto& pso = Shaders::inst().copyBuf;
   for(uint8_t lay=0; lay<V_Count; ++lay) {
+    if(lay!=V_Vsm && !isViewEnabled(VisCamera(lay)))
+      continue;
     cmd.setBinding(0, uboGlobal[lay]);
     cmd.setBinding(1, uboGlobalPf[fId][lay]);
     cmd.setPipeline(pso);

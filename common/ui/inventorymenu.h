@@ -132,6 +132,7 @@ class InventoryMenu : public Tempest::Widget {
     Interactive*              chest      =nullptr;
 
     std::unique_ptr<Page>     pageOth, pagePl;
+    std::weak_ptr<zenkit::IItem> infoItem;
     PageLocal                 pageLocal[2];
 
     uint8_t                   page       =0;
@@ -190,6 +191,8 @@ class InventoryMenu : public Tempest::Widget {
     void          onItemAction(uint8_t slotHint);
     void          onTakeStuff();
     void          adjustScroll();
+    void          syncScriptCategory(bool reset);
+    void          updateItemInfo(const Item& item);
     void          drawAll   (Tempest::Painter& p, Npc& player, DrawPass pass);
     void          drawItems (Tempest::Painter& p, DrawPass pass, const Page &inv, const PageLocal &sel, int x, int y, int wcount, int hcount);
     void          drawSlot  (Tempest::Painter& p, DrawPass pass, const Inventory::Iterator& it,

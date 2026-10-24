@@ -201,17 +201,25 @@ void DirectMemory::dumpFile(const char* what, const std::string& name, const std
   Log::i("DMA: file ",what," ",name," (",data.size()," bytes): ",txt);
   }
 
-void DirectMemory::eventSaveGame(Serialize& fout) {
+void DirectMemory::eventBeforeSaveGame() {
+  // A levitated item must not be archived as a permanently static object.
+  finishTelekinesis();
   if(hasHook(HookAdr::WriteSavegame)) {
     // oCSavegameManager::SetAndWriteSavegame keeps the slot in [ebp+60]
     const ptr32_t frame = mem32.alloc(256,"frame of SetAndWriteSavegame");
-    mem32.writeInt(frame+60,SCRIPT_SLOT);
-    HookRegs r;
-    r.ebp = frame;
-    fireHook(HookAdr::WriteSavegame,r);
-    mem32.free(frame);
+    if(frame!=0) {
+      mem32.writeInt(frame+60,SCRIPT_SLOT);
+      HookRegs r;
+      r.ebp = frame;
+      fireHook(HookAdr::WriteSavegame,r);
+      mem32.free(frame);
+      }
     }
+  HookRegs regs;
+  fireHook(HookAdr::SaveGameWorld,regs);
+  }
 
+void DirectMemory::eventSaveGame(Serialize& fout) {
   for(auto& f:vfs)
     dumpFile("saved",f.first,f.second);
 
@@ -231,6 +239,9 @@ void DirectMemory::eventSaveGame(Serialize& fout) {
   }
 
 void DirectMemory::eventLoadGame(Serialize& fin) {
+  // Raw renderer pointers in Daedalus variables belong to the old process.
+  // Rebind the freshly initialized renderer before LeGo's load callbacks.
+  initItemRenderer();
   vfs.clear();
   vhandles.clear();
   vobStates.clear();
@@ -264,6 +275,10 @@ void DirectMemory::eventLoadGame(Serialize& fin) {
   }
 
 void DirectMemory::eventChangeLevel(bool begin) {
+  if(begin)
+    finishTelekinesis();
+  if(begin)
+    previewItems.clear();
   if(!begin)
     vobStatesPending = true;
   HookRegs r;

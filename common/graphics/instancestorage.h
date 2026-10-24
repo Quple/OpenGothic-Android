@@ -56,6 +56,7 @@ class InstanceStorage {
     void join();
 
   private:
+    friend class InstanceStorageTest;
     void free(const Range& r);
     void uploadMain();
 
@@ -79,5 +80,6 @@ class InstanceStorage {
     std::thread             uploadTh;
     std::mutex              sync;
     std::condition_variable uploadCnd;
+    std::condition_variable uploadDone;
     int32_t                 uploadFId = -1;
   };

@@ -66,6 +66,9 @@ class MdlVisual final {
     void                           startEffect (World& owner, Effect&& pfx, int32_t slot, bool noSlot);
     void                           stopEffect  (const VisualFx& vfx);
     void                           stopEffect  (int32_t slot);
+    bool                           isSpellActive(int32_t spell, uint64_t now) const;
+    uint64_t                       spellRemainingTime(int32_t spell, uint64_t now) const;
+    void                           restoreLightSpell(World& world, Npc& npc, int32_t spell, uint64_t remaining);
     void                           setNpcEffect(World& owner, Npc& npc, std::string_view s, zenkit::NpcFlag flags);
     void                           setFatness  (float f);
     void                           emitBlockEffect(Npc& dst, Npc& src);
@@ -75,8 +78,10 @@ class MdlVisual final {
 
     void                           setTorch(bool t, World& owner);
     bool                           isUsingTorch() const;
+    const std::shared_ptr<zenkit::IItem>& torchItem() const { return torch.item; }
 
     const Pose&                    pose() const { return *skInst; }
+    Pose&                          pose() { return *skInst; }
 
     /// An animation of another game: the sequences by their names, the time that has passed since each of them started.
     /// Returns how many of them are known to this character.
@@ -146,6 +151,7 @@ class MdlVisual final {
 
     struct TorchSlot {
       std::unique_ptr<ObjVisual> view;
+      std::shared_ptr<zenkit::IItem> item;
       size_t                     boneId=size_t(-1);
       };
 

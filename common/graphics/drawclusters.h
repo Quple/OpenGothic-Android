@@ -22,7 +22,9 @@ class DrawClusters {
       uint32_t      firstMeshlet = 0;
       uint32_t      meshletCount = 0;
       uint32_t      instanceId   = 0;
+      MeshLods      lod;
       };
+    static_assert(sizeof(Cluster)==48);
 
     Cluster& operator[](size_t i) { return clusters[i]; }
     size_t   size() const { return clusters.size(); }

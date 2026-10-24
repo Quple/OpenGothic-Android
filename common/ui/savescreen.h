@@ -89,6 +89,7 @@ class SaveScreen final {
     std::vector<Button>   buttons(const Layout& l) const;
     const Row*            current() const;
     bool                  canSave() const;
+    bool                  canLoad() const;
     SaveGameHeader        liveHeader(int32_t& chapter, int32_t& level) const;
 
     void                  reload(const std::string& keepFile);

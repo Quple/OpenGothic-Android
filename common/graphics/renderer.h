@@ -32,6 +32,7 @@ class Renderer final {
               WorldView& view, const Camera& camera);
 
     void dbgDraw(Tempest::Painter& painter);
+    void drawUiItems(Tempest::Attachment& result, Tempest::Encoder<Tempest::CommandBuffer>& cmd, InventoryRenderer& items);
 #ifdef OPENGOTHIC_TOUCH_UI
     void drawTouchItems(Tempest::Attachment& result, Tempest::Encoder<Tempest::CommandBuffer>& cmd, InventoryRenderer& items);
 #endif

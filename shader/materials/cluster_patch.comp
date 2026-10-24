@@ -11,6 +11,7 @@ struct Cluster {
   uint  firstMeshlet;
   int   meshletCount;
   uint  instanceId;
+  uvec4 lod;
   };
 
 layout(binding = 0, std430) writeonly buffer Dst { Cluster dst[];     };

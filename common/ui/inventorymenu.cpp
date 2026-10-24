@@ -16,18 +16,28 @@
 
 using namespace Tempest;
 
+// CoM's TXT_INV_CAT/INV_CAT_GROUPS order differs from the UI enum at magic/artifacts.
+static const InventoryMenu::Category CategoryOrder[InventoryMenu::CatCount] = {
+  InventoryMenu::CatAll,     InventoryMenu::CatWeapons, InventoryMenu::CatArmor,     InventoryMenu::CatMagic,
+  InventoryMenu::CatJewelry, InventoryMenu::CatFood,    InventoryMenu::CatPotion,    InventoryMenu::CatDocuments,
+  InventoryMenu::CatMisc
+  };
+
 struct InventoryMenu::Page {
   Page()=default;
   Page(const Page&)=delete;
   virtual ~Page()=default;
 
   Category category = CatAll;
+  uint32_t scriptMask = 0;
 
   bool matches(const Item& item) const {
     if(category==CatAll)
       return true;
 
     const uint32_t flags   = uint32_t(item.mainFlag());
+    if(scriptMask!=0)
+      return (flags & scriptMask)!=0;
     const bool     weapons = (flags & (ITM_CAT_NF | ITM_CAT_FF | ITM_CAT_MUN))!=0;
     const bool     armor   = item.isArmor();
     const bool     jewelry = item.isRing() || (uint32_t(item.itemFlag()) & ITM_AMULET)!=0;
@@ -141,6 +151,7 @@ InventoryMenu::~InventoryMenu() {
   }
 
 void InventoryMenu::close() {
+  infoItem.reset();
   if(state!=State::Closed) {
     if(state==State::Trade)
       Gothic::inst().emitGlobalSound("TRADE_CLOSE"); else
@@ -152,6 +163,7 @@ void InventoryMenu::close() {
   }
 
 void InventoryMenu::open(Npc &pl) {
+  infoItem.reset();
   if(pl.isDown() || pl.isMonster() || pl.isInAir() || pl.isSlide() || (pl.interactive()!=nullptr))
     return;
   if(pl.bodyStateMasked()==BS_UNCONSCIOUS || pl.bodyStateMasked()==BS_LIE)
@@ -167,6 +179,7 @@ void InventoryMenu::open(Npc &pl) {
   page   = 0;
   pagePl .reset(new InvPage  (pl.inventory()));
   pageOth.reset();
+  syncScriptCategory(false);
   adjustScroll();
   update();
 
@@ -176,6 +189,7 @@ void InventoryMenu::open(Npc &pl) {
   }
 
 void InventoryMenu::trade(Npc &pl, Npc &tr) {
+  infoItem.reset();
   if(pl.isDown())
     return;
   state  = State::Trade;
@@ -185,12 +199,14 @@ void InventoryMenu::trade(Npc &pl, Npc &tr) {
   page   = 0;
   pagePl .reset(new InvPage  (pl.inventory()));
   pageOth.reset(new TradePage(tr.inventory()));
+  syncScriptCategory(true);
   adjustScroll();
   update();
   Gothic::inst().emitGlobalSound("TRADE_OPEN");
   }
 
 bool InventoryMenu::ransack(Npc &pl, Npc &tr) {
+  infoItem.reset();
   if(pl.isDown())
     return false;
   auto it = tr.inventory().iterator(Inventory::T_Ransack);
@@ -203,6 +219,7 @@ bool InventoryMenu::ransack(Npc &pl, Npc &tr) {
   page   = 0;
   pagePl .reset(new InvPage    (pl.inventory()));
   pageOth.reset(new RansackPage(tr.inventory()));
+  syncScriptCategory(true);
   adjustScroll();
   update();
   Gothic::inst().emitGlobalSound("INV_OPEN");
@@ -210,6 +227,7 @@ bool InventoryMenu::ransack(Npc &pl, Npc &tr) {
   }
 
 void InventoryMenu::open(Npc &pl, Interactive &ch) {
+  infoItem.reset();
   if(pl.isDown())
     return;
   const bool needToPicklock = ch.needToLockpick(pl);
@@ -228,6 +246,7 @@ void InventoryMenu::open(Npc &pl, Interactive &ch) {
   page   = 0;
   pagePl .reset(new InvPage(pl.inventory()));
   pageOth.reset(new InvPage(ch.inventory()));
+  syncScriptCategory(true);
   adjustScroll();
   update();
   }
@@ -248,6 +267,8 @@ void InventoryMenu::onWorldChanged() {
   }
 
 void InventoryMenu::tick(uint64_t /*dt*/) {
+  if(state!=State::Closed && state!=State::LockPicking)
+    syncScriptCategory(false);
   if(player!=nullptr && (player->isDown() || player->bodyStateMasked()==BS_UNCONSCIOUS)) {
     close();
     return;
@@ -543,6 +564,7 @@ InventoryMenu::PageLocal &InventoryMenu::activePageSel() {
   }
   
 void InventoryMenu::onItemAction(uint8_t slotHint) {
+  infoItem.reset();
   auto& page = activePage();
   auto& sel  = activePageSel();
 
@@ -568,7 +590,8 @@ void InventoryMenu::onItemAction(uint8_t slotHint) {
     }
   }
 
-void InventoryMenu::onTakeStuff() { 
+void InventoryMenu::onTakeStuff() {
+  infoItem.reset();
   size_t itemCount = 0;
   auto& page = activePage();
   auto& sel  = activePageSel();
@@ -874,6 +897,7 @@ void InventoryMenu::drawInfo(Painter &p) {
     return;
 
   auto& r = *pg.get(sel.sel);
+  updateItemInfo(r);
   if(tex) {
     p.setBrush(*tex);
     p.drawRect(x,y,dw,dh,
@@ -1090,6 +1114,7 @@ void InventoryMenu::drawInfoTouch(Painter& p) {
   if(!it.isValid())
     return;
   auto& item = *pg.get(sel.sel);
+  updateItemInfo(item);
 
   const auto  lay = touchLayout();
   const auto& r   = lay.info;
@@ -1193,13 +1218,6 @@ bool InventoryMenu::hasSelectedItem() {
   }
 
 #ifndef OPENGOTHIC_TOUCH_UI
-/// The order of the categories of CoM (TXT_INV_CAT): all, weapons, armor, magic, artifacts, food, potions, writings, others
-static const InventoryMenu::Category CategoryOrder[InventoryMenu::CatCount] = {
-  InventoryMenu::CatAll,     InventoryMenu::CatWeapons, InventoryMenu::CatArmor,     InventoryMenu::CatMagic,
-  InventoryMenu::CatJewelry, InventoryMenu::CatFood,    InventoryMenu::CatPotion,    InventoryMenu::CatDocuments,
-  InventoryMenu::CatMisc
-  };
-
 bool InventoryMenu::hasCategories() const {
   return player!=nullptr && player->world().script().inventoryCategoryNames().size()>=size_t(CatCount);
   }
@@ -1254,15 +1272,54 @@ void InventoryMenu::setCategory(int category) {
   takeTimer.stop();
   takeCount = 0;
 
-  const auto c = Category(std::clamp(category,0,int(CatCount)-1));
-  if(pagePl!=nullptr)
+  auto c = Category(std::clamp(category,0,int(CatCount)-1));
+  uint32_t mask = 0;
+  if(player!=nullptr) {
+    auto& script = player->world().script();
+    for(int i=0; i<int(CatCount); ++i) {
+      if(CategoryOrder[i]!=c)
+        continue;
+      script.setInventoryScriptCategory(i);
+      const int actual = script.inventoryScriptCategory();
+      if(actual>=0 && actual<int(CatCount))
+        c = CategoryOrder[actual];
+      mask = script.inventoryCategoryMask(actual>=0 ? actual : i);
+      break;
+      }
+    }
+  if(pagePl!=nullptr) {
     pagePl->category = c;
-  if(pageOth!=nullptr)
+    pagePl->scriptMask = mask;
+    }
+  if(pageOth!=nullptr) {
     pageOth->category = c;
+    pageOth->scriptMask = mask;
+    }
   pageLocal[0] = PageLocal();
   pageLocal[1] = PageLocal();
   adjustScroll();
   update();
+  }
+
+void InventoryMenu::syncScriptCategory(bool reset) {
+  if(player==nullptr)
+    return;
+  auto& script = player->world().script();
+  if(script.inventoryScriptCategory()<0)
+    return;
+  if(reset)
+    script.setInventoryScriptCategory(0);
+  const auto index = std::clamp(script.inventoryScriptCategory(),0,int(CatCount)-1);
+  const auto next = CategoryOrder[index];
+  if(category()!=next || reset)
+    setCategory(next);
+  }
+
+void InventoryMenu::updateItemInfo(const Item& item) {
+  if(player==nullptr || infoItem.lock()==item.handlePtr())
+    return;
+  player->world().script().dmaItemInfo(item);
+  infoItem = item.handlePtr();
   }
 
 int InventoryMenu::category() const {

@@ -64,8 +64,8 @@ Sky::Sky(std::string_view wname) {
     zMoonSize=400
     zMoonAlpha=255
     */
-  sunImg  = Resources::loadTexture(Gothic::settingsGetS("SKY_OUTDOOR","zSunName"));
-  moonImg = Resources::loadTexture(Gothic::settingsGetS("SKY_OUTDOOR","zMoonName"));
+  sunImg  = Resources::loadTextureWorld(Gothic::settingsGetS("SKY_OUTDOOR","zSunName"));
+  moonImg = Resources::loadTextureWorld(Gothic::settingsGetS("SKY_OUTDOOR","zMoonName"));
   if(sunImg==nullptr)
     sunImg = &Resources::fallbackBlack();
   if(moonImg==nullptr)
@@ -182,7 +182,7 @@ const Texture2d* Sky::implSkyTexture(std::string_view name, bool day, size_t id)
   for(auto& i:tex)
     i = char(std::toupper(i));
 
-  auto r = Resources::loadTexture(tex, true);
+  auto r = Resources::loadTextureWorld(tex);
   if(r==&Resources::fallbackTexture())
     return &Resources::fallbackBlack(); //format error
   return r;

@@ -23,6 +23,10 @@ layout(push_constant, std430) uniform UboPush {
   uint      firstMeshlet;
   int       meshletCount;
   float     znear;
+  float     minObjectPixels;
+  vec2      viewportSize;
+  float     objectDistance;
+  float     modelDetail;
   } push;
 
 Instance pullInstance(uint i) {
@@ -182,12 +186,49 @@ void runCluster(const uint clusterId) {
   if(!frustrumTest(cluster.sphere))
     return;
 
+  // Apply the same range to depth, color and conventional shadow passes.
+  // Terrain keeps the camera's separate landscape visibility distance.
+  if(cluster.instanceId!=0xFFFFFFFF && push.objectDistance>0) {
+    const vec3 offset = cluster.sphere.xyz-scene.camPos;
+    const float range = push.objectDistance+cluster.sphere.w;
+    if(dot(offset,offset)>range*range)
+      return;
+    }
+
 #if defined(MAIN_VIEW)
   vec4  aabb     = vec4(0);
   float depthMin = 1;
   if(!projectCluster(cluster, aabb, depthMin))
     return;
 #endif
+
+  if(push.minObjectPixels>0 && cluster.instanceId!=0xFFFFFFFF) {
+    const uint bId = cluster.bucketId_commandId >> 16;
+    // Do not simplify terrain, characters, morph animations or water.
+    if((bucket[bId].flags & (BK_SKIN | BK_MORPH | BK_WATER))==0) {
+#if defined(MAIN_VIEW)
+      // Bounds crossing the near plane must always survive this test.
+      const vec2 pixels = (aabb.zw-aabb.xy)*vec2(scene.screenRes);
+      if(depthMin>0 && max(pixels.x, pixels.y)<push.minObjectPixels)
+        return;
+#else
+      // Bound the projected box, including scale, wind and the far
+      // cascade's projective warp. Boxes crossing w=0 must survive.
+      const Instance obj = pullInstance(cluster.instanceId);
+      const vec3 extent = (bucket[bId].bbox[1]-bucket[bId].bbox[0]).xyz*0.5 + vec3(abs(obj.fatness));
+      const vec3 midpoint = (bucket[bId].bbox[0]+bucket[bId].bbox[1]).xyz*0.5;
+      const mat4 transform = scene.viewProject*mat4(obj.mat);
+      const vec4 center = transform*vec4(midpoint,1.0);
+      const vec4 radius = abs(transform[0])*extent.x + abs(transform[1])*extent.y + abs(transform[2])*extent.z;
+      const float minW = center.w-radius.w;
+      if(minW>0) {
+        const vec2 pixels = (radius.xy + abs(center.xy/center.w)*radius.w)*(push.viewportSize/minW);
+        if(max(pixels.x, pixels.y)<push.minObjectPixels)
+          return;
+        }
+#endif
+      }
+    }
 
 #if defined(LARGE)
   {
@@ -207,11 +248,27 @@ void runCluster(const uint clusterId) {
   const uint commandId  = cluster.bucketId_commandId & 0xFFFF;
   const uint bucketId   = cluster.bucketId_commandId >> 16;
   const uint instanceId = cluster.instanceId;
-  const uint meshletId  = cluster.firstMeshlet;
+  uint meshletId  = cluster.firstMeshlet;
+  uint meshletCount = uint(cluster.meshletCount);
+  // Use camera distance in every pass, including HiZ and shadows, to keep
+  // depth and color geometry identical. Close objects retain full detail.
+  if(instanceId!=0xFFFFFFFF && (cluster.lod.x!=0 || cluster.lod.z!=0)) {
+    const vec3 offset = cluster.sphere.xyz-scene.camPos;
+    const float detail = mix(1.0, 0.15, push.modelDetail);
+    const float radius = max(cluster.sphere.w,1.0);
+    const float distanceSquared = dot(offset,offset)*detail*detail;
+    if(distanceSquared>144.0*radius*radius && cluster.lod.z>0) {
+      meshletId = cluster.lod.z;
+      meshletCount = cluster.lod.w;
+      } else if(distanceSquared>25.0*radius*radius && cluster.lod.x>0) {
+      meshletId = cluster.lod.x;
+      meshletCount = cluster.lod.y;
+      }
+    }
 
   uint writeOffset = cmd[commandId].writeOffset;
-  writeOffset      += atomicAdd(cmd[commandId].instanceCount, cluster.meshletCount);
-  for(int i=0; i<cluster.meshletCount; ++i)
+  writeOffset      += atomicAdd(cmd[commandId].instanceCount, meshletCount);
+  for(uint i=0; i<meshletCount; ++i)
     payload[writeOffset+i] = uvec4(instanceId, meshletId+i, bucketId, 0);
   }
 

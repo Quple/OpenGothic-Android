@@ -8,6 +8,7 @@
 #include "graphics/bounds.h"
 
 #include "resources.h"
+#include "meshlod.h"
 
 class PackedMesh;
 
@@ -24,6 +25,7 @@ class StaticMesh {
       Material                       material;
       size_t                         iboOffset = 0;
       size_t                         iboLength = 0;
+      MeshLods                       lod;
       std::string                    texName;
       Tempest::AccelerationStructure blas;
       };

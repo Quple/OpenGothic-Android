@@ -27,6 +27,7 @@
 #include "graphics/mesh/animation.h"
 #include "graphics/mesh/attachbinder.h"
 #include "graphics/material.h"
+#include "graphics/texturequality.h"
 #include "dmusic/directmusic.h"
 #include "utils/fileext.h"
 #include "utils/gthfont.h"
@@ -35,6 +36,7 @@
 #include "utils/string_frm.h"
 
 #include <dmusic.h>
+#include <cstdlib>
 
 using namespace Tempest;
 
@@ -160,7 +162,9 @@ void Resources::loadVdfs(const std::vector<std::u16string>& modvdfs, bool modFil
       if(i.name.find(u"Speech")!=std::string::npos)
         continue;
 #endif
-      inst->gothicAssets.mount_disk(i.name, zenkit::VfsOverwriteBehavior::OLDER);
+      // Archives are already sorted by mod priority and descending timestamp.
+      // Keep that order: a newer vanilla VDF must not overwrite a mod's file.
+      inst->gothicAssets.mount_disk(i.name, zenkit::VfsOverwriteBehavior::NONE);
       }
     catch(const zenkit::VfsBrokenDiskError& err) {
       Log::e("unable to load archive: \"", TextCodec::toUtf8(i.name), "\", reason: ", err.what());
@@ -184,6 +188,7 @@ void Resources::unloadAll() {
   std::lock_guard<std::recursive_mutex> g(inst->sync);
   inst->gothicAssets = zenkit::Vfs();
   inst->texCache.clear();
+  inst->worldTexCache.clear();
   inst->pixCache.clear();
   inst->aniMeshCache.clear();
   inst->decalMeshCache.clear();
@@ -356,28 +361,29 @@ int64_t Resources::vdfTimestamp(const std::u16string& name) {
     }
   }
 
-Tempest::Texture2d* Resources::implLoadTexture(std::string_view cname, bool forceMips) {
+Tempest::Texture2d* Resources::implLoadTexture(std::string_view cname, bool forceMips, bool world) {
   if(cname.empty())
     return nullptr;
 
   //TODO: __cpp_lib_generic_unordered_lookup
   std::string name = std::string(cname);
-  auto it=texCache.find(name);
-  if(it!=texCache.end())
+  auto& cache = world ? worldTexCache : texCache;
+  auto it=cache.find(name);
+  if(it!=cache.end())
     return it->second.get();
 
-  auto tex = implLoadTextureUncached(cname, forceMips);
+  auto tex = implLoadTextureUncached(cname, forceMips, world ? textureMipSkip.load(std::memory_order_relaxed) : 0);
   if(!tex.isEmpty()) {
     std::unique_ptr<Texture2d> t{new Texture2d(std::move(tex))};
     Texture2d* ret=t.get();
-    texCache[std::move(name)] = std::move(t);
+    cache[std::move(name)] = std::move(t);
     return ret;
     }
-  texCache[std::move(name)] = nullptr;
+  cache[std::move(name)] = nullptr;
   return nullptr;
   }
 
-Texture2d Resources::implLoadTextureUncached(std::string_view name, bool forceMips) {
+Texture2d Resources::implLoadTextureUncached(std::string_view name, bool forceMips, uint32_t mipSkip) {
   if(name.empty())
     return Texture2d();
 
@@ -400,14 +406,16 @@ Texture2d Resources::implLoadTextureUncached(std::string_view name, bool forceMi
         auto dds = zenkit::to_dds(tex);
         auto ddsRead = zenkit::Read::from(dds);
 
-        return implLoadTextureUncached(name, *ddsRead, forceMips);
+        return implLoadTextureUncached(name, *ddsRead, forceMips, mipSkip);
         } else {
-        auto rgba = tex.as_rgba8(0);
+        const auto level = TextureQuality::mipLevel(tex.width(),tex.height(),tex.mipmaps(),mipSkip);
+        auto rgba = tex.as_rgba8(level);
 
         try {
-          Tempest::Pixmap    pm(tex.width(), tex.height(), TextureFormat::RGBA8);
+          Tempest::Pixmap    pm(tex.mipmap_width(level), tex.mipmap_height(level), TextureFormat::RGBA8);
           std::memcpy(pm.data(), rgba.data(), rgba.size());
-          return dev.texture(pm);
+          pm = TextureQuality::reduce(std::move(pm),mipSkip-level);
+          return dev.texture(pm,forceMips);
           }
         catch (...) {
           }
@@ -417,12 +425,12 @@ Texture2d Resources::implLoadTextureUncached(std::string_view name, bool forceMi
 
   if(auto* entry = Resources::vdfsIndex().find(name)) {
     auto reader = entry->open_read();
-    return implLoadTextureUncached(name, *reader, forceMips);
+    return implLoadTextureUncached(name, *reader, forceMips, mipSkip);
     }
   return Texture2d();
   }
 
-Texture2d Resources::implLoadTextureUncached(std::string_view name, zenkit::Read& data, bool forceMips) {
+Texture2d Resources::implLoadTextureUncached(std::string_view name, zenkit::Read& data, bool forceMips, uint32_t mipSkip) {
   try {
     std::vector<uint8_t> raw;
     data.seek(0, zenkit::Whence::END);
@@ -430,10 +438,15 @@ Texture2d Resources::implLoadTextureUncached(std::string_view name, zenkit::Read
     data.seek(0, zenkit::Whence::BEG);
     data.read(raw.data(), raw.size());
 
+    const bool reducedDds = TextureQuality::reduceDds(raw,mipSkip);
     Tempest::MemReader rd((uint8_t*)raw.data(), raw.size());
     Tempest::Pixmap    pm(rd);
 
-    const bool useMipmap = forceMips || (pm.mipCount()>1); // do not generate mips, if original texture has has none
+    const bool compressed = pm.format()==TextureFormat::DXT1 || pm.format()==TextureFormat::DXT3 || pm.format()==TextureFormat::DXT5;
+    // Generating missing BC mipmaps would expand the entire image to RGBA.
+    const bool useMipmap = (forceMips && !compressed) || (pm.mipCount()>1);
+    if(!reducedDds)
+      pm = TextureQuality::reduce(std::move(pm),mipSkip);
     return dev.texture(pm, useMipmap);
     }
   catch(...){
@@ -719,6 +732,8 @@ Tempest::Sound Resources::implLoadSoundBuffer(std::string_view name) {
 
   if(!getFileData(name,fBuff))
     return Tempest::Sound();
+  if(std::getenv("OPENGOTHIC_TRACE_AUDIO")!=nullptr)
+    Log::i("[audio] resource ",name," encodedBytes=",fBuff.size());
   try {
     Tempest::MemReader rd(fBuff.data(),fBuff.size());
     return Tempest::Sound(rd);
@@ -805,6 +820,34 @@ const Texture2d* Resources::loadTexture(std::string_view name, bool forceMips) {
   return inst->implLoadTexture(name,forceMips);
   }
 
+const Texture2d* Resources::loadTextureWorld(std::string_view name) {
+  std::lock_guard<std::recursive_mutex> g(inst->sync);
+  return inst->implLoadTexture(name,true,true);
+  }
+
+void Resources::updateTextureQuality(float quality) {
+  const auto skip = TextureQuality::mipSkip(quality);
+  if(inst->textureMipSkip.load(std::memory_order_relaxed)==skip)
+    return;
+  std::lock_guard<std::recursive_mutex> g(inst->sync);
+  // Called before frame command recording. Preserve Texture2d addresses used
+  // by materials and refresh bindless descriptors through the generation.
+  inst->dev.waitIdle();
+  inst->textureMipSkip = skip;
+  for(auto& [name,texture]:inst->worldTexCache) {
+    if(texture==nullptr)
+      continue;
+    auto reduced = inst->implLoadTextureUncached(name,true,skip);
+    if(!reduced.isEmpty())
+      *texture = std::move(reduced);
+    }
+  ++inst->textureVersion;
+  }
+
+uint64_t Resources::textureGeneration() {
+  return inst->textureVersion;
+  }
+
 const Texture2d* Resources::loadTexture(Tempest::Color color) {
   if(color==Color())
     return nullptr;
@@ -826,7 +869,7 @@ const Texture2d* Resources::loadTexture(Tempest::Color color) {
 
 const Texture2d *Resources::loadTexture(std::string_view name, int32_t iv, int32_t ic) {
   if(name.size()>=128)
-    return loadTexture(name);
+    return loadTextureWorld(name);
 
   char v[16]={};
   char c[16]={};
@@ -843,7 +886,7 @@ const Texture2d *Resources::loadTexture(std::string_view name, int32_t iv, int32
   emplaceTag(buf2,'C');
   std::snprintf(buf1,sizeof(buf1),buf2,c);
 
-  return loadTexture(buf1);
+  return loadTextureWorld(buf1);
   }
 
 std::vector<const Texture2d*> Resources::loadTextureAnim(std::string_view name) {
@@ -868,10 +911,10 @@ std::vector<const Texture2d*> Resources::loadTextureAnim(std::string_view name) 
       if(at>sizeof(buf))
         return ret;
       }
-   auto t = loadTexture(buf);
+   auto t = loadTextureWorld(buf);
     if(t==nullptr) {
       string_frm buf2(buf,".TGA");
-      t = loadTexture(buf2);
+      t = loadTextureWorld(buf2);
       if(t==nullptr)
         return ret;
       }

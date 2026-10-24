@@ -102,6 +102,11 @@ bool SaveScreen::canSave() const {
   return !w->script().dmaSaveDisabled();
   }
 
+bool SaveScreen::canLoad() const {
+  auto* w = Gothic::inst().world();
+  return w==nullptr || !w->script().dmaLoadDisabled();
+  }
+
 SaveGameHeader SaveScreen::liveHeader(int32_t& chapter, int32_t& level) const {
   SaveGameHeader hdr;
   chapter = 0;
@@ -260,7 +265,7 @@ std::vector<SaveScreen::Button> SaveScreen::buttons(const Layout& l) const {
     add(wDelete,Act::Delete,tr("Delete","Usu\xF1"),false,true,false);
   add(wRename,Act::Rename,tr("Rename","Zmie\xF1 nazw\xEA"),false,true,false);
   if(mode==Load)
-    add(wMain,Act::Primary,tr("Load game","Wczytaj gr\xEA"),true,true,true);
+    add(wMain,Act::Primary,tr("Load game","Wczytaj gr\xEA"),true,canLoad(),true);
   else
     add(wMain,Act::Primary,r->fresh ? tr("Save game","Zapisz gr\xEA") : tr("Overwrite","Nadpisz"),true,canSave(),true);
   return ret;
@@ -628,6 +633,8 @@ void SaveScreen::doAct(Act a) {
       if(r==nullptr)
         break;
       if(mode==Load) {
+        if(!canLoad())
+          break;
         Gothic::inst().load(r->e.file);
         result = Result::Close;
         } else

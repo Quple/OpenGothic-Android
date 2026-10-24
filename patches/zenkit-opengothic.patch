@@ -14,16 +14,20 @@ index 17a81ee..6055808 100644
  		ZKAPI std::shared_ptr<DaedalusInstance> unsafe_get_gi();
  		ZKAPI void unsafe_set_gi(std::shared_ptr<DaedalusInstance> i);
 diff --git a/include/zenkit/addon/daedalus.hh b/include/zenkit/addon/daedalus.hh
-index 0773c39..0ad1a5b 100644
+index 0773c39..3fed760 100644
 --- a/include/zenkit/addon/daedalus.hh
 +++ b/include/zenkit/addon/daedalus.hh
-@@ -215,6 +215,10 @@ namespace zenkit {
+@@ -215,6 +215,14 @@ namespace zenkit {
  		var int32_t bodystate_interruptable_override;
  		var int32_t no_focus;
  
 +		// Not members of C_NPC. OpenGothic keeps here the members of oCNpc that the Ikarus layer lets the scripts read.
 +		int32_t compat_focus_vob = 0;
 +		int32_t compat_interact_mob = 0;
++		int32_t compat_magic_book = 0;
++		int32_t compat_bitfield[5] = {};
++		string compat_body_visual;
++		string compat_head_visual;
 +
  		ZKAPI static void register_(DaedalusScript& s);
  	};

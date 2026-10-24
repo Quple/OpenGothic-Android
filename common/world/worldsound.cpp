@@ -212,6 +212,31 @@ void WorldSound::tick(Npc& player) {
   tickSoundZone(player);
   }
 
+void WorldSound::stopAllSounds() {
+  std::lock_guard<std::mutex> guard(sync);
+  auto stop = [](Effect& sound) {
+    // NPCs, vobs and effects may still own a Sound sharing this slot. Clearing
+    // only the world's vectors would leave those sounds playing (or looping).
+    sound.active = false;
+    sound.loop   = false;
+    sound.eff    = Tempest::SoundEffect();
+    };
+  for(auto& sound:effect)
+    stop(*sound);
+  for(auto& sound:effect3d)
+    stop(*sound);
+  for(auto& sound:freeSlot)
+    stop(*sound.second);
+  for(auto& sound:worldEff) {
+    if(sound.current.val!=nullptr)
+      stop(*sound.current.val);
+    sound.current = Sound();
+    }
+  effect.clear();
+  effect3d.clear();
+  freeSlot.clear();
+  }
+
 bool WorldSound::execTriggerEvent(const TriggerEvent& e) {
   bool emitted=false;
   for(auto& i:worldEff)

@@ -8,6 +8,19 @@ float PhysicMeshShape::friction() const {
   }
 
 PhysicMeshShape* PhysicMeshShape::load(PackedMesh&& packed) {
+  // Render LODs are appended after the original mesh. Collision uses only
+  // the original ranges and should not retain their extra CPU vertices.
+  size_t originalIndices=0;
+  bool hasLods=false;
+  for(const auto& sub:packed.subMeshes) {
+    originalIndices = std::max(originalIndices,sub.iboOffset+sub.iboLength);
+    hasLods |= sub.lod[0].firstMeshlet!=0 || sub.lod[1].firstMeshlet!=0;
+    }
+  if(hasLods) {
+    packed.vertices.resize((originalIndices/PackedMesh::MaxInd)*PackedMesh::MaxVert);
+    packed.indices.resize(originalIndices);
+    packed.indices.shrink_to_fit();
+    }
   uint32_t count = 0;
   for(auto& i : packed.subMeshes)
     if(!i.material.disable_collision && i.iboLength > 0) {

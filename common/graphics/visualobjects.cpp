@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "graphics/mesh/submesh/animmesh.h"
+#include "graphics/renderdistance.h"
 #include "gothic.h"
 
 using namespace Tempest;
@@ -50,8 +51,9 @@ struct VisualObjects::MorphData {
 void VisualObjects::Item::setObjMatrix(const Tempest::Matrix4x4& pos) {
   if(owner!=nullptr) {
     auto& obj = owner->objects[id];
-    if(obj.pos!=pos)
-      owner->updateRtAs(id);
+    if(obj.pos==pos)
+      return;
+    owner->updateRtAs(id);
     obj.pos = pos;
     owner->updateInstance(id);
     }
@@ -95,6 +97,7 @@ void VisualObjects::Item::setWind(zenkit::AnimationType m, float intensity) {
     owner->objectsWind.erase(id);
   if(m!=zenkit::AnimationType::NONE)
     owner->objectsWind.insert(id);
+  owner->updateInstance(id);
   }
 
 void VisualObjects::Item::startMMAnim(std::string_view anim, float intensity, uint64_t timeUntil) {
@@ -165,10 +168,24 @@ void VisualObjects::updateInstance(size_t id, Matrix4x4* pos) {
 
   auto cId  = obj.clusterId;
   auto npos = Vec3(obj.pos[3][0], obj.pos[3][1], obj.pos[3][2]);
-  if(clustersMem[cId].pos != npos) {
-    clustersMem[cId].pos = npos;
-    clustersMem.markClusters(cId);
+  auto& cluster = clustersMem[cId];
+  bool changed = false;
+  if(pos==nullptr) {
+    const auto& bucket = *obj.bucketId;
+    const float radius = bucket.staticMesh!=nullptr ? bucket.staticMesh->bbox.rConservative : bucket.animMesh->bbox.rConservative;
+    // Wind adds up to 0.1 to the matrix's Y column, independently of
+    // object scale. Add its norm bound so downscaled vegetation is safe.
+    const float windShear = obj.wind==zenkit::AnimationType::NONE ? 0.f : 0.1f;
+    const float worldRadius = (radius+std::abs(d.fatness))*(RenderDistance::maxScale(obj.pos)+windShear) + bucket.mat.waveMaxAmplitude;
+    changed = (cluster.r!=worldRadius);
+    cluster.r = worldRadius;
     }
+  if(clustersMem[cId].pos != npos) {
+    cluster.pos = npos;
+    changed = true;
+    }
+  if(changed)
+    clustersMem.markClusters(cId);
   }
 
 void VisualObjects::updateRtAs(size_t id) {
@@ -480,6 +497,13 @@ void VisualObjects::preFrameUpdateWind() {
 
   for(auto id:objectsWind) {
     auto& i = objects[id];
+#ifdef __ANDROID__
+    // Avoid rebuilding and uploading wind matrices for vegetation outside
+    // all active views. Offscreen shadow casters still need animation.
+    const auto& c = clustersMem[i.clusterId];
+    if(!scene.isObjectVisible(c.pos,c.r))
+      continue;
+#endif
     float m = 0;
 
     switch(i.wind) {
@@ -544,7 +568,13 @@ void VisualObjects::preFrameUpdateMorph() {
       data.morph[i].intensity   = uint16_t(intensity*uint16_t(-1));
       }
 
-    obj.objMorphAnim.set(&data, 0, sizeof(data));
+#ifdef __ANDROID__
+    const auto& c = clustersMem[obj.clusterId];
+    // Final/single-frame poses must reach the GPU before unscheduling,
+    // even offscreen, or the last visible pose would remain on reentry.
+    if(!reschedule || scene.isObjectVisible(c.pos,c.r))
+#endif
+      obj.objMorphAnim.set(&data, 0, sizeof(data));
     if(!reschedule)
       it = objectsMorph.erase(it); else
       it++;
@@ -618,6 +648,15 @@ bool VisualObjects::updateRtScene(RtScene& out) {
       }
     }
   out.buildTlas();
+  return true;
+  }
+
+bool VisualObjects::replaceTexture(const Texture2d& source, const Texture2d& replacement) {
+  if(!bucketsMem.replaceTexture(source,replacement))
+    return false;
+  // Ray queries have a separate texture descriptor array from rasterization.
+  Material mat;
+  notifyTlas(mat,RtScene::Landscape);
   return true;
   }
 

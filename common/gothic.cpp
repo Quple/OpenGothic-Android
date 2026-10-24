@@ -22,6 +22,7 @@
 #include "utils/fileutil.h"
 #include "utils/androidinput.h"
 #include "utils/inifile.h"
+#include "graphics/renderdistance.h"
 
 #include "commandline.h"
 #include "mainwindow.h"
@@ -108,6 +109,10 @@ Gothic::Gothic() {
   defaults->set("ENGINE",       "zEnvMappingEnabled", 1); // reflections
   defaults->set("ENGINE",       "zCloudShadowScale", gpu.type==Tempest::DeviceType::Discrete); // ssao
   defaults->set("INTERNAL",     "vidResIndex", 0); // full-res
+  defaults->set("PERFORMANCE", "sightValue", 4); // 100%
+  defaults->set("PERFORMANCE", "modelDetail", 1.f);
+  defaults->set("INTERNAL", "texDetailIndex", 1.f);
+  defaults->set("ENGINE", "zVobFarClipZScale", 1.f);
 
   defaults->set("VIDEO", "zVidBrightness", 0.5f);
   defaults->set("VIDEO", "zVidContrast",   0.5f);
@@ -205,6 +210,7 @@ Gothic::Gothic() {
 
   onSettingsChanged.bind(this,&Gothic::setupSettings);
   setupSettings();
+  Resources::updateTextureQuality(settingsGetF("INTERNAL","texDetailIndex"));
   }
 
 Gothic::~Gothic() {
@@ -214,6 +220,16 @@ Gothic::~Gothic() {
 Gothic& Gothic::inst() {
   assert(instance!=nullptr);
   return *instance;
+  }
+
+float Gothic::settingsObjectDistance() {
+  const float value = settingsGetF("ENGINE","zVobFarClipZScale");
+  const float scale = RenderDistance::choiceScale(value,instance->objectDistanceChoices);
+  return RenderDistance::objects(scale,RenderDistance::landscape(settingsGetI("PERFORMANCE","sightValue")));
+  }
+
+void Gothic::setObjectDistanceMenu(std::string_view choices) {
+  objectDistanceChoices = RenderDistance::percentChoices(choices);
   }
 
 void Gothic::setupGlobalScripts() {
@@ -407,6 +423,10 @@ void Gothic::emitGlobalSoundWav(std::string_view wav) {
       }
     }
   sndStorage.push_back(std::move(s));
+  }
+
+void Gothic::stopGlobalSounds() {
+  sndStorage.clear();
   }
 
  const std::vector<ItmFlags>& Gothic::invCatOrder() {

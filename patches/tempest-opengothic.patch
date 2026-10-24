@@ -250,3 +250,102 @@ index f002ef23..dd6ad058 100644
          //NOTE1: use of null-handle is not allowed, unless VK_EXT_robustness2
          //NOTE2: sizeof 1 is rouned up in shader; and sizeof 0 is illegal but harmless(hopefully)
          info.buffer = dev.dummySsbo().impl;
+diff --git a/Engine/sound/soundeffect.cpp b/Engine/sound/soundeffect.cpp
+index 2bd16bc0..1cfb2b0d 100644
+--- a/Engine/sound/soundeffect.cpp
++++ b/Engine/sound/soundeffect.cpp
+@@ -9,9 +9,36 @@
+ #include <Tempest/SoundDevice>
+ #include <Tempest/Except>
+ #include <Tempest/Log>
++#include <cstdlib>
++#include <cstdio>
++#include <typeinfo>
+ 
+ using namespace Tempest;
+ 
++static bool traceAudio() {
++  static const bool enabled = [] {
++    if(std::getenv("OPENGOTHIC_TRACE_AUDIO")!=nullptr)
++      return true;
++    if(auto* file = std::fopen("audio-trace.enabled","rb")) {
++      std::fclose(file);
++      return true;
++      }
++    return false;
++    }();
++  return enabled;
++  }
++
++static void traceAudioEvent(const char* event, void* ctx, uint32_t source, int state=0,
++                            int bytes=0, int rate=0, const char* producer="") {
++  if(!traceAudio())
++    return;
++  if(auto* file = std::fopen("audio-sources.log","a")) {
++    std::fprintf(file,"%s ctx=%p source=%u state=%d bytes=%d rate=%d producer=%s\n",
++                 event,ctx,unsigned(source),state,bytes,rate,producer);
++    std::fclose(file);
++    }
++  }
++
+ struct SoundEffect::Impl {
+   enum {
+     NUM_BUF = 3,
+@@ -44,6 +71,10 @@ struct SoundEffect::Impl {
+ 
+     alSourceiDirect(ctx, source, AL_BUFFER, stream);
+     alSourcefDirect(ctx, source, AL_REFERENCE_DISTANCE, 0);
++    if(traceAudio())
++      Log::i("[audio] static ctx=",reinterpret_cast<uintptr_t>(ctx)," source=",source,
++             " bytes=",size," rate=",freq);
++    traceAudioEvent("static",ctx,source,0,size,freq);
+     }
+ 
+   Impl(SoundDevice &dev, std::unique_ptr<SoundProducer> &&psrc)
+@@ -67,6 +98,10 @@ struct SoundEffect::Impl {
+ 
+     alSourceiDirect(ctx, source, AL_BUFFER, stream);
+     alSourcefDirect(ctx, source, AL_REFERENCE_DISTANCE, 0);
++    if(traceAudio())
++      Log::i("[audio] stream ctx=",reinterpret_cast<uintptr_t>(ctx)," source=",source,
++             " rate=",freq," producer=",typeid(src).name());
++    traceAudioEvent("stream",ctx,source,0,0,freq,typeid(src).name());
+     }
+ 
+   ~Impl() {
+@@ -74,6 +109,9 @@ struct SoundEffect::Impl {
+       return;
+ 
+     auto* ctx = reinterpret_cast<ALCcontext*>(dev->context());
++    if(traceAudio())
++      Log::i("[audio] destroy ctx=",reinterpret_cast<uintptr_t>(ctx)," source=",source);
++    traceAudioEvent("destroy",ctx,source);
+     alSourcePausevDirect(ctx, 1, &source);
+     alDeleteSourcesDirect(ctx, 1, &source);
+     if(stream!=0) {
+@@ -139,6 +177,12 @@ void SoundEffect::play() {
+     return;
+   ALCcontext* ctx = impl->context();
+   alSourcePlayvDirect(ctx, 1, &impl->source);
++  if(traceAudio()) {
++    int state = 0;
++    alGetSourceivDirect(ctx,impl->source,AL_SOURCE_STATE,&state);
++    Log::i("[audio] play ctx=",reinterpret_cast<uintptr_t>(ctx)," source=",impl->source," state=",state);
++    traceAudioEvent("play",ctx,impl->source,state);
++    }
+   }
+ 
+ void SoundEffect::pause() {
+@@ -146,6 +190,12 @@ void SoundEffect::pause() {
+     return;
+   ALCcontext* ctx = impl->context();
+   alSourcePausevDirect(ctx, 1, &impl->source);
++  if(traceAudio()) {
++    int state = 0;
++    alGetSourceivDirect(ctx,impl->source,AL_SOURCE_STATE,&state);
++    Log::i("[audio] pause ctx=",reinterpret_cast<uintptr_t>(ctx)," source=",impl->source," state=",state);
++    traceAudioEvent("pause",ctx,impl->source,state);
++    }
+   }
+ 
+ bool SoundEffect::isEmpty() const {

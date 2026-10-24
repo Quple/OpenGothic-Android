@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "resources.h"
+#include "meshlod.h"
 
 class Bounds;
 
@@ -35,6 +36,7 @@ class PackedMesh {
       zenkit::Material material;
       size_t           iboOffset = 0;
       size_t           iboLength = 0;
+      MeshLods         lod;
       };
 
     struct Cluster final {
@@ -89,6 +91,10 @@ class PackedMesh {
     std::pair<Tempest::Vec3,Tempest::Vec3> bbox() const;
 
   private:
+    struct SkeletalData;
+    PackedMesh() = default;
+    void appendLods(const zenkit::MultiResolutionMesh& mesh, PkgType type,
+                    const std::vector<SkeletalData>* skeletal);
     Tempest::Vec3 mBbox[2];
 
     struct Prim {

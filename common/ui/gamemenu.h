@@ -58,8 +58,8 @@ class GameMenu : public Tempest::Widget {
   private:
     enum class QuestStat : uint8_t {
       Current   = uint8_t(QuestLog::Status::Running),
-      Old       = uint8_t(QuestLog::Status::Failed),
-      Failed    = uint8_t(QuestLog::Status::Success),
+      Old       = uint8_t(QuestLog::Status::Success),
+      Failed    = uint8_t(QuestLog::Status::Failed),
       Log       = uint8_t(5),
       };
 

@@ -36,9 +36,9 @@ class DamageCalculator {
     static int32_t damageTypeMask(Npc& npc);
 
   private:
-    static bool    checkDamageMask(Npc& src, Npc& other, const Bullet* b);
+    static bool    checkDamageMask(Npc& src, Npc& other, const Bullet* b, const Damage* overrideDamage = nullptr);
 
-    static Val     rangeDamage(Npc& src, Npc& other, const Bullet& b, const CollideMask bMsk);
+    static Val     rangeDamage(Npc& src, Npc& other, const Bullet& b, const CollideMask bMsk, const Damage* overrideDamage = nullptr);
     static Val     rangeDamage(Npc& src, Npc& other, Damage dmg, const CollideMask bMsk);
     static Val     swordDamage(Npc& src, Npc& other);
   };

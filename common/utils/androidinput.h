@@ -44,8 +44,8 @@ enum Icon : int {
 struct Preferences {
   int buttons     = 120; // percent
 #ifdef __ANDROID__
-  int resolution  = 75;  // percent of the display resolution
-  int shadows     = 512; // shadow map size, 0 disables shadows
+  int resolution  = 50;  // percent of the display resolution
+  int shadows     = 256; // shadow map size, 0 disables shadows
   int effects     = 0;   // SSAO
   int fps         = 30;
 #else

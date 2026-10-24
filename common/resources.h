@@ -11,6 +11,7 @@
 #include <tuple>
 #include <string_view>
 #include <map>
+#include <atomic>
 
 #include "graphics/material.h"
 #include "sound/soundfx.h"
@@ -98,6 +99,9 @@ class Resources final {
     static auto                      fallbackImage() -> const Tempest::StorageImage&;
     static Tempest::Texture2d        loadTextureUncached(std::string_view name, bool forceMips = false);
     static const Tempest::Texture2d* loadTexture(std::string_view name, bool forceMips = false);
+    static const Tempest::Texture2d* loadTextureWorld(std::string_view name);
+    static void                      updateTextureQuality(float quality);
+    static uint64_t                  textureGeneration();
     static const Tempest::Texture2d* loadTexture(Tempest::Color color);
     static const Tempest::Texture2d* loadTexture(std::string_view name, int32_t v, int32_t c);
     static       Tempest::Texture2d  loadTexturePm(const Tempest::Pixmap& pm);
@@ -182,9 +186,9 @@ class Resources final {
     int64_t               vdfTimestamp(const std::u16string& name);
     void                  detectVdf(std::vector<Archive>& ret, const std::u16string& root);
 
-    Tempest::Texture2d*   implLoadTexture(std::string_view cname, bool forceMips);
-    Tempest::Texture2d    implLoadTextureUncached(std::string_view name, bool forceMips);
-    Tempest::Texture2d    implLoadTextureUncached(std::string_view name, zenkit::Read& data, bool forceMips);
+    Tempest::Texture2d*   implLoadTexture(std::string_view cname, bool forceMips, bool world = false);
+    Tempest::Texture2d    implLoadTextureUncached(std::string_view name, bool forceMips, uint32_t mipSkip = 0);
+    Tempest::Texture2d    implLoadTextureUncached(std::string_view name, zenkit::Read& data, bool forceMips, uint32_t mipSkip = 0);
     ProtoMesh*            implLoadMesh(std::string_view name);
     std::unique_ptr<ProtoMesh> implLoadMeshMain(std::string name);
     std::unique_ptr<Animation> implLoadAnimation(std::string name);
@@ -248,6 +252,9 @@ class Resources final {
     uint8_t     recycledId = 0;
 
     TextureCache                                                      texCache;
+    TextureCache                                                      worldTexCache;
+    std::atomic<uint32_t>                                              textureMipSkip {0};
+    uint64_t                                                          textureVersion = 0;
     std::map<Tempest::Color,std::unique_ptr<Tempest::Texture2d>,Less> pixCache;
     std::unordered_map<std::string,std::unique_ptr<ProtoMesh>>        aniMeshCache;
     std::unordered_map<DecalK,std::unique_ptr<ProtoMesh>,Hash>        decalMeshCache;

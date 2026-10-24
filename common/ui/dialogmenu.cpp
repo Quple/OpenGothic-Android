@@ -81,6 +81,12 @@ void DialogMenu::tick(uint64_t dt) {
   if(prompt.active)
     update();   // the cursor of the text blinks
 
+  if(pl!=nullptr) {
+    const auto* entry = isChoiceMenuActive() && !prompt.active && dlgSel<choice.size() ? &choice[dlgSel] : nullptr;
+    const bool subChoice = entry!=nullptr && entry->isSubChoice;
+    pl->world().script().dmaDialogChoice(entry,subChoice,int(dlgSel));
+    }
+
   if(state==State::PreStart) {
     except.clear();
     dlgTrade=false;
@@ -101,15 +107,6 @@ void DialogMenu::tick(uint64_t dt) {
     remPrint-=dt;
     }
 
-  for(size_t i=0; i<lingering.size();) {
-    if(lingering[i].time<=dt) {
-      lingering.erase(lingering.begin()+ptrdiff_t(i));
-      } else {
-      lingering[i].time -= dt;
-      ++i;
-      }
-    }
-
   if(isChoiceMenuActive()) {
     if(choiceAnimTime+dt>ANIM_TIME)
       choiceAnimTime = ANIM_TIME; else
@@ -125,7 +122,7 @@ void DialogMenu::tick(uint64_t dt) {
     if(dlgTrade && !haveToWaitOutput()) {
       startTrade();
       }
-    else if(choice.size()==0 && state!=State::Idle && !haveToWaitOutput()) {
+    else if(choice.size()==0 && state!=State::Idle && !haveToWaitOutput() && !haveToWaitQueues()) {
       close();
       }
     } else {
@@ -301,7 +298,7 @@ bool DialogMenu::aiPrintScr(Npc& npc, int time, std::string_view msg, int x, int
   }
 
 bool DialogMenu::aiClose() {
-  if(current.time>0){
+  if(current.time>0 || (pl!=nullptr && pl->world().script().dmaTrialogFinishPending())) {
     return false;
     }
 
@@ -395,7 +392,7 @@ void DialogMenu::onDoneText() {
   if(choice.size()==0){
     if(depth>0) {
       onStart(*pl,*other);
-      } else {
+      } else if(!haveToWaitQueues()) {
       close();
       }
     }
@@ -404,6 +401,9 @@ void DialogMenu::onDoneText() {
 void DialogMenu::close() {
   auto prevPl  = pl;
   auto prevNpc = other;
+
+  if(pl!=nullptr)
+    pl->world().script().dmaDialogChoice(nullptr,false,-1);
 
   if(pl!=nullptr) {
     // the guests of a trialog go back to the speech that is not a dialog
@@ -453,6 +453,10 @@ bool DialogMenu::haveToWaitOutput() const {
 
 /// the limit is for a queue that never ends, so that the dialog is never stuck
 bool DialogMenu::haveToWaitQueues() const {
+  // _TRIA_Finish is queued on the hero. Closing an empty choice list before
+  // it executes ends ZS_TALK early, even when the NPC queues are synchronized.
+  if(pl!=nullptr && pl->world().script().dmaTrialogFinishPending())
+    return true;
   if(queueWaitTime==0 || queueWaitTime>QUEUE_WAIT_MAX)
     return false;
   return true;
@@ -481,17 +485,9 @@ void DialogMenu::skipPhrase() {
     if(speaker!=nullptr)
       speaker->setAiOutputBarrier(0,false);
     stopGestures(nullptr);
-    if(pl!=nullptr && pl->world().script().dmaInCamera()) {
-      // oCNpc::StopRunningOU of CoM (OCNPC__STOPRUNNINGOU_REPLACEKILLOUSOUND): in a camera of a cutscene the line is skipped, the
-      // sound is not killed, the scripts time the cuts of the camera to the voices
-      Lingering l;
-      l.time = current.time;
-      l.snd  = std::move(currentSnd);
-      lingering.push_back(std::move(l));
-      currentSnd = SoundEffect();
-      } else {
-      currentSnd = SoundEffect();
-      }
+    // Skipping dismisses the voice as well as the subtitle, including trialogs
+    // with a scripted camera. Retaining it here overlapped consecutive speakers.
+    currentSnd = SoundEffect();
     current.time = 1;
     }
   }
@@ -502,6 +498,7 @@ void DialogMenu::onEntry(const GameScript::DlgChoice &e) {
     return;
     }
   if(pl && other) {
+    pl->world().script().dmaDialogChoice(nullptr,false,-1);
     selected = e;
     depth    = 1;
     dlgTrade = e.isTrade;
@@ -769,7 +766,7 @@ bool DialogMenu::isChoiceMenuActive() const {
 void DialogMenu::onSelect() {
   if(prompt.active)
     return;
-  if(current.time>0 || haveToWaitOutput()){
+  if(!isChoiceMenuActive()) {
     return;
     }
 

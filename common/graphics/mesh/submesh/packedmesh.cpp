@@ -8,6 +8,7 @@
 
 #include "game/compatibility/phoenix.h"
 #include "graphics/shaders.h"
+#include "progressivemesh.h"
 
 using namespace Tempest;
 
@@ -439,6 +440,8 @@ PackedMesh::PackedMesh(const zenkit::MultiResolutionMesh& mesh, PkgType type) {
   }
 
   packMeshletsObj(mesh,type,nullptr);
+  if(type==PK_Visual)
+    appendLods(mesh,type,nullptr);
   }
 
 PackedMesh::PackedMesh(const zenkit::SoftSkinMesh& skinned) {
@@ -474,6 +477,51 @@ PackedMesh::PackedMesh(const zenkit::SoftSkinMesh& skinned) {
     }
 
   packMeshletsObj(mesh,PK_Visual,&vertices);
+  appendLods(mesh,PK_Visual,&vertices);
+  }
+
+void PackedMesh::appendLods(const zenkit::MultiResolutionMesh& mesh, PkgType type,
+                            const std::vector<SkeletalData>* skeletal) {
+  // Keep the original ranges for collision and RT. Extra ranges are selected
+  // by visibility culling, so changing quality requires no resource reload.
+  for(size_t level=0; level<2; ++level) {
+    auto reduced = mesh;
+    if(!ProgressiveMesh::simplify(reduced, level==0 ? 0.65f : 0.35f))
+      continue;
+    PackedMesh lod;
+    lod.subMeshes.resize(mesh.sub_meshes.size());
+    lod.packMeshletsObj(reduced,type,skeletal);
+    size_t fullCount=0, lowCount=0;
+    bool fits=true;
+    for(size_t i=0; i<subMeshes.size(); ++i) {
+      fullCount += subMeshes[i].iboLength;
+      lowCount  += lod.subMeshes[i].iboLength;
+      fits &= lod.subMeshes[i].iboLength<=subMeshes[i].iboLength;
+      }
+    // Equal meshlet counts still save vertex fetch/skinning work: unused
+    // triangle lanes return before loading vertices in the pulling shader.
+    if(!fits || lowCount>fullCount)
+      continue;
+    // All materials must use the same collapse level, including unchanged
+    // meshlet counts and empty sections, otherwise UV/material seams crack.
+    for(size_t i=0; i<subMeshes.size(); ++i) {
+      const auto& src = lod.subMeshes[i];
+      auto& dst = subMeshes[i];
+      const size_t vertexBase = skeletal==nullptr ? vertices.size() : verticesA.size();
+      const size_t firstVertex = (src.iboOffset/MaxInd)*MaxVert;
+      const size_t vertexCount = (src.iboLength/MaxInd)*MaxVert;
+      dst.lod[level] = {uint32_t(indices.size()/MaxInd), uint32_t(src.iboLength/MaxInd)};
+      if(skeletal==nullptr)
+        vertices.insert(vertices.end(), lod.vertices.begin()+firstVertex, lod.vertices.begin()+firstVertex+vertexCount);
+      else
+        verticesA.insert(verticesA.end(), lod.verticesA.begin()+firstVertex, lod.verticesA.begin()+firstVertex+vertexCount);
+      for(size_t n=src.iboOffset; n<src.iboOffset+src.iboLength; ++n)
+        indices.push_back(uint32_t(vertexBase + lod.indices[n]-firstVertex));
+      const size_t firstByte = (src.iboOffset/MaxInd)*MaxPrim*4;
+      const size_t byteCount = (src.iboLength/MaxInd)*MaxPrim*4;
+      indices8.insert(indices8.end(), lod.indices8.begin()+firstByte, lod.indices8.begin()+firstByte+byteCount);
+      }
+    }
   }
 
 void PackedMesh::packPhysics(const zenkit::Mesh& mesh, PkgType type) {

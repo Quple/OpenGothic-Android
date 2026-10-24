@@ -1629,7 +1629,19 @@ void GameMenu::onTick() {
   }
 
 void GameMenu::processMusicTheme() {
-  if(auto theme = Gothic::musicDef()[menu->music_theme])
+  // CoM leaves C_MENU.MUSICTHEME empty: KmLib normally starts its menu
+  // recording outside the script theme system. Select it explicitly here.
+  const auto& music = Gothic::musicDef();
+  if(!Gothic::inst().isInGame() && music.hasRecordedMusic()) {
+    if(auto theme = music["SYS_MENU"]) {
+      GameMusic::inst().clearTrackOverride();
+      GameMusic::inst().setMusic(*theme,GameMusic::mkTags(GameMusic::Std,GameMusic::Day));
+      }
+    return;
+    }
+  if(menu->music_theme=="SYS_MENU")
+    GameMusic::inst().clearTrackOverride();
+  if(auto theme = music[menu->music_theme])
     GameMusic::inst().setMusic(*theme,GameMusic::mkTags(GameMusic::Std,GameMusic::Day));
   }
 
@@ -1943,6 +1955,8 @@ void GameMenu::execSaveGame(const GameMenu::Item& item) {
   }
 
 bool GameMenu::execLoadGame(const GameMenu::Item &item) {
+  if(auto* w = Gothic::inst().world(); w!=nullptr && w->script().dmaLoadDisabled())
+    return false;
   const size_t id = saveSlotId(item);
   if(id==size_t(-1))
     return false;

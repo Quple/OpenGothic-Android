@@ -148,7 +148,8 @@ class Camera final {
 
     float                 dlgRange   = 0;
 
-    Tempest::Matrix4x4    proj;
+    mutable Tempest::Matrix4x4 proj;
+    mutable float         projectionFar = 0;
     uint32_t              vpWidth=0;
     uint32_t              vpHeight=0;
     float                 depthNear = 0;

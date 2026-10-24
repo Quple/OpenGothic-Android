@@ -18,6 +18,7 @@ StaticMesh::StaticMesh(const PackedMesh& mesh) {
     sub[i].material  = Resources::loadMaterial(mesh.subMeshes[i].material,mesh.isUsingAlphaTest);
     sub[i].iboOffset = mesh.subMeshes[i].iboOffset;
     sub[i].iboLength = mesh.subMeshes[i].iboLength;
+    sub[i].lod       = mesh.subMeshes[i].lod;
     }
   bbox.assign(mesh.bbox());
 

@@ -488,6 +488,34 @@ string_frm<64> KeyCodec::keyToStr(Tempest::Event::MouseButton k) {
   return string_frm<64>('?');
   }
 
+int32_t KeyCodec::scriptKeyCode(Tempest::Event::KeyType t) {
+  if(t>=Tempest::Event::K_1 && t<=Tempest::Event::K_9)
+    return 2+int(t-Tempest::Event::K_1);
+  if(t==Tempest::Event::K_0)
+    return 11;
+  if(t>=Tempest::Event::K_F1 && t<=Tempest::Event::K_F10)
+    return 59+int(t-Tempest::Event::K_F1);
+  if(t>=Tempest::Event::K_F11 && t<=Tempest::Event::K_F12)
+    return 87+int(t-Tempest::Event::K_F11);
+  if(t>=Tempest::Event::K_F13 && t<=Tempest::Event::K_F15)
+    return 100+int(t-Tempest::Event::K_F13);
+  switch(t) {
+    case Tempest::Event::K_ESCAPE:   return 1;
+    case Tempest::Event::K_Return:   return 28;
+    case Tempest::Event::K_Pause:    return 197;
+    case Tempest::Event::K_LCommand: return 219;
+    case Tempest::Event::K_RCommand: return 220;
+    default: break;
+    }
+  const auto packed = uint32_t(keyToCode(t));
+  return int32_t(((packed&0xff)<<8) | ((packed>>8)&0xff));
+  }
+
+int32_t KeyCodec::scriptKeyCode(Tempest::Event::MouseButton t) {
+  const auto packed = uint32_t(keyToCode(t));
+  return int32_t(((packed&0xff)<<8) | ((packed>>8)&0xff));
+  }
+
 int32_t KeyCodec::keyToCode(Tempest::Event::KeyType t) {
   for(auto& i:keys)
     if(i.k==t)

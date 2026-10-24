@@ -8,6 +8,7 @@
 #include "world/world.h"
 #include "game/definitions/cameradefinitions.h"
 #include "graphics/mesh/animmath.h"
+#include "graphics/renderdistance.h"
 #include "game/serialize.h"
 #include "utils/gthfont.h"
 #include "utils/dbgpainter.h"
@@ -129,6 +130,7 @@ void Camera::changeZoom(int delta) {
 void Camera::setViewport(uint32_t w, uint32_t h) {
   const float fov = Gothic::options().cameraFov;
   proj.perspective(fov, float(w)/float(h), zNear(), zFar());
+  projectionFar = zFar();
 
   // NOTE: usually depth bouds are from 0.95 to 1.0, resilting into ~805675 discrete values
   static float l = 0.951978f, r = 1;
@@ -148,8 +150,7 @@ float Camera::zNear() const {
   }
 
 float Camera::zFar() const {
-  static float far = 100000.0f;
-  return far;
+  return RenderDistance::landscape(Gothic::settingsGetI("PERFORMANCE","sightValue"));
   }
 
 void Camera::rotateLeft(uint64_t dt) {
@@ -322,6 +323,11 @@ void Camera::onRotateMouse(const PointF& dpos) {
   }
 
 Matrix4x4 Camera::projective() const {
+  const float far = zFar();
+  if(far!=projectionFar && vpWidth>0 && vpHeight>0) {
+    proj.perspective(Gothic::options().cameraFov,float(vpWidth)/float(vpHeight),zNear(),far);
+    projectionFar = far;
+    }
   auto ret = proj;
   if(auto w = Gothic::inst().world())
     w->globalFx()->morph(ret);

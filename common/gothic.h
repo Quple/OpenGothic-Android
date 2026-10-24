@@ -32,6 +32,9 @@ class Gothic final {
 
     static Gothic& inst();
 
+    static float settingsObjectDistance();
+    void         setObjectDistanceMenu(std::string_view choices);
+
     enum class LoadState:int {
       Idle       = 0,
       Loading    = 1,
@@ -104,6 +107,7 @@ class Gothic final {
     void         emitGlobalSound(const Tempest::Sound& sfx);
 
     void         emitGlobalSoundWav(std::string_view wav);
+    void         stopGlobalSounds();
 
     static auto  invCatOrder()  -> const std::vector<ItmFlags>&;
 
@@ -168,6 +172,7 @@ class Gothic final {
 
     Tempest::Signal<void(Npc&,Npc&,AiOuputPipe*&)>                      onDialogPipe;
     Tempest::Signal<void(Npc&)>                                         onDialogGuest;   // a third character speaks in the dialog (Trialoge of LeGo)
+    Tempest::Signal<void()>                                            onDialogCameraReset;
     Tempest::Signal<void(Npc&,Npc&)>                                    onOpenTrade;   // the player and the trader, without a dialog (mods)
     std::function<bool(const Npc*)>                                     isNpcInDialogFn;
 
@@ -215,6 +220,7 @@ class Gothic final {
     static void                           flushSettings();
 
   private:
+    std::vector<float> objectDistanceChoices;
     VersionInfo                             vinfo;
     Options                                 opts;
     std::mt19937                            randGen;

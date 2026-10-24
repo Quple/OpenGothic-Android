@@ -30,6 +30,7 @@ class WorldSound final {
     Sound   addDlgSound(std::string_view s, const Tempest::Vec3& pos, float range, uint64_t &timeLen);
 
     void    aiOutput(const Tempest::Vec3& pos, std::string_view outputname);
+    void    stopAllSounds();
 
     void    tick(Npc& player);
     bool    execTriggerEvent(const TriggerEvent& e);

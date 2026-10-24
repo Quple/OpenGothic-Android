@@ -56,20 +56,16 @@ void main(void) {
     return;
     }
 
-  int neg = 0;
-  for(int i=0;i<8;++i) {
-    vec3 at  = light.pos + v[i]*light.range;
-    vec4 pos = scene.viewProject*vec4(at,1.0);
-
-    if(pos.z<0.0)
-      neg++;
-    pos.xy/=pos.w;
-    // TODO: list of fsq lights
-    }
+  // Project the cube's center and support radius onto the near plane.
+  // This is the same crossing test as projecting all eight corners.
+  const vec4 center = scene.viewProject*vec4(light.pos,1.0);
+  const vec3 nearPlane = vec3(scene.viewProject[0][2], scene.viewProject[1][2], scene.viewProject[2][2]);
+  const float radius = dot(abs(nearPlane), vec3(abs(light.range)));
+  const bool crossesNear = center.z-radius<0.0 && center.z+radius>=0.0;
 
   const vec3 inPos = v[gl_VertexIndex];
   vec4 pos = vec4(0);
-  if(neg>0 && neg<8) {
+  if(crossesNear) {
     // transform close lights into FSQ
     vec2 fsq = vec2(inPos.x, -inPos.y);
     if(gl_VertexIndex>=4)

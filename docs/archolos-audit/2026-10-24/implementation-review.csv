@@ -1,0 +1,37 @@
+api,name,static_call_sites,location,findings,body_excerpt
+override_function,ASMINT_MYEXTERNAL,0,common/game/compatibility/directmemory.cpp:128,empty_body,
+override_function,MEMINT_SETUPEXCEPTIONHANDLER,1,common/game/compatibility/directmemory.cpp:164,empty_body,
+override_function,MEMINT_REPLACESLOWFUNCTIONS,1,common/game/compatibility/directmemory.cpp:165,empty_body,
+override_function,MEM_INITSTATARRS,1,common/game/compatibility/directmemory.cpp:167,empty_body,
+override_function,MEM_INITREPEAT,1,common/game/compatibility/directmemory.cpp:168,empty_body,
+safeOverrideFunction,PRINT_FIXPS,1,common/game/compatibility/directmemory.cpp:181,empty_body,// function patches asm code of zCView::PrintTimed* to fix text coloring - we can ignore it
+dummyfy,WRITENOP,22,common/game/compatibility/directmemory.cpp:224,empty_body;dummy_wrapper,
+dummyfy,MEM_SETKEYS,3,common/game/compatibility/directmemory.cpp:225,empty_body;dummy_wrapper,
+override_function,MEM_GETADDRESS_INIT,3,common/game/compatibility/directmemory.cpp:1395,empty_body,
+register_stdcall,WINAPI__LOADLIBRARY,0,common/game/compatibility/directmemory.cpp:1948,incomplete_marker_review,"auto [ptr, size] = mem32.deref(pname); auto name = std::string_view(reinterpret_cast<const char*>(ptr), size_t(size)); Log::d(""suppress LoadLibrary: "", name); return 0x1;"
+register_stdcall,WINAPI__GETPROCADDRESS,0,common/game/compatibility/directmemory.cpp:1955,incomplete_marker_review,"auto [ptr, size] = mem32.deref(pname); auto name = std::string_view(reinterpret_cast<const char*>(ptr), size_t(size)); Log::d(""suppress GetProcAddress: "",name); return 0x1;"
+register_thiscall,ZERROR__SETTARGET,0,common/game/compatibility/directmemory.cpp:2101,empty_body,// nop
+override_function,HOOKENGINEI,3,common/game/compatibility/directmemory.cpp:2163,incomplete_marker_review,"auto sym = function.value; auto name = sym==nullptr ? """" : sym->name().c_str(); // the frame and the events of the animations are answered by tick and eventPlayAni std::string key(name); for(auto& c:key) c = char(std::toupper(static_cast<un"
+register_thiscall,ZCCONSOLE__REGISTER,0,common/game/compatibility/directmemory.cpp:2186,incomplete_marker_review,"(void)pcmd; (void)pdescr; // auto sym = func.value; // auto name = sym==nullptr ? """" : sym->name().c_str(); // Log::e(""not implemented call [ZCCONSOLE__REGISTER] ("", prefix, "" -> "", name, "")"");"
+override_function,FINAL,0,common/game/compatibility/directmemory.cpp:2203,incomplete_marker_review,"Log::e(""LeGo: 'final' is not implemented""); return 0;"
+register_thiscall,7864512,0,common/game/compatibility/directmemory_engine.cpp:218,empty_body,
+register_thiscall,6290896,0,common/game/compatibility/directmemory_engine.cpp:219,empty_body,
+register_thiscall,4355760,0,common/game/compatibility/directmemory_engine.cpp:220,empty_body,
+register_thiscall,ZCINPUT_WIN32__GETSTATE,0,common/game/compatibility/directmemory_engine.cpp:240,constant_return_review,return 0;
+register_thiscall,ZCINPUT__ISBINDEDTOGGLED,0,common/game/compatibility/directmemory_engine.cpp:243,constant_return_review,return 0;
+register_thiscall,ZCINPUT__BINDKEYS,0,common/game/compatibility/directmemory_engine.cpp:246,empty_body,
+register_thiscall,7566816,0,common/game/compatibility/directmemory_events.cpp:928,empty_body,
+safe,_TRIA_COPY,5,common/game/compatibility/directmemory_events.cpp:1040,empty_body,
+safe,_TRIA_COPYNPC,1,common/game/compatibility/directmemory_events.cpp:1041,empty_body,
+safe,_TRIA_NEXT,0,common/game/compatibility/directmemory_events.cpp:1042,empty_body,
+safe,_TRIA_UPDATEVISUAL,2,common/game/compatibility/directmemory_events.cpp:1043,empty_body,
+bindExternal,WLD_PLAYEFFECT,134,common/game/gamescript.cpp:385,incomplete_marker_review,"if(aiProcessPolicy>=NpcProcessPolicy::AiFar2) return; if(isProjectile!=0 || damageType!=0 || damage!=0 || effectLevel!=0) { // TODO Log::i(""effect not implemented ["",visual.data(),""]""); return; } const VisualFx* vfx = Gothic::inst().loadVis"
+bindExternal,WLD_ISRAINING,5,common/game/gamescript.cpp:406,incomplete_marker_review,"static bool first=true; if(first){ Log::e(""not implemented call [wld_israining]""); first=false; } return false;"
+bindExternal,MDL_APPLYRANDOMANI,3,common/game/gamescript.cpp:416,incomplete_marker_review,"(void)npcRef; (void)s1; (void)s0; static bool first=true; if(first){ Log::e(""not implemented call [mdl_applyrandomani]""); first=false; }"
+bindExternal,MDL_APPLYRANDOMANIFREQ,1,common/game/gamescript.cpp:417,incomplete_marker_review,"(void)f0; (void)s1; (void)npcRef; static bool first=true; if(first){ Log::e(""not implemented call [mdl_applyrandomanifreq]""); first=false; }"
+bindExternal,MDL_APPLYRANDOMFACEANI,0,common/game/gamescript.cpp:418,incomplete_marker_review,"(void)probMin; (void)timeMaxVar; (void)timeMax; (void)timeMinVar; (void)timeMin; (void)name; (void)npcRef; static bool first=true; if(first){ Log::e(""not implemented call [mdl_applyrandomfaceani]""); first=false; }"
+bindExternal,NPC_ISDETECTEDMOBOWNEDBYGUILD,0,common/game/gamescript.cpp:502,incomplete_marker_review,"static bool first=true; if(first){ Log::e(""not implemented call [npc_isdetectedmobownedbyguild]""); first=false; } auto npc = findNpc(npcRef); (void)guild; if(npc!=nullptr && npc->detectedMob()!=nullptr) { auto ow = npc->detectedMob()->owner"
+bindExternal,AI_SETWALKMODE,585,common/game/gamescript.cpp:528,incomplete_marker_review,int32_t weaponBit = 0x80; auto npc = findNpc(npcRef); int32_t mode = modeBits & (~weaponBit); if(npc!=nullptr && mode>=0 && mode<=3){ //TODO: weapon flags npc->aiPush(AiQueue::aiSetWalkMode(WalkBit(mode))); }
+bindExternal,GAME_INITGERMAN,0,common/game/gamescript.cpp:593,constant_return_review,return true;
+bindExternal,GAME_INITENGLISH,0,common/game/gamescript.cpp:594,constant_return_review,return true;
+register_external,APPLY_OPTIONS_VIDEO,0,common/ui/menuroot.cpp:36,incomplete_marker_review,"Log::d(""TODO: apply_options_video"");"

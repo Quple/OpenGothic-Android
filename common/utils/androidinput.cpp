@@ -158,9 +158,10 @@ int nextValue(int setting, int value) {
     case Mobile::SettingButtons:
       return value<60 ? 60 : value<80 ? 80 : value<100 ? 100 : value<120 ? 120 : value<140 ? 140 : 60;
     case Mobile::SettingResolution:
-      return value==50 ? 75 : value==75 ? 100 : 50;
+      return value==25 ? 50 : value==50 ? 75 : value==75 ? 100 : 25;
     case Mobile::SettingShadows:
-      return value==0 ? 512 : value==512 ? 1024 : value==1024 ? 2048 : 0;
+      return value==0 ? 128 : value==128 ? 256 : value==256 ? 512 :
+             value==512 ? 1024 : value==1024 ? 2048 : 0;
     case Mobile::SettingEffects:
       return value ? 0 : 1;
     case Mobile::SettingFps:

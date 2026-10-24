@@ -16,6 +16,7 @@ class InventoryRenderer {
     void draw(Tempest::Encoder<Tempest::CommandBuffer>& cmd);
 
     void reset(bool full=false);
+    bool isEmpty() const { return items.empty(); }
     /// clip: only this part of the screen is drawn
     void drawItem(int x, int y, int w, int h, const Item &item, const Tempest::Rect* clip=nullptr);
 

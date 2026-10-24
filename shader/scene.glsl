@@ -76,6 +76,7 @@ struct Cluster {
   uint  firstMeshlet;
   int   meshletCount;
   uint  instanceId;
+  uvec4 lod; // first meshlet and count for two authored progressive LODs
   };
 
 const uint BK_SOLID = 0x1;

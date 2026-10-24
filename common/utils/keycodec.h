@@ -96,6 +96,10 @@ class KeyCodec final {
     static int32_t     keyToCode(Tempest::Event::KeyType     t);
     static int32_t     keyToCode(Tempest::Event::MouseButton t);
 
+    // Ikarus uses DirectInput scan codes, rather than the packed INI strings.
+    static int32_t     scriptKeyCode(Tempest::Event::KeyType t);
+    static int32_t     scriptKeyCode(Tempest::Event::MouseButton t);
+
     static std::string toCode(int32_t scan);
 
   private:

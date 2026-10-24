@@ -7,6 +7,7 @@
 #include <cassert>
 
 #include "ui/inventorymenu.h"
+#include "graphics/inventoryrenderer.h"
 #include "ui/videowidget.h"
 #include "camera.h"
 #include "gothic.h"
@@ -143,7 +144,7 @@ void Renderer::setupSettings() {
 #ifdef OPENGOTHIC_TOUCH_UI
   {
     const auto pref = AndroidInput::preferences();
-    settings.vidResIndex       = pref.resolution>=100 ? 0.f : pref.resolution>=75 ? 1.f : 2.f;
+    settings.vidResIndex       = pref.resolution>=100 ? 0.f : pref.resolution>=75 ? 1.f : pref.resolution>=50 ? 2.f : 3.f;
     settings.shadowResolution  = uint32_t(std::clamp(pref.shadows,0,2048));
     settings.zCloudShadowScale = pref.effects!=0;
   }
@@ -432,18 +433,25 @@ void Renderer::resetViewport(Tempest::Size res, Tempest::Size fullRes) {
 void Renderer::resetShadowmap() {
   auto& device = Resources::device();
 
-  for(int i=0; i<Resources::ShadowLayers; ++i)
-    Resources::recycle(std::move(shadowMap[i]));
-
   const bool forceSm1 = (settings.giMethod==GiMethod::Probes || settings.giMethod==GiMethod::IrrC ||
                          settings.pathTraceEnabled || sky.quality==PathTrace);
   for(int i=0; i<Resources::ShadowLayers; ++i) {
+    bool required = settings.shadowResolution>0;
     if(!(i==1 && forceSm1)) {
       if(settings.vsmEnabled && !(settings.rtsmEnabled && i==1))
-        continue; //TODO: support vsm in gi code
+        required = false; //TODO: support vsm in gi code
       if(settings.rtsmEnabled && !(sky.quality!=None && i==1))
-        continue; //TODO: support vsm in gi code
+        required = false; //TODO: support vsm in gi code
       }
+    if(!required) {
+      Resources::recycle(std::move(shadowMap[i]));
+      continue;
+      }
+    // Settings notifications also cover sound, controls and menu sliders.
+    // Keep existing maps unless their actual allocation needs to change.
+    if(shadowMap[i].size()==Size(int(settings.shadowResolution),int(settings.shadowResolution)))
+      continue;
+    Resources::recycle(std::move(shadowMap[i]));
     shadowMap[i] = device.zbuffer(shadowFormat, settings.shadowResolution, settings.shadowResolution);
     }
   }
@@ -475,19 +483,26 @@ void Renderer::resetSkyFog() {
 
   sky.lutIsInitialized = false;
 
+#ifdef __ANDROID__
+  // Fog is interpolated from a 3D LUT. Halve its angular resolution on
+  // mobile while retaining the depth samples and scattering distance.
+  constexpr uint32_t fogScale = 2;
+#else
+  constexpr uint32_t fogScale = 1;
+#endif
   switch(sky.quality) {
     case None:
     case VolumetricLQ:
-      sky.fogLut3D   = device.image3d(sky.lutRGBAFormat, 160, 90, 64);
+      sky.fogLut3D   = device.image3d(sky.lutRGBAFormat, 160/fogScale, 90/fogScale, 64);
       break;
     case VolumetricHQ:
       // fogLut and oclussion are decupled
-      sky.fogLut3D   = device.image3d(sky.lutRGBFormat,  128,64,32);
-      sky.fogLut3DMs = device.image3d(sky.lutRGBAFormat, 128,64,32);
+      sky.fogLut3D   = device.image3d(sky.lutRGBFormat,  128/fogScale,64/fogScale,32);
+      sky.fogLut3DMs = device.image3d(sky.lutRGBAFormat, 128/fogScale,64/fogScale,32);
       break;
     case Epipolar:
-      sky.fogLut3D   = device.image3d(sky.lutRGBFormat,  128,64,32);
-      sky.fogLut3DMs = device.image3d(sky.lutRGBAFormat, 128,64,32);
+      sky.fogLut3D   = device.image3d(sky.lutRGBFormat,  128/fogScale,64/fogScale,32);
+      sky.fogLut3DMs = device.image3d(sky.lutRGBAFormat, 128/fogScale,64/fogScale,32);
       break;
     case PathTrace:
       break;
@@ -578,15 +593,20 @@ void Renderer::draw(Attachment& result, Encoder<CommandBuffer>& cmd, uint8_t fId
     }
   }
 
-#ifdef OPENGOTHIC_TOUCH_UI
-void Renderer::drawTouchItems(Attachment& result, Encoder<CommandBuffer>& cmd, InventoryRenderer& items) {
+void Renderer::drawUiItems(Attachment& result, Encoder<CommandBuffer>& cmd, InventoryRenderer& items) {
   auto& zb = (zbufferUi.isEmpty() ? zbuffer : zbufferUi);
   cmd.setFramebuffer({{result, Tempest::Preserve, Tempest::Preserve}},{zb, 1.f, Tempest::Preserve});
-  cmd.setDebugMarker("Touch-items");
+  cmd.setDebugMarker("UI-item-previews");
+  cmd.setScissor(0,0,result.w(),result.h());
   items.draw(cmd);
 
   cmd.setFramebuffer({{result, Tempest::Preserve, Tempest::Preserve}});
   cmd.setViewport(0,0,result.w(),result.h());
+  }
+
+#ifdef OPENGOTHIC_TOUCH_UI
+void Renderer::drawTouchItems(Attachment& result, Encoder<CommandBuffer>& cmd, InventoryRenderer& items) {
+  drawUiItems(result,cmd,items);
   }
 #endif
 
@@ -2010,7 +2030,7 @@ void Renderer::prepareFog(Encoder<Tempest::CommandBuffer>& cmd, WorldView& wview
         cmd.setBinding(2, zbuffer, Sampler::nearest());
         cmd.setBinding(3, scene.uboGlobal[SceneGlobals::V_Main]);
         cmd.setBinding(4, occlusionLut);
-        cmd.setBinding(5, shadowMap[1], Resources::shadowSampler());
+        cmd.setBinding(5, *scene.shadowMap[1], Resources::shadowSampler());
         cmd.setPipeline(shaders.fogOcclusion);
         cmd.dispatchThreads(occlusionLut.size());
         }
@@ -2785,6 +2805,8 @@ float Renderer::internalResolutionScale() const {
     return 1;
   if(settings.vidResIndex==1)
     return 0.75;
+  if(settings.vidResIndex==3)
+    return 0.25;
   return 0.5;
   }
 
@@ -2792,7 +2814,9 @@ Size Renderer::internalResolution(Tempest::Size src) const {
   if(settings.vidResIndex==0)
      return src;
   if(settings.vidResIndex==1)
-    return Size(3*src.w/4, 3*src.h/4);
-  return Size(src.w/2, src.h/2);
+    return Size(std::max(1,3*src.w/4), std::max(1,3*src.h/4));
+  if(settings.vidResIndex==3)
+    return Size(std::max(1,src.w/4), std::max(1,src.h/4));
+  return Size(std::max(1,src.w/2), std::max(1,src.h/2));
   }
 

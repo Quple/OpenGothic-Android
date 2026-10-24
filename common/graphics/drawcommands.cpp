@@ -66,13 +66,7 @@ DrawCommands::~DrawCommands() {
   }
 
 bool DrawCommands::isViewEnabled(SceneGlobals::VisCamera viewport) const {
-  if(viewport==SceneGlobals::V_Vsm && !(vsmSupported && scene.vsmEnabled))
-    return false;
-  if(viewport==SceneGlobals::V_Shadow0 && scene.shadowMap[0]->size()==Size(1,1))
-    return false;
-  if(viewport==SceneGlobals::V_Shadow1 && scene.shadowMap[1]->size()==Size(1,1))
-    return false;
-  return true;
+  return scene.isViewEnabled(viewport) && (viewport!=SceneGlobals::V_Vsm || vsmSupported);
   }
 
 void DrawCommands::setBindings(Tempest::Encoder<CommandBuffer>& cmd, const DrawCmd& cx, SceneGlobals::VisCamera v) {
@@ -286,10 +280,33 @@ void DrawCommands::visibilityPass(Encoder<CommandBuffer>& cmd, int pass) {
     const size_t visClustersSz = maxPayload*sizeof(uint32_t)*4;
     usesSsbo(view.visClusters, visClustersSz);
 
-    struct Push { uint32_t firstMeshlet; uint32_t meshletCount; float znear; } push = {};
+    struct Push {
+      uint32_t firstMeshlet;
+      uint32_t meshletCount;
+      float    znear;
+      float    minObjectPixels;
+      Vec2     viewportSize;
+      float    objectDistance;
+      float    modelDetail;
+      } push = {};
+    static_assert(sizeof(Push)==32);
     push.firstMeshlet = 0;
     push.meshletCount = uint32_t(clusters.size());
     push.znear        = scene.znear;
+    push.objectDistance = scene.objectDistance;
+    push.modelDetail = std::clamp(Gothic::settingsGetF("PERFORMANCE","modelDetail"),0.f,1.f);
+#ifdef __ANDROID__
+    // Keep terrain and animated objects; discard only tiny static details.
+    // The HiZ prepass retains its existing large-occluder selection.
+    if(viewport==SceneGlobals::V_Main) {
+      push.minObjectPixels = 2.f;
+      }
+    else if(SceneGlobals::isShadowView(viewport)) {
+      push.minObjectPixels = 1.f;
+      const auto& shadow = *scene.shadowMap[viewport-SceneGlobals::V_Shadow0];
+      push.viewportSize = Vec2(float(shadow.w()), float(shadow.h()));
+      }
+#endif
 
     auto* pso = &Shaders::inst().visibilityPassSh;
     if(viewport==SceneGlobals::V_Main)

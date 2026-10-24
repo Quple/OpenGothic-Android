@@ -6,6 +6,7 @@
 #include "game/gametime.h"
 #include "camera.h"
 #include "shaders.h"
+#include "gothic.h"
 
 using namespace Tempest;
 
@@ -37,6 +38,7 @@ bool WorldView::isInPfxRange(const Vec3& pos) const {
   }
 
 void WorldView::preFrameUpdate(const Camera& camera, uint64_t tickCount, uint8_t fId) {
+  sGlobal.objectDistance = Gothic::settingsObjectDistance();
   const auto ldir = gSky.sunLight().dir();
   Tempest::Matrix4x4 shadow   [Resources::ShadowLayers];
   Tempest::Matrix4x4 shadowLwc[Resources::ShadowLayers];
@@ -240,6 +242,10 @@ bool WorldView::updateRtScene() {
   if(!visuals.updateRtScene(sGlobal.rtScene))
     return false;
   return true;
+  }
+
+bool WorldView::replaceTexture(const Texture2d& source, const Texture2d& replacement) {
+  return visuals.replaceTexture(source,replacement);
   }
 
 void WorldView::postFrameupdate() {

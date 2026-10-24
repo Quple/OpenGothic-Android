@@ -16,6 +16,8 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen, l
     let finishNpc = null;
     let partyStrength = false;
     let fixCases = null;
+    let houseWallChoice = null;
+    let itemPreview = 0;
 
     // comtest <case> and comcheck fix <case>: the cases that were fixed
     function fixCommand(args) {
@@ -628,6 +630,168 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen, l
                     console.log("You got the sword ITMW_1H_MIL_SWORD (equipped) and +100 strength. The baker with AIVAR[15]=1 stands in front of you. Close F10. Without a weapon he is in the focus (his name). Draw a weapon: the name must disappear and he must not be targeted. comcheck party off makes him a normal character.");
                     break;
                 }
+                case "trialog": {
+                    const names = ["TRIA_RUNNING", "TRIA_CPTR", "TRIA_SELF", "TRIA_LAST", "Q102_JORNCHOSEN", "Q102_FABIOCHOSEN"];
+                    for (const name of names) {
+                        const symbol = debug.symbol(name);
+                        if (symbol) console.log(`${name}=${symbol.value}`);
+                    }
+                    console.log("After naturally finishing the Q102 choice (go with Jorn/Fabio), TRIA_RUNNING and TRIA_CPTR must become 0, the camera must return, and ZS_TALK_END must not report an unfinished trialog. Use comcheck queue for any pending actions. This command only reads state; it does not force completion.");
+                    break;
+                }
+                case "crafting": {
+                    for (const name of ["CRAFTINGVIEW_ISOPEN", "CRAFTINGVIEWLASTCHOICE", "CV_CURRENTITEM", "CV_CURRENTMODE", "CV_CURRENTAMOUNT", "CRAFTINGVIEW_SELECTEDTAB"]) {
+                        const symbol = debug.symbol(name);
+                        if (symbol) console.log(`${name}=${symbol.value}`);
+                    }
+                    console.log("Read-only crafting state. At a real workbench/alchemy table/cooking station select several recipes and quantities, including All. Check the resulting model, ingredients, owned/required counts and properties tab. Leave the menu: the preview and its texts must disappear. Reopen and craft normally; this command does not craft or grant items.");
+                    break;
+                }
+                case "breath":
+                case "slowdown": {
+                    const npc = args[1] ? npcs.find(args[1]) : player;
+                    if (!npc || !npc.valid) throw new Error("No such live NPC in this world.");
+                    const state = npc.compatibilityState;
+                    if (!state) throw new Error("This command needs the current compatibility build of Gothic2Notr.exe.");
+                    console.log(`${npc.instance}: diving=${state.diving}, elapsed=${state.diveElapsedMs} ms, limit=${state.diveLimitMs} ms, remaining=${state.diving ? state.diveLimitMs - state.diveElapsedMs : state.diveLimitMs} ms, requested model scale=${state.requestedModelScale}, HP=${npc.health}/${npc.maxHealth}.`);
+                    console.log("Read only: does not cast, grant a potion, refill air or change the quest. Breath: naturally use Dive10, dive, save/load and let the buff expire. Slowdown: naturally cast on this NPC, compare animation/movement/hits, save/load during the effect and check the return to 1.0. Use comcheck slowdown NPC_INSTANCE to inspect its target; inspect the player during Otis Q306.");
+                    break;
+                }
+                case "attitude": {
+                    if (!args[1]) throw new Error("Usage: comcheck attitude NPC_INSTANCE (reads only)");
+                    const npc = npcs.find(args[1]);
+                    if (!npc || !npc.valid) throw new Error("No such live NPC in this world.");
+                    const current = call("NPC_GETATTITUDE", [npc, player]);
+                    const permanent = call("NPC_GETPERMATTITUDE", [npc, player]);
+                    console.log(`${npc.instance}: current attitude=${current}, permanent attitude=${permanent}, party AIVAR[15]=${npc.aiVar(15)}. Expected codes: 0 hostile, 1 angry, 2 neutral, 3 friendly.`);
+                    console.log("Read only. Compare before/during/after a natural quest fight and after save/load; a temporary fight must not permanently change the relationship. Check Q205/Q306 and party combat separately.");
+                    break;
+                }
+                case "telekinesis": {
+                    for (const name of ["STAGE", "NUMB_OF_STEPS", "STEP_X", "STEP_Y", "STEP_Z"]) {
+                        const symbol = debug.symbol(name);
+                        if (symbol) console.log(`${name}=${symbol.value}`);
+                    }
+                    console.log("Read only. Naturally cast Telekinesis on a loose world item 2-10 metres away. It must rise by its height, travel toward you with the original mana cost and drop normally when released/completed. Pick it up once. Repeat with no valid target, too-close item, exhausted mana, interrupted cast and save/load during levitation; no item may remain floating permanently or duplicate. STEP values above are float bit patterns.");
+                    break;
+                }
+                case "map": {
+                    const maps = {
+                        archolos: "USE_MAP_ARCHOLOS", silbach: "USE_MAP_SILBACH",
+                        city: "USE_MAP_CITY", sewers: "USE_MAP_SEWERS"
+                    };
+                    const choice = args[1] || "archolos";
+                    if (choice === "off") {
+                        call("SPRITEMAP_DESTROY", []);
+                        console.log("Closed the CoM sprite map.");
+                        break;
+                    }
+                    if (!maps[choice]) throw new Error("Usage: comcheck map archolos|silbach|city|sewers|off");
+                    call(maps[choice], [], { self: player, other: player });
+                    console.log(`Opened ${choice} through its CoM use function. Close F10: the map should be square and the cursor should stay above it and follow position/heading where this map supports the current world. Close normally or use comcheck map off. Also check natural map-item use and quest maps.`);
+                    break;
+                }
+                case "preview": {
+                    if (itemPreview) {
+                        call("RENDER_REMOVE", [itemPreview]);
+                        itemPreview = 0;
+                    }
+                    if (args[1] === "off") {
+                        console.log("Removed the LeGo item preview.");
+                        break;
+                    }
+                    const item = args[1] || "ITMW_1H_MIL_SWORD";
+                    call("_RENDER_INIT", []);
+                    itemPreview = call("RENDER_ADDITEMPRIO", [id(item), 1024, 1024, 3072, 3072, 0]);
+                    if (!itemPreview) throw new Error("Render_AddItemPrio returned no view.");
+                    console.log(`Created a LeGo 3D preview of ${item}. Close F10: expect a model in the upper-left area, with no inventory item granted. Use comcheck preview off before saving/loading/changing world. Also inspect the natural crafting window's ingredient and result previews.`);
+                    break;
+                }
+                case "category": {
+                    id("CATINV_SETCATEGORY");
+                    if (args[1] !== undefined && args[1] !== "status") {
+                        const index = Number(args[1]);
+                        if (!Number.isInteger(index) || index < 0 || index > 8)
+                            throw new Error("Usage: comcheck category 0..8|status");
+                        const changed = call("CATINV_SETCATEGORY", [index]);
+                        console.log(`CATINV_SETCATEGORY(${index}): changed=${changed}.`);
+                    }
+                    console.log(`CATINV_ACTIVECATEGORY=${debug.symbol("CATINV_ACTIVECATEGORY").value}. Order: 0 all, 1 weapons, 2 armor, 3 magic, 4 artifacts, 5 food, 6 potions, 7 documents, 8 other. Open inventory, inspect the filter, close and reopen: own inventory should remember it. Open a chest/trade/ransack: the initial category should return. Transfer the last item of a category and check both lists.`);
+                    break;
+                }
+                case "torch": {
+                    const action = args[1] || "status";
+                    if (!["status", "stow"].includes(action)) throw new Error("Usage: comcheck torch status|stow");
+                    const holding = call("TORCH_HEROHOLDINGTORCH", []);
+                    if (action === "stow") {
+                        if (!holding) throw new Error("No burning torch is detected in the left hand. Equip one normally first.");
+                        const before = player.itemCount("ITLSTORCH");
+                        call("TORCH_UNEQUIP", []);
+                        console.log(`Stowed through CoM TORCH_UNEQUIP: holding=${call("TORCH_HEROHOLDINGTORCH", [])}, unlit torches ${before} -> ${player.itemCount("ITLSTORCH")}. Expected: the flame disappears, holding=0, exactly one unlit torch is returned. No torch should appear on the ground.`);
+                    } else {
+                        console.log(`CoM detects burning torch in left hand: ${holding ? "YES" : "NO"}; unlit torches=${player.itemCount("ITLSTORCH")}. Equip normally, check again, then use comcheck torch stow. Also verify the normal torch key and save/reload while holding it.`);
+                    }
+                    break;
+                }
+                case "spellactive": {
+                    const name = args[1] || "SPL_LIGHT";
+                    const spell = debug.symbol(name);
+                    if (!spell || !Number.isInteger(spell.value)) throw new Error(`Unknown spell constant: ${name}`);
+                    const active = call("ISSPELLACTIVE", [player, spell.value]);
+                    console.log(`${name}: ${active ? "ACTIVE" : "INACTIVE"}. Compare before casting, while the committed spell effect is visible, and after it expires. Merely equipping a rune must remain INACTIVE. For Q501, cast light in the dark room and check the natural journal/room update.`);
+                    break;
+                }
+                case "scenelock": {
+                    const mode = args[1];
+                    if (!["load", "save", "both", "off"].includes(mode))
+                        throw new Error("Usage: comcheck scenelock load|save|both|off. Use while idle on a disposable save; off enables both operations.");
+                    if (mode === "both" || mode === "off") {
+                        call("ENABLELOADSAVEGAME", [mode === "off" ? 1 : 0]);
+                    } else {
+                        call("ENABLELOADSAVEGAME", [1]);
+                        call(mode === "load" ? "ENABLELOADGAME" : "ENABLESAVEGAME", [0]);
+                    }
+                    console.log(`Scene lock: ${mode}. Check save/load buttons and quick-load. A blocked load must keep the current world. Use comcheck scenelock off to enable both again; do not save while a manual lock is active.`);
+                    break;
+                }
+                case "housewall": {
+                    // Real CoM function: wallpaper choices 0..11, including Christmas.
+                    const key = "HOUSE_CRAFT_WALL_CHANGETEXTURE";
+                    id("APPLYHOUSEWALLTEXTURE");
+                    const current = debug.symbol(key);
+                    if (!current) throw new Error("The CoM wallpaper variable is missing.");
+                    const action = args[1] || "status";
+                    if (action === "status") {
+                        console.log(`House wallpaper=${current.value}. Stand inside your house, then comcheck housewall 1..11, 0 for default, restore to undo. This changes the saved choice; use a disposable save.`);
+                        break;
+                    }
+                    let value;
+                    if (action === "restore") {
+                        if (houseWallChoice === null) throw new Error("No wallpaper choice was saved by this command in this session.");
+                        value = houseWallChoice;
+                    } else {
+                        value = Number(action);
+                        if (!Number.isInteger(value) || value < 0 || value > 11)
+                            throw new Error("Usage: comcheck housewall 0..11|status|restore");
+                    }
+                    if (houseWallChoice === null) houseWallChoice = current.value;
+                    debug.setSymbol(key, value);
+                    call("APPLYHOUSEWALLTEXTURE", []);
+                    console.log(`Applied wallpaper ${value}. Close F10 and inspect the walls; then try another choice and default (0). Save/reload and verify the selected pattern remains. Restore only restores the choice remembered in this JS session.`);
+                    break;
+                }
+                case "bestweapon": {
+                    id("NpcEquipBestWeaponByType");
+                    const before = `melee=${player.weaponItem}, ranged=${player.rangedItem}`;
+                    call("NpcEquipBestWeaponByType", [player, 2]);
+                    call("NpcEquipBestWeaponByType", [player, 4]);
+                    const after = `melee=${player.weaponItem}, ranged=${player.rangedItem}`;
+                    // Repeat the same calls: equipment must stay equipped.
+                    call("NpcEquipBestWeaponByType", [player, 2]);
+                    call("NpcEquipBestWeaponByType", [player, 4]);
+                    console.log(`Before: ${before}; selected: ${after}; repeated: melee=${player.weaponItem}, ranged=${player.rangedItem}. Inspect equipped melee/ranged weapons in inventory: strongest usable weapons should be equipped and remain equipped on repetition. Stand idle with weapons sheathed and use a disposable save.`);
+                    break;
+                }
                 case "inventory": {
                     // LOCKINVENTORY of CoM: with the flag the inventory closes itself right after it was opened
                     const on = args[1] !== "off";
@@ -667,6 +831,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen, l
                     break;
                 default:
                     console.log("Tools for saves: state | scale [instance] [factor] | item <NAME> [n] | clock <h> [m] | world [list|<name> [waypoint]] | wp [part] | tp <waypoint> | heal | god [off] | xp <n> | attr <strength|dexterity|health|mana> <n>.");
+                    console.log("New CoM checks: trialog | crafting | breath [NPC_INSTANCE] | slowdown [NPC_INSTANCE] | attitude NPC_INSTANCE | telekinesis | bestweapon | spellactive [SPL_LIGHT] | torch status|stow | category 0..8|status | map archolos|silbach|city|sewers|off | preview [item]|off | housewall 0..11|status|restore | scenelock load|save|both|off. Details: docs/ARCHOLOS_PROGRESS_2026-10-24.md.");
                     console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | faint [keep|drop|go|wake] | vob <NAME> [go|hide|show|ghost|solid] | queue [radius] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers] | fix [case] [check] | test [all|area] | dlg list|analyze|run|all|report");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;

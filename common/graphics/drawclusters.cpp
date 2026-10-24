@@ -41,6 +41,7 @@ uint32_t DrawClusters::alloc(const Bucket& bucket, size_t firstMeshlet, size_t m
   const auto ret = implAlloc(1);
 
   Cluster& c = clusters[ret];
+  c = Cluster();
   if(bucket.staticMesh!=nullptr)
     c.r = bucket.staticMesh->bbox.rConservative + bucket.mat.waveMaxAmplitude; else
     c.r = bucket.animMesh->bbox.rConservative;
@@ -49,6 +50,18 @@ uint32_t DrawClusters::alloc(const Bucket& bucket, size_t firstMeshlet, size_t m
   c.firstMeshlet = uint32_t(firstMeshlet);
   c.meshletCount = uint32_t(meshletCount);
   c.instanceId   = uint32_t(-1);
+
+  const auto findLods = [&](const auto& sub, size_t length) {
+    if(sub.iboOffset/PackedMesh::MaxInd==firstMeshlet && length/PackedMesh::MaxInd==meshletCount)
+      c.lod = sub.lod;
+    };
+  if(bucket.staticMesh!=nullptr) {
+    for(const auto& sub:bucket.staticMesh->sub)
+      findLods(sub,sub.iboLength);
+    } else {
+    for(const auto& sub:bucket.animMesh->sub)
+      findLods(sub,sub.iboSize);
+    }
 
   clustersDurty.resize((clusters.size() + 32 - 1)/32);
   markClusters(ret, 1);
@@ -113,8 +126,10 @@ size_t DrawClusters::implAlloc(size_t count) {
       }
     if(sz<count)
       continue;
-    if(sz-count < bfDiff)
+    if(sz-count < bfDiff) {
       bestFit = i;
+      bfDiff = sz-count;
+      }
     }
 
   if(bestFit != size_t(-1)) {

@@ -2,10 +2,12 @@
 
 #include <Tempest/Matrix4x4>
 #include <Tempest/Log>
+#include <cctype>
 
 #include "graphics/mesh/skeleton.h"
 #include "graphics/visualfx.h"
 #include "game/damagecalculator.h"
+#include "game/globaleffects.h"
 #include "game/serialize.h"
 #include "game/gamescript.h"
 #include "utils/string_frm.h"
@@ -213,6 +215,8 @@ Npc::Npc(World &owner, size_t instance, std::string_view waypoint, NpcProcessPol
 Npc::~Npc(){
   if(currentInteract)
     currentInteract->detach(*this,true);
+  if(hnpc!=nullptr && hnpc->user_ptr==this)
+    hnpc->user_ptr = nullptr;
   }
 
 void Npc::save(Serialize &fout, size_t id, std::string_view directory) {
@@ -259,6 +263,26 @@ void Npc::save(Serialize &fout, size_t id, std::string_view directory) {
   fout.setEntry("worlds/",fout.worldName(),directory,id,"/inventory");
   if(!invent.isEmpty() || id==size_t(-1))
     invent.save(fout);
+  if(!walkStopChasmEnabled) {
+    fout.setEntry("worlds/",fout.worldName(),directory,id,"/compat-movement");
+    fout.write(uint8_t(1),walkStopChasmEnabled);
+    }
+  if(compatDiveLimit>=0) {
+    fout.setEntry("worlds/",fout.worldName(),directory,id,"/compat-breath");
+    fout.write(uint8_t(1),compatDiveLimit,compatDiveRemaining);
+    }
+  if(visual.pose().hasModelClock()) {
+    fout.setEntry("worlds/",fout.worldName(),directory,id,"/compat-model-clock");
+    fout.write(uint8_t(1));
+    visual.pose().saveModelClock(fout);
+    }
+  if(auto* light = owner.script().findSymbol("SPL_LIGHT"); light!=nullptr && light->type()==zenkit::DaedalusDataType::INT) {
+    const uint64_t remaining = visual.spellRemainingTime(light->get_int(),owner.tickCount());
+    if(remaining>0) {
+      fout.setEntry("worlds/",fout.worldName(),directory,id,"/compat-light-spell");
+      fout.write(uint8_t(1),light->get_int(),remaining);
+      }
+    }
   }
 
 void Npc::load(Serialize &fin, size_t id, std::string_view directory) {
@@ -329,7 +353,41 @@ void Npc::load(Serialize &fin, size_t id, std::string_view directory) {
   if(fin.setEntry("worlds/",fin.worldName(),directory,id,"/inventory"))
     invent.load(fin,*this);
 
+  walkStopChasmEnabled = true;
+  if(fin.setEntry("worlds/",fin.worldName(),directory,id,"/compat-movement")) {
+    uint8_t version = 0;
+    fin.read(version);
+    if(version==1)
+      fin.read(walkStopChasmEnabled);
+    }
+  compatDiveLimit = -1;
+  compatDiveRemaining = 0;
+  if(fin.setEntry("worlds/",fin.worldName(),directory,id,"/compat-breath")) {
+    uint8_t version = 0;
+    fin.read(version);
+    if(version==1)
+      fin.read(compatDiveLimit,compatDiveRemaining);
+    }
+
   // post-alignment
+  if(fin.setEntry("worlds/",fin.worldName(),directory,id,"/compat-model-clock")) {
+    uint8_t version = 0;
+    fin.read(version);
+    if(version==1)
+      visual.pose().loadModelClock(fin);
+    }
+  if(fin.setEntry("worlds/",fin.worldName(),directory,id,"/compat-light-spell")) {
+    uint8_t version = 0;
+    fin.read(version);
+    if(version==1) {
+      int32_t spell = -1;
+      uint64_t remaining = 0;
+      fin.read(spell,remaining);
+      auto* light = owner.script().findSymbol("SPL_LIGHT");
+      if(light!=nullptr && light->type()==zenkit::DaedalusDataType::INT && light->get_int()==spell)
+        visual.restoreLightSpell(owner,*this,spell,remaining);
+      }
+    }
   updateTransform();
   if(isUsingTorch)
     visual.setTorch(true,owner);
@@ -887,6 +945,10 @@ bool Npc::isUsingTorch() const {
   return visual.isUsingTorch();
   }
 
+const std::shared_ptr<zenkit::IItem>& Npc::torchItem() const {
+  return visual.torchItem();
+  }
+
 void Npc::dropTorch(bool burnout) {
   auto sk = visual.visualSkeleton();
   if(sk==nullptr)
@@ -935,6 +997,17 @@ void Npc::setVisualBody(int32_t headTexNr, int32_t teethTexNr, int32_t bodyTexNr
   vTeeth  = teethTexNr;
   vColor  = bodyTexNr;
   bdColor = bodyTexColor;
+
+  // Ikarus oCNpc appearance, used by CoM's NPC_ChangeFace and
+  // B_RefreshAtInsert. These are engine bitfields, not C_NPC.MISSION.
+  hnpc->compat_body_visual = body;
+  hnpc->compat_head_visual = head;
+  auto packed = [](int32_t value, uint32_t mask, int shift, int32_t previous) {
+    return int32_t((uint32_t(previous)&~mask) | ((uint32_t(value)<<shift)&mask));
+    };
+  hnpc->compat_bitfield[0] = packed(vColor,0x3FFFC000u,14,hnpc->compat_bitfield[0]);
+  hnpc->compat_bitfield[1] = packed(vHead, 0xFFFF0000u,16,hnpc->compat_bitfield[1]);
+  hnpc->compat_bitfield[2] = packed(vTeeth,0x0000FFFFu, 0,hnpc->compat_bitfield[2]);
 
   auto  vhead = head.empty() ? MeshObjects::Mesh() : owner.addView(FileExt::addExt(head,".MMB"),vHead,vTeeth,bdColor);
   auto  vbody = body.empty() ? MeshObjects::Mesh() : owner.addView(FileExt::addExt(body,".ASC"),vColor,0,bdColor);
@@ -1402,7 +1475,23 @@ int32_t Npc::learningPoints() const {
   }
 
 int32_t Npc::diveTime() const {
+  if(compatDiveLimit>=0 && isDive())
+    return int32_t(std::min<int64_t>(int64_t(compatDiveLimit)-compatDiveRemaining,INT32_MAX));
   return mvAlgo.diveTime();
+  }
+
+int32_t Npc::diveTimeLimit() const {
+  if(compatDiveLimit>=0)
+    return compatDiveLimit;
+  return int32_t(std::clamp<int64_t>(int64_t(owner.script().guildVal().dive_time[guild()])*1000,
+                                    INT32_MIN,INT32_MAX));
+  }
+
+void Npc::setDiveBreath(int32_t limit, int32_t remaining) {
+  if(limit<0)
+    return;
+  compatDiveLimit = limit;
+  compatDiveRemaining = remaining;
   }
 
 void Npc::setAttitude(Attitude att) {
@@ -2187,12 +2276,18 @@ void Npc::takeDamage(Npc& other, const Bullet* b, const CollideMask bMask, int32
     }
 
   // mods of Ikarus and LeGo hook oCNpc::OnDamage: they take the armor into account and may forbid to kill
-  auto dmaDamage = owner.script().dmaDamageBegin(*this,other,isSpell,splId,b!=nullptr && !isSpell,dontKill);
+  if(b!=nullptr)
+    dmg = b->damage();
+  else if(!isSpell)
+    for(size_t i=0; i<zenkit::DamageType::NUM; ++i)
+      dmg[i] = other.handle().damage[i];
+  auto dmaDamage = owner.script().dmaDamageBegin(*this,other,isSpell,splId,b!=nullptr && !isSpell,dontKill,dmg);
   dontKill       = dmaDamage.dontKill;
+  if(isSpell)
+    dmg = dmaDamage.damage;
   hitResult = DamageCalculator::damageValue(other,*this,b,isSpell,dmg,bMask);
   owner.script().dmaDamageEnd(*this,dmaDamage);
-  if(hitResult.hasHit && dmaDamage.extra>0)
-    hitResult.value += dmaDamage.extra;
+  dontKill = dmaDamage.dontKill;
   if(!isSpell && !isDown() && hitResult.hasHit)
     owner.addWeaponHitEffect(other,b,*this).play();
 
@@ -2280,7 +2375,8 @@ Npc *Npc::updateNearestEnemy() {
   Npc*  ret  = nullptr;
   float dist = std::numeric_limits<float>::max();
   if(nearestEnemy!=nullptr &&
-     (!nearestEnemy->isDown() && canSenseNpc(*nearestEnemy,true)!=SensesBit::SENSE_NONE)) {
+     (!nearestEnemy->isDown() && canSenseNpc(*nearestEnemy,true)!=SensesBit::SENSE_NONE) &&
+     owner.script().dmaEnemyCandidate(*this,*nearestEnemy)) {
     ret  = nearestEnemy;
     dist = qDistTo(*ret);
     }
@@ -2290,7 +2386,7 @@ Npc *Npc::updateNearestEnemy() {
       return;
 
     float d = qDistTo(n);
-    if(d<dist && canSenseNpc(n,true)!=SensesBit::SENSE_NONE) {
+    if(d<dist && canSenseNpc(n,true)!=SensesBit::SENSE_NONE && owner.script().dmaEnemyCandidate(*this,n)) {
       ret  = &n;
       dist = d;
       }
@@ -2708,6 +2804,8 @@ void Npc::tickAnimationTags() {
   }
 
 void Npc::tick(uint64_t dt) {
+  if(auto* effects = owner.globalFx())
+    visual.pose().setTimeScale(effects->modelTimeScale(*this),owner.tickCount());
   static bool dbg = false;
   static int  kId = 432;
   if(dbg && !isPlayer() && hnpc->id!=kId)
@@ -2725,9 +2823,17 @@ void Npc::tick(uint64_t dt) {
     return;
     }
 
+  if(compatDiveLimit>=0) {
+    // Gothic counts remaining milliseconds down under water, and refills them
+    // at twice that rate outside it. CoM's Dive10 buff writes 30000/31000 every
+    // second; keep those values independent of the movement animation clock.
+    const int64_t step = int64_t(std::min<uint64_t>(dt,INT32_MAX));
+    const int64_t left = int64_t(compatDiveRemaining) + (isDive() ? -step : 2*step);
+    compatDiveRemaining = int32_t(isDive() ? std::max<int64_t>(left,INT32_MIN)
+                                         : std::min<int64_t>(left,compatDiveLimit));
+    }
   if(isDive()) {
-    uint32_t gl = guild();
-    int32_t  v  = world().script().guildVal().dive_time[gl]*1000;
+    int32_t  v  = diveTimeLimit();
     int32_t  t  = diveTime();
     if(v>=0 && t>v+int(dt)) {
       int tickSz = world().script().npcDamDiveTime();
@@ -3635,6 +3741,7 @@ void Npc::emitSoundSVM(std::string_view svm) {
 
 void Npc::startEffect(Npc& to, const VisualFx& vfx) {
   Effect e(vfx,owner,*this,SpellFxKey::Cast);
+  e.setOrigin(this);
   e.setActive(true);
   e.setTarget(&to);
   visual.startEffect(owner, std::move(e), 0, true);
@@ -3916,7 +4023,7 @@ void Npc::notifyItemTaken(Item* it) {
     owner.script().dmaItemTaken(*this,*it);
   }
 
-Item* Npc::takeItem(Item& item) {
+Item* Npc::takeItem(Item& item, bool animate) {
   if(interactive()!=nullptr)
     return nullptr;
   if(item.isTorchBurn() && (isUsingTorch() || weaponState()!=WeaponState::NoWeapon))
@@ -3927,10 +4034,19 @@ Item* Npc::takeItem(Item& item) {
     return nullptr;
     }
 
-  const auto  dpos = item.midPosition()-centerPosition();
-  const auto* sq   = setAnimAngGet(Npc::Anim::ItmGet, Pose::calcAniCombVert(dpos));
-  if(sq==nullptr)
-    return nullptr;
+  const Animation::Sequence* sq = nullptr;
+  const bool waterPickup = isDive() && owner.script().dmaUnderwaterPickup();
+  if(animate) {
+    if(waterPickup) {
+      // CoM's diving hook uses this animation instead of the ground pickup.
+      sq = playAnimByName("T_WATERTAKEITEM",BS_DIVE);
+      } else {
+      const auto dpos = item.midPosition()-centerPosition();
+      sq = setAnimAngGet(Npc::Anim::ItmGet,Pose::calcAniCombVert(dpos));
+      }
+    if(sq==nullptr)
+      return nullptr;
+    }
 
   std::unique_ptr<Item> ptr = owner.takeItem(item);
   if(ptr!=nullptr && ptr->isTorchBurn()) {
@@ -3950,7 +4066,13 @@ Item* Npc::takeItem(Item& item) {
   if(isPlayer() && it!=nullptr)
     owner.sendPassivePerc(*this,*this,*it,PERC_ASSESSTHEFT);
 
-  implAniWait(uint64_t(sq->totalTime()));
+  if(sq!=nullptr)
+    implAniWait(uint64_t(sq->totalTime()));
+  if(it!=nullptr && animate && waterPickup && isPlayer()) {
+    auto* received = owner.script().getVm().find_symbol_by_name("PRINT_ADDON_ERHALTEN");
+    if(received!=nullptr && received->type()==zenkit::DaedalusDataType::STRING)
+      Gothic::inst().onPrint(std::string(it->displayName())+received->get_string());
+    }
   return it;
   }
 
@@ -4045,6 +4167,73 @@ void Npc::dropItem(size_t id, size_t count) {
 
 void Npc::clearInventory() {
   invent.clear(owner.script(),*this);
+  }
+
+Item* Npc::itemInSlot(std::string_view slot) {
+  if(auto* it = invent.itemInSlot(slot))
+    return it;
+  std::string name(slot);
+  for(auto& c:name)
+    c = char(std::toupper(static_cast<unsigned char>(c)));
+  const auto mode = visual.fightMode();
+  const bool meleeDrawn = mode==WeaponState::W1H || mode==WeaponState::W2H;
+  const bool rangedDrawn = mode==WeaponState::Bow || mode==WeaponState::CBow;
+  auto* melee = invent.currentMeleeWeapon();
+  auto* ranged = invent.currentRangedWeapon();
+  if(name=="ZS_RIGHTHAND") {
+    if(meleeDrawn)
+      return melee;
+    if(mode==WeaponState::CBow)
+      return ranged;
+    } else if(name=="ZS_LEFTHAND") {
+    if(mode==WeaponState::Bow)
+      return ranged;
+    } else if(name=="ZS_SWORD" || name=="ZS_LONGSWORD") {
+    if(!meleeDrawn && melee!=nullptr && name==(melee->is2H() ? "ZS_LONGSWORD" : "ZS_SWORD"))
+      return melee;
+    } else if(name=="ZS_BOW" || name=="ZS_CROSSBOW") {
+    if(!rangedDrawn && ranged!=nullptr && name==(ranged->isCrossbow() ? "ZS_CROSSBOW" : "ZS_BOW"))
+      return ranged;
+    } else if(name=="ZS_LEFTARM" || name=="ZS_SHIELD") {
+    if(name==(mode==WeaponState::W1H ? "ZS_LEFTARM" : "ZS_SHIELD"))
+      return invent.currentShield();
+    }
+  return nullptr;
+  }
+
+bool Npc::dropFromSlot(std::string_view slot) {
+  std::string name(slot);
+  for(auto& c:name)
+    c = char(std::toupper(static_cast<unsigned char>(c)));
+  if(name=="ZS_LEFTHAND" && isUsingTorch()) {
+    dropTorch();
+    return !isUsingTorch();
+    }
+  auto* it = itemInSlot(name);
+  auto* sk = visual.visualSkeleton();
+  if(it==nullptr || sk==nullptr || it->count()==0)
+    return false;
+  const auto bone = sk->findNode(name);
+  if(bone==size_t(-1))
+    return false;
+  if(isPlayer() && owner.script().dmaDropVob(*this,*it))
+    return false;
+  const auto cls = it->clsId();
+  auto mat = visual.transform();
+  if(bone<visual.pose().boneCount())
+    mat = visual.pose().bone(bone);
+  auto* dropped = owner.addItemDyn(cls,mat,hnpc->symbol_index());
+  if(dropped==nullptr)
+    return false;
+  dropped->setCount(1);
+  invent.clearSlot(*this,name,false);
+  invent.unequip(cls,*this);
+  invent.delItem(cls,1,*this);
+  return true;
+  }
+
+bool Npc::isSpellActive(int32_t spell) const {
+  return visual.isSpellActive(spell,owner.tickCount());
   }
 
 Item* Npc::currentArmor() {
@@ -4167,8 +4356,27 @@ void Npc::useItem(size_t item, uint8_t slotHint, bool force) {
   invent.use(item,*this,slotHint,force);
   }
 
+void Npc::equipItem(size_t item) {
+  auto* it = invent.getItem(item);
+  if(it==nullptr)
+    return;
+  // Equip is idempotent. Inventory::use toggles equipment, including torches.
+  if((it->itemFlag() & ITM_TORCH)!=0) {
+    setTorch(true);
+    return;
+    }
+  invent.equip(item,*this,true);
+  }
+
 void Npc::setCurrentItem(size_t item) {
   invent.setCurrentItem(item);
+  }
+
+void Npc::equipBestWeapon(ItmFlags category) {
+  if(category==ITM_CAT_NF)
+    invent.equipBestMeleeWeapon(*this);
+  else if(category==ITM_CAT_FF)
+    invent.equipBestRangedWeapon(*this);
   }
 
 void Npc::unequipItem(size_t item) {
@@ -4444,7 +4652,7 @@ Npc::BeginCastResult Npc::beginCastSpell() {
     }
 
   // castLevel        = CS_Invest_0;
-  owner.script().dmaSpellBegin();
+  owner.script().dmaSpellBegin(*this);
   currentSpellCast = active->clsId();
   castNextTime     = owner.tickCount();
   hnpc->aivar[88]  = 0; // HACK: clear AIV_SpellLevel
@@ -5442,6 +5650,8 @@ void Npc::updateTransform() {
   }
 
 void Npc::updateAnimation(uint64_t dt, bool force) {
+  if(auto* effects = owner.globalFx())
+    visual.pose().setTimeScale(effects->modelTimeScale(*this),owner.tickCount());
   const auto camera = Gothic::inst().camera();
   if(isPlayer() && camera!=nullptr && camera->isFree())
     dt = 0;

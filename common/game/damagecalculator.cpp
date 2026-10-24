@@ -16,7 +16,7 @@ static float mix(float x, float y, float a) {
 DamageCalculator::Val DamageCalculator::damageValue(Npc& src, Npc& other, const Bullet* b, bool isSpell, const DamageCalculator::Damage& splDmg, const CollideMask bMsk) {
   DamageCalculator::Val ret;
   if(b!=nullptr) {
-    ret = rangeDamage(src,other,*b,bMsk);
+    ret = rangeDamage(src,other,*b,bMsk,isSpell ? &splDmg : nullptr);
     } else
   if(isSpell) {
     ret = rangeDamage(src,other,splDmg,bMsk);
@@ -57,11 +57,11 @@ DamageCalculator::Val DamageCalculator::damageFall(Npc& npc, float speed) {
   return ret;
   }
 
-DamageCalculator::Val DamageCalculator::rangeDamage(Npc& nsrc, Npc& nother, const Bullet& b, const CollideMask bMsk) {
+DamageCalculator::Val DamageCalculator::rangeDamage(Npc& nsrc, Npc& nother, const Bullet& b, const CollideMask bMsk, const Damage* overrideDamage) {
   float dist       = b.pathLength();
   bool  noHit      = dist>float(MaxMagRange);
-  bool  invincible = !checkDamageMask(nsrc,nother,&b);
-  auto  dmg        = b.damage();
+  bool  invincible = !checkDamageMask(nsrc,nother,&b,overrideDamage);
+  auto  dmg        = overrideDamage!=nullptr ? *overrideDamage : b.damage();
 
   if(!b.isSpell()) {
     auto& script    = nsrc.world().script();
@@ -192,11 +192,11 @@ int32_t DamageCalculator::damageTypeMask(Npc& npc) {
   return npc.handle().damage_type;
   }
 
-bool DamageCalculator::checkDamageMask(Npc& nsrc, Npc& nother, const Bullet* b) {
+bool DamageCalculator::checkDamageMask(Npc& nsrc, Npc& nother, const Bullet* b, const Damage* overrideDamage) {
   auto& other = nother.handle();
 
   if(b!=nullptr) {
-    auto dmg = b->damage();
+    auto dmg = overrideDamage!=nullptr ? *overrideDamage : b->damage();
     for(unsigned int i=0;i<zenkit::DamageType::NUM;++i) {
       if(dmg[size_t(i)]>0 && other.protection[i]>=0)
         return true;

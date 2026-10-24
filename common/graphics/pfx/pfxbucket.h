@@ -116,6 +116,7 @@ class PfxBucket {
 
       Tempest::StorageBuffer         pfxGpu;
       uint64_t                       timeShift = 0;
+      size_t                         count = 0;
 
       bool                           isEmpty() const;
       };
@@ -153,6 +154,9 @@ class PfxBucket {
 
     Draw                        item  [Resources::MaxFramesInFlight];
     std::vector<PfxState>       pfxCpu;
+#ifdef __ANDROID__
+    std::vector<PfxState>       pfxDrawCpu;
+#endif
 
     Draw                        itemTrl[Resources::MaxFramesInFlight];
     std::vector<PfxState>       trlCpu;

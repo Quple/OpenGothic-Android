@@ -81,6 +81,7 @@ class MainWindow : public Tempest::Window {
 #endif
     void drawDmaOverlay(Tempest::Painter& p);
     std::vector<GameScript::DmaOverlayItem> dmaOverlay;
+    InventoryRenderer dmaModels[Resources::MaxFramesInFlight];
     void drawMsg(Tempest::Painter& p);
     void drawProgress(Tempest::Painter& p, int x, int y, int w, int h, float v);
     void drawLoading (Tempest::Painter& p,int x,int y,int w,int h);
@@ -125,6 +126,8 @@ class MainWindow : public Tempest::Window {
     uint64_t tick();
     void     updateAnimation(uint64_t dt);
     void     tickCamera(uint64_t dt);
+    void     requestDialogCamera();
+    bool     dialogCameraReset = false;
     void     isDialogClosed(bool& ret);
 
     template<Tempest::KeyEvent::KeyType k>
@@ -191,7 +194,7 @@ class MainWindow : public Tempest::Window {
 
     Tempest::Widget*          uiKeyUp=nullptr;
     ErrorScreen               errorScreen;
-    std::bitset<256>          dmaKeysDown;
+    std::bitset<1100>         dmaKeysDown;
     Tempest::Point            dMouse;
     PlayerControl             player;
     uint64_t                  lastTick=0;

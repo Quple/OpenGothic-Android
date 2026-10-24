@@ -19,6 +19,7 @@ class AnimMesh {
       std::string                    texName;
       size_t                         iboOffset = 0;
       size_t                         iboSize   = 0;
+      MeshLods                       lod;
       };
 
     Tempest::VertexBuffer<VertexA> vbo;

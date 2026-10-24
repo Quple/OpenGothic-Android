@@ -68,6 +68,9 @@ class Interactive : public Vob {
     void                setAsCracked(bool c) { isLockCracked = c; }
     void                setPickLockCode(std::string_view s) { pickLockStr = s; }
     bool                isCracked() const { return isLockCracked; }
+    bool                isLocked() const { return (isContainer() || isDoor()) && locked && !isLockCracked; }
+    uint32_t            pickLockProgress() const { return compatPickLockProgress; }
+    void                setPickLockProgress(uint32_t count);
     bool                needToLockpick(const Npc& pl) const;
 
     Inventory&          inventory();
@@ -172,6 +175,7 @@ class Interactive : public Vob {
     bool                reverseState  = false;
     bool                loopState     = false;
     bool                isLockCracked = false;
+    uint32_t            compatPickLockProgress = 0;
 
     uint64_t            waitAnim      = 0;
     bool                animChanged   = false;
