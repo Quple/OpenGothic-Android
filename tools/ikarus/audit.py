@@ -163,7 +163,7 @@ def cpp_inventory(repo):
         cpp_pairs = pairs(cpp_ts)
         openings = {offset: i for i, (t, offset) in enumerate(cpp_ts) if t == '{'}
         positions = {offset: i for i, (_, offset) in enumerate(cpp_ts)}
-        for m in re.finditer(r'\b(register_(?:thiscall|cdecl|stdcall|fastcall)|winapi|override_function|safeOverrideFunction|safeOverride|safe|dummyfy|bindExternal|register_external)\s*\(\s*("[^"]+"|\w+)', text):
+        for m in re.finditer(r'\b(register_(?:thiscall|cdecl|stdcall|fastcall|float_to_int)|winapi|override_function|safeOverrideFunction|safeOverride|safe|dummyfy|bindExternal|register_external)\s*\(\s*("[^"]+"|\w+)', text):
             api, key = m[1], m[2]
             where = f'{rel}:{text.count(chr(10), 0, m.start())+1}'
             paren = positions.get(text.find('(',m.start()))
@@ -176,6 +176,8 @@ def cpp_inventory(repo):
                 body = text[body_start+1:end]
                 original_body = raw[path][body_start+1:end]
             else:
+                if api == 'register_float_to_int':
+                    body, original_body = methods.get('Cpu32::register_float_to_int', ('', ''))
                 member = re.search(r'&\s*(\w+::\w+)', text[m.end():call_end])
                 if member:
                     body, original_body = methods.get(member[1], ('', ''))
@@ -238,6 +240,32 @@ def dat_ir(path):
             callers = [dat.sym(i) for i in by_address[starts[si]]] if si >= 0 else ['<GLOBAL>']
             call = {'caller': callers[0], 'caller_aliases': callers[1:], 'callee': callee.upper(), 'pc': hex(pc),
                     'kind': 'external' if op == 62 else 'script', 'origin': 'dat'}
+            # Keep callback references separate from BL/BE counts. CoM queues
+            # important story callbacks through AI_Function and LeGo FF; a
+            # zero direct-call count does not make those functions unused.
+            wrapper = call['callee']
+            callback_arg = 1 if re.fullmatch(r'AI_FUNCTION(?:_[INS]{1,2})?', wrapper) else \
+                           0 if re.fullmatch(r'FF_APPLY[A-Z]*|CALLAFTERWORLDLOADED|MEM_CALL(?:BYID|BYSTRING)?', wrapper) else None
+            if callback_arg is not None and targets:
+                argc = dat.symbols[targets[0]]['count']
+                call['callback_argument'] = callback_arg
+                if callback_arg < argc <= len(recent) and all(o in (64, 65, 67, 245) for o, _ in recent[-argc:]):
+                    arg_op, arg_value = recent[-argc+callback_arg]
+                    symbol = None
+                    if arg_op == 64:
+                        symbol = dat.symbols[arg_value] if arg_value < len(dat.symbols) else None
+                    elif arg_op == 65 and arg_value < len(dat.symbols):
+                        pushed = dat.symbols[arg_value]
+                        if pushed['flags'] & 1 and pushed['type'] == 5:
+                            symbol = pushed
+                        elif pushed['flags'] & 1 and pushed['type'] == 2 and pushed['value']:
+                            index = pushed['value'][0]
+                            symbol = dat.symbols[index] if 0 <= index < len(dat.symbols) else None
+                        elif wrapper == 'MEM_CALLBYSTRING' and pushed['flags'] & 1 and pushed['type'] == 3 and pushed['value']:
+                            name = pushed['value'][0].upper()
+                            symbol = next((s for s in dat.symbols if s['name'].upper() == name), None)
+                    if symbol is not None and symbol['type'] == 5 and symbol['flags'] & 1:
+                        call['callback_target'] = symbol['name'].upper()
             if call['callee'] in NATIVE | HOOK:
                 # Only the immediately preceding operand is unambiguous without
                 # dataflow analysis. Everything else remains explicitly dynamic.
@@ -270,7 +298,7 @@ def dat_ir(path):
             if not targets:
                 unresolved.append(call)
         recent.append((op, operand))
-        recent = recent[-3:]
+        recent = recent[-8:]
         pc += size
     return dat, calls, unresolved
 
@@ -382,10 +410,23 @@ def main():
             status = 'unresolved_source_symbol'
         rows.append({'function': name, 'static_call_sites': count, 'distinct_callers': len(callers[name]),
                      'status': status, 'binding': externals.get(name, overrides.get(name, ''))})
+    callback_rows = []
+    for call in byte_calls:
+        if 'callback_argument' not in call:
+            continue
+        target = call.get('callback_target', '')
+        callback_rows.append({'caller': call['caller'], 'wrapper': call['callee'], 'pc': call['pc'],
+                              'target': target,
+                              'status': 'dynamic_callback' if not target else 'overridden_review_semantics' if target in overrides
+                                        else 'external_bound' if target in externals else 'missing_external' if target in dat_externals
+                                        else 'script_defined_review_semantics',
+                              'binding': overrides.get(target, externals.get(target, ''))})
     summary = {'schema': 1, 'count_kind': 'static_call_sites', 'primary': 'dat' if dat else 'mod_source',
                'source_files': len(manifests), 'source_definitions': len(definitions),
                'source_call_sites': len(source_calls), 'dat_symbols': len(dat.symbols) if dat else 0,
                'dat_call_sites': len(byte_calls), 'unresolved_bytecode_calls': len(unresolved),
+               'callback_sites': len(callback_rows),
+               'resolved_callback_sites': sum(bool(r['target']) for r in callback_rows),
                'function_status': dict(collections.Counter(r['status'] for r in rows)),
                'called_function_status': dict(collections.Counter(r['status'] for r in rows if r['static_call_sites'])),
                'native_status': dict(collections.Counter(r['status'] for r in inventory)),
@@ -393,7 +434,8 @@ def main():
                                            for origin in sorted({r['origin'] for r in inventory})},
                'limitations': ['Counts do not measure runtime frequency or campaign playability.',
                                'Registrations and overrides need semantic review; partial adapters may exist.',
-                               'Dynamic calls/callbacks are not resolved into graph edges.',
+                               'Callback references are reported separately; only unambiguous consecutive pushes are resolved.',
+                               'Computed callback targets and native dynamic addresses remain unresolved.',
                                'Source hooks need an event and register/stack contract review.',
                                'Library source versions may differ from libraries embedded in DAT.']}
     if args.dat:
@@ -409,6 +451,7 @@ def main():
             stream.write(json.dumps(definition) + '\n')
     (args.out / 'sources.json').write_text(json.dumps(manifests, indent=2), encoding='utf-8')
     write_csv(args.out / 'functions.csv', rows, ['function', 'static_call_sites', 'distinct_callers', 'status', 'binding'])
+    write_csv(args.out / 'callback-references.csv', callback_rows, ['caller', 'wrapper', 'pc', 'target', 'status', 'binding'])
     for item in review:
         item['static_call_sites'] = counts[item['name']]
     write_csv(args.out / 'implementation-review.csv', review,

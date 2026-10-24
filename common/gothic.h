@@ -173,6 +173,7 @@ class Gothic final {
     Tempest::Signal<void(Npc&,Npc&,AiOuputPipe*&)>                      onDialogPipe;
     Tempest::Signal<void(Npc&)>                                         onDialogGuest;   // a third character speaks in the dialog (Trialoge of LeGo)
     Tempest::Signal<void()>                                            onDialogCameraReset;
+    Tempest::Signal<void()>                                            onStopAllSounds;
     Tempest::Signal<void(Npc&,Npc&)>                                    onOpenTrade;   // the player and the trader, without a dialog (mods)
     std::function<bool(const Npc*)>                                     isNpcInDialogFn;
 

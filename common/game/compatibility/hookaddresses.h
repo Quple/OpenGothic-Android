@@ -6,6 +6,9 @@
 /// patch the engine: when something happens in OpenGothic that corresponds to such a place, it calls the functions that
 /// are hooked there (DirectMemory::fireHook) with the registers and the stack that the original engine would have.
 namespace HookAdr {
+  constexpr uint32_t CutsceneMenu          = 0x42ABE7; // eax != 0 blocks the menu
+  constexpr uint32_t CutsceneStatus        = 0x6C31D6; // eax != 0 hides player status
+  constexpr uint32_t DialogMessage         = 0x7A9240; // ecx = view, [esp+4] = name string, [esp+16] = color*
   constexpr uint32_t SpellTargetValid       = 0x485FC4; // ecx = target type, [esp+4] = target vob, ecx = validity
   constexpr uint32_t EquipBestWeapons        = 0x745FA6; // oCNpc::EquipBestWeapons: esi = oCNpc*
   // LeGo

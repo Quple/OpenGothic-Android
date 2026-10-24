@@ -86,6 +86,9 @@ class DirectMemory {
     bool        saveDisabled() const { return saveOff; }
     bool        loadDisabled() const { return loadOff; }
     bool        inCamera();
+    bool        cutsceneMenuBlocked();
+    bool        cutsceneStatusHidden();
+    void        eventDialogMessage(std::string& name, uint32_t& color, bool& bottom, bool playerLine);
     /// who OTHER was in the last command that AI_Function ran (for the developer tests)
     const std::string& lastCallOther() const { return lastCallOtherName; }
     /// Trialoge of LeGo: the commands for the self of the scripts go to the character who speaks now
@@ -255,6 +258,7 @@ class DirectMemory {
     bool                             dropCancelled = false;
     ptr32_t                          focusMagic = 0;
     uint8_t                          keyEvents[1100] = {};   // MEM_KeyPressed reads it (the table of the keys of the engine)
+    uint8_t                          keyToggles[1100] = {};
     int                              lastSpellFocus = -1;
     auto        mobPointer(Interactive& mob) -> ptr32_t;
     void        setupFocusMagic();

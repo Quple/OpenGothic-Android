@@ -360,8 +360,49 @@ void DirectMemory::eventMobCanOpen(Interactive& mob) {
 
 /// A key is down or up: MEM_KeyPressed and MEM_KeyState of Ikarus read it
 void DirectMemory::eventKeyState(int key, bool down) {
-  if(key>0 && size_t(key)<sizeof(keyEvents))
+  if(key>0 && size_t(key)<sizeof(keyEvents)) {
+    if(down && keyEvents[key]==0)
+      keyToggles[key] = 1;
+    if(!down)
+      keyToggles[key] = 0;
     keyEvents[key] = down ? 1 : 0;
+    }
+  }
+
+void DirectMemory::eventDialogMessage(std::string& name, uint32_t& color, bool& bottom, bool playerLine) {
+  if(!hasHook(HookAdr::DialogMessage))
+    return;
+  const auto storage = mem32.alloc(uint32_t(sizeof(zString)+4),"dialog message hook arguments");
+  if(storage==0)
+    return;
+  const auto colorPtr = storage+uint32_t(sizeof(zString));
+  auto* text = mem32.deref<zString>(storage);
+  if(text==nullptr || !memAssignString(*text,name)) {
+    mem32.free(storage);
+    return;
+    }
+  mem32.writeInt(colorPtr,int32_t(color));
+  auto cleanup = [&]() {
+    if(auto* value = mem32.deref<const zString>(storage))
+      mem32.free(value->ptr);
+    mem32.free(storage);
+    };
+  HookRegs regs;
+  regs.ecx = memGame.ARRAY_VIEW[playerLine ? 1 : 5];
+  const auto originalView = regs.ecx;
+  regs.args = {int32_t(storage),0,0,int32_t(colorPtr)};
+  try {
+    fireHook(HookAdr::DialogMessage,regs);
+    if(auto* value = mem32.deref<const zString>(storage))
+      memFromString(name,*value);
+    color = uint32_t(mem32.readInt(colorPtr));
+    bottom = regs.ecx!=originalView && regs.ecx==memGame.ARRAY_VIEW[1];
+    }
+  catch(...) {
+    cleanup();
+    throw;
+    }
+  cleanup();
   }
 
 /// The status screen of the player is shown or closed: the hooks of CoM write the texts of its items (UPDATE_MENU_ITEM)

@@ -584,3 +584,146 @@ pozostają oddzielne od kodów wymaganych przez skrypty.
 MEM_DeleteVob ma już adapter dekoracji kołczanu; puste RemoveVob nie stanowi
 braku na tej zastąpionej ścieżce. Pozostała ogólna obsługa vobów i logicznych
 bindingów klawiatury wymaga oddzielnego uzupełnienia.
+
+### Crafting: panel, model, kolory i dynamiczny komparator
+
+Zrzut użytkownika pokazywał brak DLG_CHOICE.TGA i modelu oraz nagłówki wśród
+wierszy składników. BAR_GetInterfaceScaling dzieli wirtualną szerokość HPBAR
+przez szerokość 180 px. Fasada HPBAR miała szerokość zero, więc oryginalny
+CRAFTINGVIEW_SHOW wyliczał zerowe rozmiary panelu i modelu. Fasada ma teraz
+rzeczywistą niezerową szerokość, aktualizowaną według viewportu, i skaluje panel
+800x200 proporcjonalnie tak, by mieścił się na ekranie.
+
+Osobny błąd z logu: RENDERITEM.PRIORITY bez kontekstu w LIST_INSERTSORTED.
+LIST_COMPARE wywołuje MEM_Call(compare), pozostawiając dwa argumenty poniżej
+referencji do funkcji. Skryptowy void MEM_Call usuwał wynik przy pop_call VM.
+MEM_Call i MEM_GetFuncID mają teraz adaptery naked; rozwiązują również łańcuch
+zmiennych func i zachowują wynik komparatora. MEM_PushIntParam/StringParam/
+InstParam zachowują przygotowane argumenty, zamiast tracić je przy powrocie
+z wrappera void. W DAT: odpowiednio 25/38/19/7/10 statycznych miejsc wywołania.
+
+invoke_function w patchu ZenKit traktuje nadpisania tak samo jak opcode BL:
+adapter naked nie dostaje dodatkowej ramki sprzątającej, a zwykły adapter
+posiada własną ramkę. Nadal obsługuje osobno ramki externali.
+
+Rysowanie tekstów używa przekazanego koloru i alpha (tinted GthFont). Pomiar
+szerokości/wysokości czcionki oraz rysowanie mają wspólną skalę. Zmiana rozmiaru
+okna odświeża aktywną recepturę; bezpośrednia zmiana zakładki również sprząta
+tymczasowy C_RECIPE. Ilości nadal liczy oryginalny skrypt z ekwipunku, bez
+podstawiania liczb ze zrzutu referencyjnego.
+
+archolos-crafting-build-2026-10-24.log zakończył się kodem 0 i linkiem obu EXE.
+Agent nie uruchamiał gry ani testów. Użytkownik potwierdził poprawny wygląd:
+tło, model i rozdzielone kolorowe składniki. Pełne wytwarzanie, koszty,
+zakładki, ilości/Wszystko, wyjście i resize nadal pozostają do odbioru.
+
+### Mosty menu, HUD i napisów scenek CoM
+
+CutsceneMenu 0x42abe7 wywołuje oryginalny callback z wynikiem w EAX. Jawna
+blokada scenki/plansz końcowych ma pierwszeństwo przed awaryjnym limitem dwóch
+minut, używanym dotąd dla heurystyki. CutsceneStatus 0x6c31d6 steruje widocznością
+fokusu i pasków postaci, również przy ISINFINALBOARDS.
+
+DialogMessage 0x7a9240 dostaje rzeczywiste pola kontraktu: ECX jest tożsamością
+widoku dialogu, ESP+4 wskazuje napis nazwy, ESP+16 wskaźnik koloru. Oddzielne
+fasady ARRAY_VIEW[1] i [5] pozwalają callbackowi rozróżnić i zmienić widok.
+DialogMenu stosuje zmienioną nazwę/kolor oraz przenosi pole na dół przy zmianie
+widoku. Dzięki temu oryginalny callback CoM może usunąć nazwę i wybrać żółty
+kolor na planszach końcowych. To nie pełna emulacja dowolnego widgetu zCView.
+
+Pełny pakiet archolos-input-cutscenes-build-2026-10-24.log skompilował oba
+EXE kodem 0. Nowe mosty nie mają jeszcze odbioru w grze.
+
+### Kolejne bezpośrednie operacje Ikarusa
+
+MEM_CallByString ma naked adapter, zachowujący argumenty i wynik funkcji tak
+samo jak MEM_Call. MEM_ReadByte i MEM_WriteByte używają operacji jednobajtowej,
+bez czterobajtowego odczytu poza końcem bufora; zapis synchronizuje ownedStrings.
+MEM_CompareBytes porównuje dokładny zakres, obsługuje granice sąsiednich regionów,
+pusty zakres, odrzuca ujemny rozmiar/null/overflow/niezmapowane fragmenty i kopiuje
+pierwszy fragment przed callbackiem odczytu drugiego. Pakiet skompilowany kodem 0.
+
+### Logiczne przypisania wejścia i __ftol
+
+MEM_GetKey i MEM_GetSecondaryKey odczytują oba przypisania z bieżących ustawień
+KEYS, konwertują kody do skanów Ikarusa i zwracają 0 dla nieprzypisanej opcji.
+GetState 0x4d4d30 zwraca float dla logicznego ZOPT_GAMEKEY_WEAPON=8, jedynego
+identyfikatora używanego tutaj przez CoM. IsBindedToggled 0x4cc470 sprawdza
+przypisanie i konsumuje pojedyncze zbocze wciśnięcia. BindKeys czyści zbocza;
+ClearKeyBuffer i utrata fokusu nie pozostawiają wciśnięć. Pozostałe logiczne
+akcje nie są ogólnie emulowane; nieznane żądanie jest raportowane.
+
+__ftol 0x7d0f48, wywoływany po GetState, ma kontrakt sprawdzony w oryginalnym
+EXE: obcięcie ST0 do signed int64, wynik EDX:EAX, wartość nieokreślona x87
+przy NaN/Inf/przekroczeniu zakresu. To nie pełny wieloelementowy stos FPU.
+Pakiet archolos-input-cutscenes-build-2026-10-24.log skompilował oba EXE.
+
+### STOPALLSOUNDS: osobny kanał głosu dialogu
+
+Native RemoveAllActiveSounds 0x4ed7a0 zatrzymywało dźwięki WorldSound i globalne,
+ale głos DialogMenu należał do osobnego SoundDevice. Dodano sygnał zatrzymania
+currentSnd również w DialogMenu. Nie zeruje czasu tekstu ani barier AI i nie
+zatrzymuje muzyki. Pełny archolos-voices-build-2026-10-24.log zakończył się
+kodem 0. Odbiór w scence pozostaje do wykonania.
+
+### MEM_SetKeys i domyślne skróty pochodni
+
+Usunięto pusty override MEM_SETKEYS. INIT_TORCHKEY w tym DAT wywołuje go,
+gdy nie istnieje KEYS.keyTorch; zapisuje KEY_T=20 i KEY_COMMA=51. Adapter
+koduje dwa uint16 little endian jako osiem znaków hex, zapisuje bieżące
+ustawienia i odświeża natywne przypisania przez onSettingsChanged; zeruje
+stare zbocza. MEM_SetKey i MEM_SetSecondaryKey mogą używać tego samego
+adaptera bez utraty drugiego przypisania. Nie nadpisuje istniejącej opcji:
+warunek pierwszego uruchomienia nadal wykonuje skrypt INIT_TORCHKEY.
+
+Pozostała rzeczywista atrapa: WLD_ISRAINING zwraca false. Pięć miejsc DAT:
+B_SAY_GUILDGREETINGS, dwa C_CANNPCCOLLIDEWITHSPELL, DIA_OLDMAN_GOODWATER_CONDITION
+i EVENTSMANAGER_NS06. Brakuje wspólnego systemu pogody/renderowania deszczu;
+nie dodano losowej wartości odłączonej od świata. NPC staruszka i jego dialog
+wymagają suchości, więc false nie blokuje tych dwóch warunków; brak wpływa
+na warianty powitań i warunki zaklęć. Pozostaje jawnie niezaimplementowany.
+
+### Kolejkowany _AI_TeleportAlways — weryfikacja callbacków
+
+AI_TELEPORTALWAYS ma 95 miejsc BL w 53 funkcjach DAT, m.in. Q102_JornDistanceLimit,
+Q602, KQ402, QA304 i zmianach rozdziału. Najpierw kolejkuje standardowe AI_Teleport,
+a następnie _AI_TeleportAlways przez AI_Function_IS. Rozszerzony analizator
+potwierdza tę krawędź mimo braku bezpośredniego BL do callbacka.
+
+Przegląd początkowo błędnie uznał callback za brakujący. Adapter istniał już
+w setupQuiverFunctions w directmemory_events.cpp: rozwiązuje rzeczywistego NPC
+oraz punkt, czyści GoTo, ustawia pozycję przy ziemi i kierunek. Usunięto dodany
+przez pomyłkę drugi override; nie ma nowej implementacji teleportu w tym pakiecie.
+Ta ścieżka nie korzysta z ogólnego WLD_GetWaypointByName ani SetColl. Sam wynik
+statycznego przeglądu nie zastępuje odbioru scen w grze.
+
+### ENABLEMUSICZONE, enabled i priorytety ZEN
+
+EVENTSMANAGER_INEXTREMOCONCERT dwa razy wywołuje ENABLEMUSICZONE dla HARBOUR_INX.
+Oryginał szukał strefy jako voba, ale wyszukiwarka zgodności miała tylko movery.
+Adapter zmienia rzeczywisty stan WorldSound. Strefy wczytują enabled/local_enabled,
+priority i ellipsoid z ZEN; wybór rozpatruje nakładanie się stref przy każdym
+odświeżeniu, zachowując bieżącą tylko przy remisie priorytetu. Wcześniej wejście
+w strefę o wyższym priorytecie mogło nie zmienić muzyki aż do wyjścia z poprzedniej.
+
+Zmiana enabled wymusza odświeżenie, a stan jest zapisywany w opcjonalnym wpisie
+worlds/<świat>/music-zones, także przy zmianie świata. Stare zapisy korzystają
+z wartości ZEN. Przy braku aktywnej strefy cichnie ścieżka strefy, bez zmiany
+ustawienia musicEnabled i bez zatrzymania jawnego MusicSystem_OverrideTrack.
+Nie emuluje reverb/volumeLevel ani wejściowych motywów day/nightEntrance.
+Pakiet archolos-teleport-zones-build oraz archolos-zones-final-build z datą
+2026-10-24 skompilowały oba EXE. Odbiór koncertu i stref w świecie nadal wymagany.
+
+### Callbacki w analizatorze
+
+Nowy callback-references.csv rozpoznaje stałe cele AI_Function, FF_Apply,
+CallAfterWorldLoaded, MEM_Call/ByID/ByString, gdy argumenty są jednoznacznym
+ciągiem push. Wynik tego DAT: 2529 miejsc, 2118 rozwiązanych, 411 dynamicznych.
+Są oddzielne od 240563 BL/BE; nie zmieniają licznika bezpośrednich wywołań.
+Nie oznaczają częstotliwości wykonania ani pełnej analizy przepływu sterowania.
+Pozwoliło to potwierdzić istniejący adapter _AI_TeleportAlways i usunąć duplikat.
+Nie stwierdzono brakującego externala w rozwiązanych celach callbacków.
+
+Końcowy archolos-checkpoint2-build-2026-10-24.log zakończył się kodem 0; oba EXE
+zlinkowane, dołączono comcheck cutscene i musiczone. git diff --check oraz
+odwrotna walidacja obu patchy bibliotek przeszły. Bez uruchamiania gry/testów.

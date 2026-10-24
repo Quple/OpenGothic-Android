@@ -3,8 +3,8 @@
 Postęp: **24/27 grup**, nie procent zgodności gry. To pełny znany backlog z kodu,
 aktualnego DAT i wcześniejszych raportów; nie dowód wykrycia każdego błędu kampanii.
 Agent nie uruchamia gry, testów ani komend comcheck. Użytkownik zezwolił na okresowe
-kompilacje przed STOP. Nowy pakiet wymaga odbioru w grze. Tylko muzyka menu ma
-osobne potwierdzenie użytkownika.
+kompilacje przed STOP. Nowy pakiet wymaga odbioru w grze. Muzyka menu i wygląd
+panelu craftingu mają osobne potwierdzenie użytkownika.
 
 ## Priorytet: fabuła, awarie i zapis
 
@@ -58,6 +58,10 @@ osobne potwierdzenie użytkownika.
 - [ ] Odbiór telekinezy: przedmiot, koszt, dokończenie/anulowanie, zapis i load.
 - [x] Kody klawiszy Ikarusa: poprawna konwersja z ustawień INI, cyfry/F1–F15,
   mysz, puszczenie klawiszy przy utracie fokusu i ClearKeyBuffer.
+- [x] MEM_SetKeys zapisuje oba przypisania i odświeża sterowanie; INIT_TORCHKEY
+  może ustawić T/przecinek przy nieistniejącej opcji keyTorch.
+- [x] MEM_GetKey/SecondaryKey: aktualne dwa przypisania; logiczne GetState float
+  i IsBindedToggled dla wymaganej akcji broni, BindKeys i __ftol int64.
 - [ ] Odbiór map LeGo (Escape/Enter/PPM), zaklęcia zamka i skrótów CoM.
 
 ## Pozostała semantyka bibliotek
@@ -68,6 +72,12 @@ osobne potwierdzenie użytkownika.
 - [ ] Finalizacja/destruktory LeGo podczas delete/clear/load, bez mylenia z FINAL.
   FINAL jest optymalizatorem bytecode i ma zero bezpośrednich wywołań w tym DAT.
 - [ ] Dynamiczne adresy/callbacki: ustalić konkretne cele, argumenty, wyniki i kontekst.
+- [x] MEM_Call, MEM_GetFuncID i MEM_PushIntParam/StringParam/InstParam: zachowanie
+  argumentów/wyniku oraz rozwiązywanie zmiennych func; invoke_function bez
+  dodatkowej ramki dla naked overrides. Dotyczy komparatorów list LeGo.
+- [x] MEM_CallByString zachowuje stos i wynik; ReadByte/WriteByte działają na
+  jednym bajcie, CompareBytes waliduje zakresy; ujemny copybytes nie kopiuje.
+- [x] STOPALLSOUNDS obejmuje również osobny kanał głosu DialogMenu.
 - [ ] Faktycznie potrzebne instrukcje x86 i kontrakty flag/rejestrów/stosu.
 - [ ] Alias VM kontra surowa pamięć: poprawny layout, odczyt i zapis do realnego obiektu.
 - [x] SetPositionWorld sprawdza cały bufor vec3, a zapisy pozycji odrzucają NaN/Inf.
@@ -77,6 +87,11 @@ osobne potwierdzenie użytkownika.
   odtworzona fizyka zachowuje właściciela obiektu. Odbiór przejść fabularnych.
 - [x] OCNPC.BITFIELD oddzielone od C_NPC.MISSION; zgodne maski tekstur.
 - [ ] Pozostałe flagi OCNPC.BITFIELD: skutki zapisów dla realnego obiektu i trwałość.
+- [ ] WLD_ISRAINING: wciąż false; 5 miejsc DAT, powitania/zaklęcia/staruszek NS06.
+  Wymaga spójnego systemu pogody, którego renderer obecnie nie posiada.
+- [ ] MDL_APPLYRANDOMANI/FREQ: wciąż atrapy, 3+1 miejsca ZS_MM_RTN_EATGROUND.
+- [x] Zweryfikowano istniejący adapter _AI_TeleportAlways: realny NPC/WP
+  w callbacku LeGo; 95 miejsc AI_TELEPORTALWAYS w 53 funkcjach DAT.
 - [ ] Potrzebne ścieżki waynetu i list vobów; nie pełna emulacja silnika na zapas.
 - [ ] KmLib InitializeMenu/Gamestart/Always i eksporty usług gry; LoadLibrary/
   GetProcAddress są zastępcze. GetStat/IncrementStat/UnlockAchievement oraz trwałość.
@@ -87,11 +102,20 @@ osobne potwierdzenie użytkownika.
   blokady i decyzje skryptowe. Wykazać pokrycie natywnym UI dla każdego starego hooka.
 - [ ] Crafting: warunki, grupy składników, wynik, liczby, koszty, brak zasobów,
   ilości/Wszystko, zakładki, anulowanie i normalne wykonanie.
+- [x] Panel craftingu: skala HPBAR, tekstura i rozmiary modelu, kolory i zgodny
+  pomiar tekstu, odświeżanie po resize i sprzątanie receptury po zmianie zakładki.
+- [x] Użytkownik potwierdził poprawny wygląd panelu względem drugiego zrzutu.
+- [ ] Odbiór kosztów i ilości przy naturalnym wytwarzaniu oraz zmiany rozmiaru okna.
 - [ ] InformationManager: imię psa/nazwa wina, polskie znaki, kasowanie/Escape/powrót;
   pełny prywatny widget Gothica nie jest emulowany.
 - [ ] Scenki: menu/HUD/sterowanie/napisy podczas kamery i plansz końcowych.
+- [x] Mosty CutsceneMenu 0x42abe7, CutsceneStatus 0x6c31d6 i DialogMessage
+  0x7a9240: blokada menu, ukrywanie HUD, nazwa, kolor i docelowe pole napisu.
+- [ ] Odbiór scenek dłuższych niż dwie minuty, napisów kamery i plansz końcowych.
 - [ ] Sprite/Render: gradienty, dodatkowe blend modes, zagnieżdżone widoki,
   animacje okien, kolor/alpha tekstu, rotacja modeli i kolejność warstw 2D/3D.
+- [x] ENABLEMUSICZONE: realne enabled, priorytety/ellipsoidy ZEN i opcjonalny
+  zapis stanu stref na świat; brak strefy wycisza tylko tło, z zachowaniem override.
 - [ ] Muzyka świata: strefy, dzień/noc/walka, nadpisania, powrót po scenie i loadzie.
 - [ ] Dziennik: naturalne ukończenie zadań, w tym W gorącej wodzie kąpany, i load.
 - [ ] Wyposażenie: warunki, idempotencja, kołczany, pochodnie, ręce, transfer/ostatnia sztuka.
@@ -110,7 +134,7 @@ Poniższe tabele opisują brak ogólnego handlera/mostu albo atrapę. Zamienniki
 mogą już pokrywać część zachowania: crafting, wejście tekstowe, nurkowanie, focus,
 CATINV i HUD. Wymagają przeglądu semantyki. Liczby są statyczne, nie pomiarami gry.
 
-### Adresy bez handlera: 30
+### Adresy bez handlera: 29
 
 | Adres | Wywołujący/rejestrujący | Callback | Miejsca wywołań wrappera |
 | --- | --- | --- | --- |
@@ -143,16 +167,14 @@ CATINV i HUD. Wymagają przeglądu semantyki. Liczby są statyczne, nie pomiaram
 | 0x7b4a62 | SETCLIPBOARDDATA |  | 1 |
 | 0x7b4a68 | EMPTYCLIPBOARD |  | 1 |
 | 0x7b4a6e | OPENCLIPBOARD |  | 2 |
-| 0x7d0f48 | CATINV_DELAYMOBCAMERA |  | 0 |
 
-### Hooki bez ogólnego mostu: 43
+### Hooki bez ogólnego mostu: 40
 
 | Adres | Wywołujący/rejestrujący | Callback | Miejsca wywołań wrappera |
 | --- | --- | --- | --- |
 | 0x4276b0 | CATINV_INIT | APPLYSOMESETTINGS_HOOK | 1 |
 | 0x42926a | INIT_SIGHTSCALING | APPLYSOMESETTINGSEND_HOOK | 1 |
 | 0x42a2d0 | INITALTERNATIVELOADINGSCREENS | UPDATELOADINGTEXTURE | 1 |
-| 0x42abe7 | CUTSCENESYSTEM_INIT | CGAMEMANAGER__MENUENABLED_REPLACECHECKINGGLOBALCUTSCENE | 1 |
 | 0x4344a3 | INIT_FEATURES_GAMESTART | HANDLERESULTSTRING_MARVINMODE_REPLACEHOOK | 1 |
 | 0x437d9f | PATCHSAVEGAMEWORLD | PATCHSAVEGAMEWORLD_HOOK | 1 |
 | 0x437e55 | PATCHSAVEGAMEVERSION | PATCHSAVEGAMEVERSION_HOOK | 1 |
@@ -165,7 +187,6 @@ CATINV i HUD. Wymagają przeglądu semantyki. Liczby są statyczne, nie pomiaram
 | 0x699c60 | INIT_GATHERINGITEMSUNDERWATER | OCAIHUMAN__PC_DIVING_HOOK | 1 |
 | 0x69b947 | INIT_HIDEFOCUSFORPARTYMEMBERS | HIDEFOCUSFORPARTYMEMBERS_UPDATESTATUSREPLACEHOOK2 | 1 |
 | 0x69d415 | CATINV_INIT | CATINV_DELAYMOBCAMERA | 1 |
-| 0x6c31d6 | CUTSCENESYSTEM_INIT | OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE | 1 |
 | 0x6cfdf8 | LEGO_INITGAMESTART | _CC_HOOK | 1 |
 | 0x706e03 | CATINV_INIT | CATINV_DRAWCATEGORY | 1 |
 | 0x7086d0 | CATINV_INIT | CATINV_OPEN | 1 |
@@ -191,15 +212,12 @@ CATINV i HUD. Wymagają przeglądu semantyki. Liczby są statyczne, nie pomiaram
 | 0x762a18 | CATINV_INIT | CATINV_DEADRESETCATEGORY | 1 |
 | 0x76e0f3 | INIT_OCNPCSTATES_CHANGEROUTINE_ERROR | OCNPCSTATES_CHANGEROUTINE_HOOK | 0 |
 | 0x7a6060 | INIT_INVTRANSPARENCYHACK | INVTRANSPARENCYHACK_HOOK | 1 |
-| 0x7a9240 | CUTSCENESYSTEM_INIT | ZCVIEW__DIALOGMESSAGECXY_HOOK | 1 |
 
-### Proste atrapy: 4
+### Proste atrapy: 2
 
 | Adres | Wywołujący/rejestrujący | Callback | Miejsca wywołań wrappera |
 | --- | --- | --- | --- |
 | 0x44df50 | STARTLOGFILE |  | 3 |
-| 0x4cc470 | CATINV_KEYBINDINGISTOGGLED |  | 2 |
-| 0x4d4d30 | CATINV_DELAYMOBCAMERA |  | 0 |
 | 0x7375e0 | OCNPC__DROPUNCONSCIOUS_HOOK |  | 0 |
 
 ## Pola natywnych obiektów: 20 kandydatów do przeglądu

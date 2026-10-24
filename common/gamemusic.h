@@ -33,6 +33,7 @@ class GameMusic final {
     bool      isEnabled() const;
     void      setMusic(Music m);
     void      setMusic(const zenkit::IMusicTheme &theme, Tags t);
+    void      clearZoneMusic();
     void      stopMusic();
     void      overrideTrack(uint32_t instance);
     void      clearTrackOverride();
@@ -58,6 +59,7 @@ class GameMusic final {
     Tempest::SoundEffect sound;
     MusicProvider*       impl = nullptr;
     bool                 enabled = true;
+    bool                 zoneMusicActive = true;
     Tempest::SoundEffect recordedSound, outgoingSound;
     RecordedMusic*       recordedImpl = nullptr;
     std::string          recordedFile;

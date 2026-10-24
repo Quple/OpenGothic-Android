@@ -187,6 +187,7 @@ void World::load(Serialize &fin) {
   wobj.load(fin);
   npcPlayer = wobj.findHero();
   globFx->load(fin);
+  wsound.load(fin);
   }
 
 void World::save(Serialize &fout) {
@@ -200,6 +201,7 @@ void World::save(Serialize &fout) {
 
   wobj.save(fout);
   globFx->save(fout);
+  wsound.save(fout);
   }
 
 uint32_t World::npcId(const Npc *ptr) const {

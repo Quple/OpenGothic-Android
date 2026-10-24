@@ -112,6 +112,9 @@ class GameScript final {
     bool         dmaSaveDisabled() const;
     bool         dmaLoadDisabled() const;
     bool         dmaInCamera() const;
+    bool         dmaCutsceneMenuBlocked() const;
+    bool         dmaCutsceneStatusHidden() const;
+    void         dmaDialogMessage(std::string& name, uint32_t& color, bool& bottom, bool playerLine);
     std::string  dmaLastCallOther() const;
     void         logMoveToTop(std::string_view topic);
     bool         dmaFinishingMove(Npc& npc, Npc& target);

@@ -22,6 +22,7 @@ class DialogMenu : public Tempest::Widget {
 
     void tick(uint64_t dt);
     void clear();
+    void stopSounds();
 
     void onWorldChanged();
 
@@ -177,6 +178,8 @@ class DialogMenu : public Tempest::Widget {
     Entry                               current;
     Tempest::SoundEffect                currentSnd;
     bool                                curentIsPl=false;
+    std::string                         subtitleName;
+    uint32_t                            subtitleColor=0xFFFFFFFF;
     bool                                dlgTrade=false;
     int32_t                             mobsiState=-1;
 

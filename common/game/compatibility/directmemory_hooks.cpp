@@ -42,6 +42,9 @@ bool DirectMemory::isHookAnswered(uint32_t address) {
     HookAdr::FinishingMove,
     HookAdr::PickLockLength,
     HookAdr::MovingCutscene,
+    HookAdr::CutsceneMenu,
+    HookAdr::CutsceneStatus,
+    HookAdr::DialogMessage,
     HookAdr::CsCameraTrigger,
     HookAdr::CsCameraUntrigger,
     HookAdr::BarUpdateResolution,
@@ -77,6 +80,20 @@ bool DirectMemory::inFinalBoards() {
 
 bool DirectMemory::hidesPartyFocus() const {
   return hasHook(HookAdr::HideFocusParty);
+  }
+
+bool DirectMemory::cutsceneMenuBlocked() {
+  HookRegs regs;
+  regs.eax = (inCamera() || inFinalBoards()) ? 1 : 0;
+  fireHook(HookAdr::CutsceneMenu,regs);
+  return regs.eax!=0;
+  }
+
+bool DirectMemory::cutsceneStatusHidden() {
+  HookRegs regs;
+  regs.eax = (inCamera() || inFinalBoards()) ? 1 : 0;
+  fireHook(HookAdr::CutsceneStatus,regs);
+  return regs.eax!=0;
   }
 
 bool DirectMemory::hasHook(uint32_t address) const {

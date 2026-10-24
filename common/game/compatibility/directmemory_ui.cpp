@@ -46,21 +46,21 @@ static constexpr float VirtualSize = 8192.f;
 
 namespace {
 /// The width of a text of Gothic in pixels of the screen of 800x600
-int textWidth(const std::string& font, const std::string& txt) {
+int textWidth(const std::string& font, const std::string& txt, float scale) {
   try {
-    return Resources::font(font,Resources::FontType::Normal,1.f).textSize(txt).w;
+    return Resources::font(font,Resources::FontType::Normal,scale).textSize(txt).w;
     }
   catch(...) {
-    return int(txt.size())*10;
+    return int(float(txt.size())*10.f*scale);
     }
   }
 
-int fontHeight(const std::string& font) {
+int fontHeight(const std::string& font, float scale) {
   try {
-    return Resources::font(font,Resources::FontType::Normal,1.f).pixelSize();
+    return Resources::font(font,Resources::FontType::Normal,scale).pixelSize();
     }
   catch(...) {
-    return 20;
+    return std::max(1,int(20.f*scale));
     }
   }
 }
@@ -164,6 +164,15 @@ void DirectMemory::eventDialogChoice(const GameScript::DlgChoice* choice, bool s
 /// Views of LeGo (bars, icons, texts of the mods) are made by the functions of the engine and by writing the fields of the
 /// object; OpenGothic draws the views that are open (collectOverlay)
 void DirectMemory::setupUiFunctions() {
+  if(auto* show = vm.find_symbol_by_name("CRAFTINGVIEW_SHOW")) {
+    // Tab switches call SHOW directly, outside eventDialogChoice. They need
+    // the same temporary-recipe cleanup as a new recipe selection.
+    vm.override_function("CRAFTINGVIEW_SHOW",[this,show](int recipe, int mode, int amount) {
+      withRecipeTemporary(uint32_t(recipe),"CRAFTINGVIEW_SHOW",[&]() {
+        vm.call_function(show,recipe,mode,amount); // Deliberately run its original body.
+        });
+      });
+    }
   cpu.register_thiscall(ZCVIEW__ZCVIEW,[this](ptr32_t ptr, int x1, int y1, int x2, int y2, int id) {
     auto* view = mem32.deref<zCView>(ptr);
     if(view==nullptr)
@@ -430,7 +439,7 @@ void DirectMemory::setupFontFunctions() {
     auto it = fontByPtr.find(self);
     if(it==fontByPtr.end())
       return 0;
-    return int32_t(textWidth(fonts[it->second].name,txt));
+    return int32_t(textWidth(fonts[it->second].name,txt,std::min(float(uiWidth)/800.f,float(uiHeight)/600.f)));
     });
 
   // zCFont::GetFontName() returns a zSTRING by value: the script gives the place for it (CALL_RetValIsZString) and takes
@@ -449,7 +458,7 @@ void DirectMemory::setupFontFunctions() {
     auto it = fontByPtr.find(self);
     if(it==fontByPtr.end())
       return 0;
-    return int32_t(fontHeight(fonts[it->second].name));
+    return int32_t(fontHeight(fonts[it->second].name,std::min(float(uiWidth)/800.f,float(uiHeight)/600.f)));
     });
   }
 
@@ -511,6 +520,15 @@ void DirectMemory::collectOverlay(std::vector<GameScript::DmaOverlayItem>& out, 
   const bool resized = uiWidth!=std::max(width,1) || uiHeight!=std::max(height,1);
   uiWidth = std::max(width,1);
   uiHeight = std::max(height,1);
+  // CoM's 800x200 crafting panel fits the viewport. Its script computes the
+  // scale from the virtual width of the HP bar, not from a UI-only constant.
+  const float scale = std::min(float(uiWidth)/800.f,float(uiHeight)/600.f);
+  if(auto* bar = mem32.deref<oCViewStatusBar>(memGame.HPBAR)) {
+    bar->PSIZEX = std::max(1,int(180.f*scale));
+    bar->PSIZEY = std::max(1,int(20.f*scale));
+    bar->VSIZEX = int(180.f*scale*VirtualSize/float(uiWidth));
+    bar->VSIZEY = int(20.f*scale*VirtualSize/float(uiHeight));
+    }
   if(auto* viewport = mem32.deref<zCView>(memGame._ZCSESSION_VIEWPORT)) {
     viewport->PSIZEX = uiWidth;
     viewport->PSIZEY = uiHeight;
@@ -518,6 +536,16 @@ void DirectMemory::collectOverlay(std::vector<GameScript::DmaOverlayItem>& out, 
   if(resized && resolutionFired) {
     HookRegs regs;
     fireHook(HookAdr::BarUpdateResolution,regs);
+    auto* open = vm.find_symbol_by_name("CRAFTINGVIEW_ISOPEN");
+    auto* show = vm.find_symbol_by_name("CRAFTINGVIEW_SHOW");
+    auto* recipe = vm.find_symbol_by_name("CV_CURRENTITEM");
+    auto* mode = vm.find_symbol_by_name("CV_CURRENTMODE");
+    auto* amount = vm.find_symbol_by_name("CV_CURRENTAMOUNT");
+    if(open!=nullptr && show!=nullptr && recipe!=nullptr && mode!=nullptr && amount!=nullptr && open->get_int()!=0) {
+      withRecipeTemporary(uint32_t(recipe->get_int()),"CRAFTINGVIEW_SHOW",[&]() {
+        vm.call_function(show,recipe->get_int(),mode->get_int(),amount->get_int());
+        });
+      }
     }
   spriteOverlay.clear();
   renderedViews.clear();

@@ -262,6 +262,19 @@ bool GameScript::dmaInCamera() const {
   return dma!=nullptr && dma->inCamera();
   }
 
+bool GameScript::dmaCutsceneMenuBlocked() const {
+  return dma!=nullptr && dma->cutsceneMenuBlocked();
+  }
+
+bool GameScript::dmaCutsceneStatusHidden() const {
+  return dma!=nullptr && dma->cutsceneStatusHidden();
+  }
+
+void GameScript::dmaDialogMessage(std::string& name, uint32_t& color, bool& bottom, bool playerLine) {
+  if(dma!=nullptr)
+    dma->eventDialogMessage(name,color,bottom,playerLine);
+  }
+
 bool GameScript::dmaSaveDisabled() const {
   return dma!=nullptr && dma->saveDisabled();
   }

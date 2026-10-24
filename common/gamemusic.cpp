@@ -491,10 +491,11 @@ GameMusic::Tags GameMusic::mkTags(GameMusic::Tags daytime, GameMusic::Tags mode)
 void GameMusic::setEnabled(bool e) {
   const bool wasEnabled = enabled;
   enabled = e;
-  impl->setEnabled(e && recordedImpl==nullptr);
+  const bool hasMusic = zoneMusicActive || overrideTheme.has_value();
+  impl->setEnabled(e && recordedImpl==nullptr && hasMusic);
   // Stop the OpenAL source as well as the legacy provider. Its streaming
   // buffer may still contain samples prepared before the provider was disabled.
-  if(!e || recordedImpl!=nullptr)
+  if(!e || recordedImpl!=nullptr || !hasMusic)
     sound.pause();
   else if(!wasEnabled)
     sound.play();
@@ -524,8 +525,14 @@ void GameMusic::setMusic(GameMusic::Music m) {
   }
 
 void GameMusic::setMusic(const zenkit::IMusicTheme &theme, Tags tags) {
+  zoneMusicActive = true;
   currentMusic.theme = theme;
   currentMusic.tags  = tags;
+  playCurrent();
+  }
+
+void GameMusic::clearZoneMusic() {
+  zoneMusicActive = false;
   playCurrent();
   }
 
@@ -544,6 +551,15 @@ void GameMusic::clearTrackOverride() {
   }
 
 void GameMusic::playCurrent() {
+  if(!zoneMusicActive && !overrideTheme) {
+    recordedSound = SoundEffect();
+    outgoingSound = SoundEffect();
+    recordedImpl = nullptr;
+    recordedFile.clear();
+    impl->setEnabled(false);
+    sound.pause();
+    return;
+    }
   const auto& theme = overrideTheme ? *overrideTheme : currentMusic.theme;
   const auto* track = Gothic::musicDef().recordedTrack(theme.file);
   if(track!=nullptr) {

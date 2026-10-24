@@ -92,28 +92,30 @@ What it showed for CoM (scripts of CoM: about 5000 functions):
 - Every exception of a script prints the stack of the script the first two times (log, red): it says who did it.
 - `HookEngine` places that are not answered are listed in the tab Debug, Ikarus, not in the log (the log has one line).
 
-## Not done
+## Current CoM coverage and remaining work
 
-What of CoM does not work yet (every item is a place where the original engine is hooked or called, see the tab Debug,
-Ikarus, for the list of the hooks that nobody answers):
+The detailed current implementation and manual acceptance list are maintained in
+[PROGRESS.md](PROGRESS.md), [ARCHOLOS_REMAINING_2026-10-24.md](ARCHOLOS_REMAINING_2026-10-24.md)
+and [ARCHOLOS_AUDIT_2026-10-24.md](ARCHOLOS_AUDIT_2026-10-24.md). A registration alone
+is not proof of complete semantics or campaign playability.
 
-1. **The custom inventory of CoM** (`CATINV_*`, about 30 hooks of `oCItemContainer`), the texts of the items in the
-   windows of recipes (`OCITEMCONTAINER__DRAWITEMINFO_HOOK`): the inventory of OpenGothic is used.
-2. **The windows of the dialogs** (`CRAFTINGVIEW_*`, `OCINFORMATIONMANAGER__UPDATE_HOOK`, `ZCVIEWDIALOGCHOICE__HANDLEEVENT_HOOK`):
-   the crafting and the answers that are typed work as the normal choices of a dialog, without the icons.
-3. **The status screen** (`STATUSSCREENSHOW_HOOK`, `UPDATE_MENU_ITEM`): the menu of the original has no items in memory.
-4. **Slots and equipment of the engine**: `oCNpc::GetSlotItem` (answers 0), `PutInSlot`, `RemoveFromSlot`, `EquipWeapon`,
-   `DropAllInHand`, the quivers (`_EVT_QUIVER_*`), the torch, `OCNPC__DROPUNCONSCIOUS_HOOK`.
-5. **Companions and the cutscenes of CoM**: `OCNPC__GETNEXTENEMY_REPLACEHOOK`, `HIDEFOCUSFORPARTYMEMBERS_*`,
-   `ZCCSCAMERA__ONTRIGGER`, `OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE` (and the two like it),
-   `zCAICamera::StartDialogCam`.
-6. **Drawing**: the color and the alpha of a text (the font has its own color), the sprites of LeGo (`_SPRITE_DORENDER`),
-   `Render`, `Draw3D`, the animations and the children of a `zCView`, the texture of the walls of the houses
-   (`zCTexture::Load`).
-7. **The picklock strings** (`HANDLE_SETPROPERPICKLOCKSTRLEN`), the important items that must not be dropped or sold
-   (`OCNPC__EVDROPVOB_HOOK`, `ITEMIMPORTANTFLAG_CHECKSELLINGITEMS`), `oCLogManager` (`LOG_MOVETOTOP` does nothing).
-8. Windows: `KmLib.dll` of CoM (Steam achievements and the music): `LoadLibrary` is answered by a pretended handle, the
-   calls into it are dropped.
+Implemented adapters include equipment/torch/quivers, protected unconsciousness,
+party target selection, scene camera/menu/HUD/subtitles, picklocks and telekinesis,
+important-item restrictions, journal ordering, native inventory categories, LeGo
+sprites/model previews and the crafting panel. The user confirmed the crafting
+panel's appearance and menu music. Crafting quantities/costs, quests, load cycles
+and the newest scene/input changes still need manual acceptance.
+
+The old private CATINV widgets and approximately 40 remaining hook contracts are
+not generally emulated. Review must distinguish paths handled by the native UI
+from behavior still missing. KmLib platform services and arbitrary DLL exports
+remain unsupported; CoM's recorded music uses native adapters. WLD_IsRaining and
+Mdl_ApplyRandomAni/Freq remain incomplete and are listed explicitly in the backlog.
+
+The analyzer writes `callback-references.csv` alongside direct BL/BE call counts.
+It resolves constant callback targets passed to AI_Function, FF_Apply and selected
+MEM_Call wrappers only when the pushes are unambiguous. Unresolved expressions stay
+visible. Callback references do not count as direct calls or runtime frequency.
 
 ## How to try CoM
 

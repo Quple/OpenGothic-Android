@@ -3,14 +3,15 @@
 Postęp: **24/27 pozycji**. Licznik dotyczy tej listy, nie procentu zgodności gry.
 `[x]` oznacza implementację w kodzie. Użytkownik zezwolił na okresowe kompilacje
 przed STOP; nowy pakiet nadal wymaga ręcznych prób. Agent nie uruchamia gry,
-testów ani komend comcheck. Muzyka menu ma osobne potwierdzenie użytkownika.
+testów ani komend comcheck. Użytkownik potwierdził muzykę menu i poprawny wygląd
+panelu craftingu po pakiecie naprawczym.
 
 - [x] Muzyka menu Kronik; użytkownik potwierdził wyłącznie właściwy motyw.
 - [x] OGG i mapowanie muzyki stref świata.
 - [x] Priorytet plików moda w VDF/MOD.
 - [x] Kategorie ukończonych i niezaliczonych zadań dziennika.
 - [x] Zatrzymanie głosu pominiętej wypowiedzi trialogu.
-- [x] STOPALLSOUNDS dla efektów świata i globalnych.
+- [x] STOPALLSOUNDS dla efektów świata, globalnych i głosu DialogMenu.
 - [x] WLD_INSERTOBJECT dla obsługiwanych wizualizacji, z zapisem obiektów.
 - [x] Equip/Unequip bez zdejmowania przy ponownym wyposażeniu.
 - [x] NpcEquipBestWeaponByType i most hooka wyposażania NPC Kronik.
@@ -35,13 +36,16 @@ testów ani komend comcheck. Muzyka menu ma osobne potwierdzenie użytkownika.
 
 ## Nowe komendy, wyłącznie do uruchomienia przez użytkownika
 
-Na zapisie roboczym. Źródło: `mods/devtools/lib/archoloschecks.js`; komendy trafią
-do EXE/kopii moda podczas następnej kompilacji.
+Na zapisie roboczym. Źródło: `mods/devtools/lib/archoloschecks.js`; komendy są kopiowane
+do EXE/kopii moda podczas kompilacji; ostatnio dodano cutscene.
 
 - `comcheck bestweapon` — warunki używania i idempotencja wyposażania.
 - `comcheck housewall 0..11|status|restore` — wzory ścian, w tym 11 świąteczny;
   wewnątrz domu sprawdzić też zapis/wczytanie wybranego wzoru.
 - `comcheck scenelock load|save|both|off` — po próbie zawsze `off`.
+- `comcheck cutscene` — tylko odczyt flag. W naturalnej scence sprawdzić blokadę
+  menu również po dwóch minutach, brak HUD/fokusu, dolne pole kwestii NPC oraz
+  nazwę/kolor przy planszach końcowych. Po scenie zwykłe zachowanie wraca.
 - `comcheck spellactive [SPL_LIGHT]` — przed rzuceniem, w trakcie i po wygaśnięciu;
   sprawdzić naturalny warunek światła w ciemnym pokoju Q501.
 - `comcheck torch status|stow` — płonący model, zwrot jednej zgaszonej pochodni,
@@ -55,6 +59,9 @@ do EXE/kopii moda podczas następnej kompilacji.
 - `comcheck crafting` — tylko odczyt stanu. Przy naturalnym stanowisku sprawdzić
   kilka receptur, ilości i „Wszystko”, składniki, wymagane/posiadane liczby,
   zakładkę właściwości, wyjście i ponowne wejście. Następnie normalne wytworzenie.
+  Nowy pakiet: niezerowa skala panelu/modelu, DLG_CHOICE.TGA, kolory i odstępy
+  tekstu, dynamiczny komparator listy LeGo. Skompilowany; użytkownik potwierdził
+  wygląd. Pełne wytwarzanie, koszty, zakładki i resize nadal do odbioru.
 - Pod wodą: naturalnie podnieść przedmiot. Ma zniknąć ze świata, trafić raz do
   ekwipunku i użyć wodnej animacji; po niej dalsze nurkowanie. Porównać z lądem.
 - Spowolnienie: naturalne rzucenie ze zwoju i runy, właściwy koszt many, efekt,
@@ -75,9 +82,15 @@ do EXE/kopii moda podczas następnej kompilacji.
 - `comcheck telekinesis` — odczyt fazy i kroków ruchu. Naturalnie przyciągnąć
   luźny przedmiot: koszt many, ruch, ukończenie i opadanie. Przerwać rzucanie,
   zmienić broń, zapisać i wczytać; przedmiot nie może pozostać bez fizyki.
+- Kolejkowane teleporty: naturalne limity odległości Jorna/Ruperta w Q102,
+  przygotowanie postaci w Q602 i manekiny domu; brak skoku do środka świata.
+- `comcheck musiczone` — tylko odczyt strefy/świata i flag koncertu. Wejście do nakładających się stref, wyjście, dzień/noc, koncert
+  In Extremo 18–21, zapis podczas aktywnego koncertu i powrót po zmianie świata.
 - Klawiatura Ikarusa: mapę LeGo zamknąć Escape, Enter, PPM i przypisanym
   klawiszem mapy/ekwipunku. Przy zaklęciu zamka sprawdzić puszczenie akcji;
-  po Alt+Tab klawisze nie pozostają wciśnięte dla skryptów.
+  po Alt+Tab klawisze nie pozostają wciśnięte dla skryptów. Sprawdzić skrót
+  pochodni po zmianie przypisania, także drugie przypisanie, bez powtarzania
+  przełączenia od trzymania klawisza.
 - Obrażenia: ten sam czar z pierścieniem maga i bez, przeciwnicy z ochroną oraz
   odpornością na magię; broń penetrująca nie może trwale odejmować pancerza.
   Oddzielnie strzały i magiczna broń w walkach, które mają kończyć się ogłuszeniem.
@@ -106,8 +119,13 @@ do EXE/kopii moda podczas następnej kompilacji.
 - Nie potwierdzono pełnego craftingu, wszystkich questów ani braku critical error.
 - Buildy: archolos-compat/time/light/diagnostics/attitude/memory/timers/screenfx/
   telekinesis-build z datą 2026-10-24 zakończyły się kodem 0. Pakiet klawiatury
-  również skompilował oba EXE; brak uruchomionych prób gry.
+  i archolos-input-cutscenes-build również skompilowały oba EXE. Wygląd craftingu
+  potwierdził użytkownik; brak odbioru kolejnych zmian.
 - `CRAFTINGVIEW_UPDATE` korzysta z natywnego wyboru menu. Nie oznacza to pełnej
   emulacji prywatnego InformationManagera ani wszystkich hooków pod 0x660bb0.
 - Drugi parametr time.slw ma już kod zegara modelu i zapisu. Kompilacja/odbiór
   naturalnego zaklęcia i sceny Q306 pozostają warunkiem uznania działania w grze.
+
+- Pakiet voices oraz torchbindings z 2026-10-24 skompilował oba EXE kodem 0.
+
+- Strefy muzyki: oba EXE skompilowane; najnowsze ręczne komendy nadal bez odbioru.

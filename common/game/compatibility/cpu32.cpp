@@ -3,6 +3,8 @@
 #include <Tempest/Log>
 #include <unordered_set>
 #include <cstring>
+#include <cmath>
+#include <limits>
 
 #include "directmemory.h"
 
@@ -11,6 +13,20 @@ using namespace Compatibility;
 
 Cpu32::Cpu32(DirectMemory& owner, Mem32& mem32):owner(owner), mem32(mem32){
   stack.reserve(1024);
+  }
+
+void Cpu32::register_float_to_int(ptr32_t address) {
+  register_stdcall_inner(address,[](Cpu32& cpu) {
+    // MSVC's _ftol consumes ST0, not an integer argument on the stack.
+    const double value = std::trunc(double(cpu.st0));
+    // The installed engine uses FISTP qword and returns EDX:EAX, including
+    // the x87 integer-indefinite value on NaN/overflow.
+    const int64_t result = std::isfinite(value) && value>=-0x1p63 && value<0x1p63
+                           ? int64_t(value) : std::numeric_limits<int64_t>::min();
+    cpu.eax = uint32_t(uint64_t(result));
+    cpu.edx = uint32_t(uint64_t(result)>>32);
+    cpu.st0 = 0;
+    });
   }
 
 void Cpu32::exec(const ptr32_t basePc, const uint8_t* ins, size_t len) {

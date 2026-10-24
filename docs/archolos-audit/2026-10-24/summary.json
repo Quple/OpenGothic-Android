@@ -8,37 +8,39 @@
   "dat_symbols": 206709,
   "dat_call_sites": 240563,
   "unresolved_bytecode_calls": 0,
+  "callback_sites": 2529,
+  "resolved_callback_sites": 2118,
   "function_status": {
     "external_bound": 241,
-    "script_defined": 37834,
-    "overridden_review_semantics": 111,
+    "script_defined": 37821,
+    "overridden_review_semantics": 124,
     "missing_external": 76
   },
   "called_function_status": {
     "external_bound": 216,
-    "script_defined": 5537,
-    "overridden_review_semantics": 100
+    "script_defined": 5524,
+    "overridden_review_semantics": 113
   },
   "native_status": {
     "dynamic_expression": 75,
     "caller_overridden_review_semantics": 46,
-    "registered_review_semantics": 186,
-    "missing_native": 84,
-    "registered_trivial": 12,
-    "missing_hook_bridge": 92,
+    "registered_review_semantics": 192,
+    "missing_native": 82,
+    "registered_trivial": 8,
+    "missing_hook_bridge": 86,
     "special_event_adapter_review_semantics": 4,
-    "hook_declared_review_semantics": 72
+    "hook_declared_review_semantics": 78
   },
   "native_status_by_origin": {
     "dat": {
       "dynamic_expression": 41,
       "caller_overridden_review_semantics": 20,
-      "registered_review_semantics": 68,
-      "missing_native": 35,
+      "registered_review_semantics": 71,
+      "missing_native": 34,
       "special_event_adapter_review_semantics": 2,
-      "missing_hook_bridge": 44,
-      "hook_declared_review_semantics": 36,
-      "registered_trivial": 4
+      "missing_hook_bridge": 41,
+      "hook_declared_review_semantics": 39,
+      "registered_trivial": 2
     },
     "ikarus": {
       "dynamic_expression": 12,
@@ -58,18 +60,19 @@
     },
     "mod": {
       "caller_overridden_review_semantics": 15,
-      "registered_review_semantics": 60,
+      "registered_review_semantics": 63,
       "dynamic_expression": 18,
-      "missing_hook_bridge": 43,
-      "hook_declared_review_semantics": 30,
-      "missing_native": 25,
-      "registered_trivial": 6
+      "missing_hook_bridge": 40,
+      "hook_declared_review_semantics": 33,
+      "missing_native": 24,
+      "registered_trivial": 4
     }
   },
   "limitations": [
     "Counts do not measure runtime frequency or campaign playability.",
     "Registrations and overrides need semantic review; partial adapters may exist.",
-    "Dynamic calls/callbacks are not resolved into graph edges.",
+    "Callback references are reported separately; only unambiguous consecutive pushes are resolved.",
+    "Computed callback targets and native dynamic addresses remain unresolved.",
     "Source hooks need an event and register/stack contract review.",
     "Library source versions may differ from libraries embedded in DAT."
   ],

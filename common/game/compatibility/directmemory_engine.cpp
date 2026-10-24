@@ -3,6 +3,8 @@
 #include <Tempest/Log>
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cmath>
 #include <cstring>
 
@@ -121,6 +123,7 @@ void DirectMemory::setupEngineCalls() {
   cpu.register_thiscall(ZCSNDSYS_MSS__REMOVEALLACTIVESOUNDS,[this](ptr32_t) {
     gameScript.world().sound()->stopAllSounds();
     Gothic::inst().stopGlobalSounds();
+    Gothic::inst().onStopAllSounds();
     });
   // the floats of Ikarus (float.d) are ints, the VM does not take a float for an int
   auto safeOverride = [this](std::string_view name, auto fn) {
@@ -128,6 +131,10 @@ void DirectMemory::setupEngineCalls() {
     if(f!=nullptr && f->type()==zenkit::DaedalusDataType::FUNCTION)
       vm.override_function(name,fn);
     };
+  safeOverride("ENABLEMUSICZONE",[this](std::string_view name, int enabled) {
+    if(gameScript.world().sound()->setZoneEnabled(name,enabled!=0)==0 && logBudget("music-zone-enable"))
+      Log::e("EnableMusicZone: no such zone: ",name);
+    });
   if(vm.find_symbol_by_name("CATINV_ACTIVECATEGORY")!=nullptr &&
      vm.find_symbol_by_name("INV_CAT_GROUPS")!=nullptr) {
     safeOverride("CATINV_SETCATEGORY",[this](int index) -> int {
@@ -230,21 +237,91 @@ void DirectMemory::setupEngineCalls() {
       dropCancelled = true;
     });
 
-  // zCInput: there is an object, the keys are not bound by the scripts here
+  // zCInput: script bindings share the native UI's current KEYS options.
   const ptr32_t input = mem32.alloc(256,"zCInput");
   mem32.alloc(ZCINPUT_ZINPUT,4,"zinput*");
   mem32.writeInt(ZCINPUT_ZINPUT,int32_t(input));
+  auto bindings = [](std::string_view option) {
+    std::array<int32_t,2> result = {};
+    const auto value = Gothic::settingsGetS("KEYS",option);
+    for(size_t i=0; i<result.size(); ++i) {
+      if(value.size()<(i+1)*4)
+        break;
+      uint32_t packed = 0;
+      const auto* begin = value.data()+i*4;
+      const auto parsed = std::from_chars(begin,begin+4,packed,16);
+      if(parsed.ec!=std::errc() || parsed.ptr!=begin+4)
+        continue;
+      int32_t code = int32_t(((packed&255)<<8) | ((packed>>8)&255));
+      // OpenGothic's key editor stores its digit shortcuts as 120..129.
+      // Ikarus must see the corresponding DirectInput digit scans 2..11.
+      if(code>=120 && code<=129)
+        code = code-120+2;
+      result[i] = code;
+      }
+    return result;
+    };
+  safeOverride("MEM_GetKey",[bindings](std::string_view option) -> int32_t {
+    return bindings(option)[0];
+    });
+  safeOverride("MEM_GetSecondaryKey",[bindings](std::string_view option) -> int32_t {
+    return bindings(option)[1];
+    });
+  safeOverride("MEM_SetKeys",[this](std::string_view option, int primary, int secondary) {
+    if(option.empty())
+      return;
+    // Ikarus stores two uint16 DirectInput codes, little endian, as hex.
+    // INIT_TORCHKEY relies on this to install its defaults in a fresh INI.
+    constexpr char hex[] = "0123456789ABCDEF";
+    std::string value(8,'0');
+    const std::array<uint16_t,2> codes = {uint16_t(primary),uint16_t(secondary)};
+    for(size_t i=0; i<codes.size(); ++i) {
+      const auto code = codes[i];
+      value[i*4+0] = hex[(code>>4)&15];
+      value[i*4+1] = hex[code&15];
+      value[i*4+2] = hex[(code>>12)&15];
+      value[i*4+3] = hex[(code>>8)&15];
+      }
+    Gothic::settingsSetS("KEYS",option,value);
+    std::fill(std::begin(keyToggles),std::end(keyToggles),uint8_t(0));
+    });
+  auto weaponAction = [this](int action) {
+    const auto* symbol = vm.find_symbol_by_name("ZOPT_GAMEKEY_WEAPON");
+    return action==(symbol!=nullptr ? symbol->get_int() : 8);
+    };
   cpu.register_thiscall(ZCINPUT_WIN32__CLEARKEYBUFFER,[this](ptr32_t) {
     std::fill(std::begin(keyEvents),std::end(keyEvents),uint8_t(0));
+    std::fill(std::begin(keyToggles),std::end(keyToggles),uint8_t(0));
     });
-  cpu.register_thiscall(ZCINPUT_WIN32__GETSTATE,[](ptr32_t, int) -> int32_t {
+  cpu.register_thiscall(ZCINPUT_WIN32__GETSTATE,[this,bindings,weaponAction](ptr32_t, int action) -> float {
+    // The CoM DAT calls this only for ZOPT_GAMEKEY_WEAPON (8).
+    if(!weaponAction(action)) {
+      if(logBudget("input-state-action"))
+        Log::e("Ikarus input: unsupported logical action ",action);
+      return 0.f;
+      }
+    for(const auto code:bindings("keyWeapon"))
+      if(code>0 && size_t(code)<sizeof(keyEvents) && keyEvents[code]!=0)
+        return 1.f;
+    return 0.f;
+    });
+  cpu.register_thiscall(ZCINPUT__ISBINDEDTOGGLED,[this,bindings,weaponAction](ptr32_t, int action, int key) -> int32_t {
+    if(!weaponAction(action) || key<=0 || size_t(key)>=sizeof(keyToggles))
+      return 0;
+    for(const auto code:bindings("keyWeapon")) {
+      if(code!=key || keyToggles[key]==0)
+        continue;
+      keyToggles[key] = 0;
+      return 1;
+      }
     return 0;
     });
-  cpu.register_thiscall(ZCINPUT__ISBINDEDTOGGLED,[](ptr32_t, int, int) -> int32_t {
-    return 0;
+  cpu.register_thiscall(ZCINPUT__BINDKEYS,[this](ptr32_t, int) {
+    // Bindings are read from the same current KEYS options as the native UI;
+    // rebinding discards old toggles without maintaining a second key map.
+    std::fill(std::begin(keyToggles),std::end(keyToggles),uint8_t(0));
     });
-  cpu.register_thiscall(ZCINPUT__BINDKEYS,[](ptr32_t, int) {
-    });
+  cpu.register_float_to_int(0x7D0F48); // __ftol, used after GetState in CoM
 
   // oCGame::TriggerChangeLevel(level, point): the screen has faded and the mod goes to another world
   cpu.register_thiscall(OCGAME__TRIGGERCHANGELEVEL,[this](ptr32_t, std::string level, std::string point) {

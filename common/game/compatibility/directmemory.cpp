@@ -222,7 +222,6 @@ DirectMemory::DirectMemory(GameScript& owner, zenkit::DaedalusVm& vm) : gameScri
     vm.override_function(name, hook);
     };
   dummyfy("WRITENOP",    [](int,int){}); // hook-related mess
-  dummyfy("MEM_SETKEYS", [](std::string_view,int,int){});
   setupQuiverFunctions();
   setupTelekinesisFunctions();
   setupTrialogFunctions();
@@ -723,8 +722,25 @@ void DirectMemory::setupEngineMemory() {
     v->PSIZEX = 800;  v->PSIZEY = 600;
     v->VSIZEX = 8192; v->VSIZEY = 8192;
     }
+  // Distinct dialog views are compared by CoM's DialogMessageCXY hook.
+  // They remain native-owned UI surfaces, with valid 32-bit identities.
+  for(size_t i=1; i<std::size(memGame.ARRAY_VIEW); ++i) {
+    memGame.ARRAY_VIEW[i] = mem32.alloc(sizeof(zCView),"dialog view identity");
+    if(auto* view = mem32.deref<zCView>(memGame.ARRAY_VIEW[i])) {
+      view->PSIZEX = 800; view->PSIZEY = 600;
+      view->VSIZEX = 8192; view->VSIZEY = 8192;
+      }
+    }
 
   mem32.deref<oCViewStatusBar>(memGame.HPBAR)   ->RANGE_BAR = mem32.alloc(sizeof(zCView));
+  // BAR_GetInterfaceScaling derives its scale from this native bar's width.
+  // Zero collapsed CoM's crafting background and item preview entirely.
+  if(auto* bar = mem32.deref<oCViewStatusBar>(memGame.HPBAR)) {
+    bar->VSIZEX = 180*8192/800;
+    bar->VSIZEY = 20*8192/600;
+    bar->PSIZEX = 180;
+    bar->PSIZEY = 20;
+    }
   mem32.deref<oCViewStatusBar>(memGame.HPBAR)   ->VALUE_BAR = mem32.alloc(sizeof(zCView));
   mem32.deref<oCViewStatusBar>(memGame.FOCUSBAR)->RANGE_BAR = mem32.alloc(sizeof(zCView));
   mem32.deref<oCViewStatusBar>(memGame.FOCUSBAR)->VALUE_BAR = mem32.alloc(sizeof(zCView));
@@ -1407,6 +1423,43 @@ void DirectMemory::setupMemoryFunctions() {
   vm.override_function("MEM_ReadInt",          [this](int address){ return mem_readint(address);                  });
   vm.override_function("MEM_WriteInt",         [this](int address, int val){ mem_writeint(address, val);          });
   vm.override_function("MEM_CopyBytes",        [this](int src, int dst, int size){ mem_copybytes(src, dst, size); });
+  vm.override_function("MEM_ReadByte",[this](int address) -> int32_t {
+    return int32_t(mem32.readByte(ptr32_t(address)));
+    });
+  vm.override_function("MEM_WriteByte",[this](int address, int value) {
+    mem32.writeByte(ptr32_t(address),uint8_t(value));
+    if(!ownedStrings.empty())
+      syncOwnedStrings(ptr32_t(address),1);
+    });
+  vm.override_function("MEM_CompareBytes",[this](int first, int second, int count) -> int32_t {
+    if(count<0)
+      return 0;
+    if(count==0)
+      return 1;
+    const auto a = ptr32_t(first), b = ptr32_t(second);
+    if(a==0 || b==0 || uint64_t(a)+uint32_t(count)>uint64_t(UINT32_MAX)+1 ||
+       uint64_t(b)+uint32_t(count)>uint64_t(UINT32_MAX)+1)
+      return 0;
+    uint8_t copy[256];
+    uint32_t offset = 0;
+    while(offset<uint32_t(count)) {
+      auto [left,leftSize] = mem32.deref(a+offset);
+      if(left==nullptr || leftSize==0)
+        return 0;
+      auto size = std::min({uint32_t(count)-offset,leftSize,uint32_t(sizeof(copy))});
+      // A second read can run callbacks; retain the first bytes, not a pointer
+      // into a region that a callback may change. Adjacent regions are legal.
+      std::memcpy(copy,left,size);
+      auto [right,rightSize] = mem32.deref(b+offset);
+      if(right==nullptr || rightSize==0)
+        return 0;
+      size = std::min(size,rightSize);
+      if(std::memcmp(copy,right,size)!=0)
+        return 0;
+      offset += size;
+      }
+    return 1;
+    });
   vm.override_function("MEM_ReadString",       [this](int sym){ return mem_readstring(sym);           });
   vm.override_function("MEM_WriteString", [this](int location, std::string_view text) {
     const auto address = ptr32_t(location);
@@ -1612,6 +1665,8 @@ void DirectMemory::mem_writeint(int address, int val) {
   }
 
 void DirectMemory::mem_copybytes(int src, int dst, int size) {
+  if(size<=0)
+    return;
   mem32.copyBytes(ptr32_t(src),ptr32_t(dst),ptr32_t(size));
   if(!ownedStrings.empty() && size>0)
     syncOwnedStrings(ptr32_t(dst),uint32_t(size));
@@ -1674,6 +1729,62 @@ int DirectMemory::mem_realloc(int address, int oldsz, int size) {
 
 
 void DirectMemory::setupDirectFunctions() {
+  // A func parameter contains a symbol ID, possibly another func variable.
+  // Resolve it without the parser's self-modifying MEM_GetFuncID trampoline.
+  auto resolve = [this](uint32_t id) -> zenkit::DaedalusSymbol* {
+    for(size_t depth=0; depth<vm.symbols().size(); ++depth) {
+      auto* symbol = vm.find_symbol_by_index(id);
+      if(symbol==nullptr || symbol->type()!=zenkit::DaedalusDataType::FUNCTION || symbol->is_member())
+        return nullptr;
+      if(symbol->is_const())
+        return symbol;
+      const auto next = uint32_t(symbol->get_int());
+      if(next==id)
+        return nullptr;
+      id = next;
+      }
+    return nullptr;
+    };
+  vm.override_function("MEM_GetFuncID",[resolve](zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall {
+    auto* function = resolve(uint32_t(vm.pop_int()));
+    vm.push_int(function!=nullptr ? int32_t(function->index()) : -1);
+    return {};
+    });
+  vm.override_function("MEM_Call",[this,resolve](zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall {
+    auto* function = resolve(uint32_t(vm.pop_int()));
+    if(function!=nullptr)
+      directCall(vm,*function);
+    else
+      Log::e("MEM_Call: invalid function reference");
+    return {};
+    });
+  vm.override_function("MEM_CallByString",[this](zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall {
+    const std::string name(vm.pop_string());
+    auto* function = vm.find_symbol_by_name(name);
+    if(function!=nullptr && function->type()==zenkit::DaedalusDataType::FUNCTION && function->is_const())
+      directCall(vm,*function);
+    else if(logBudget("callbystring"))
+      Log::e("MEM_CallByString: not a callable function: ",name);
+    return {};
+    });
+  // These are deliberately naked: the original void wrappers leave values
+  // below the next dynamic call. Ordinary function cleanup discards them.
+  vm.override_function("MEM_PushIntParam",[](zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall {
+    const int32_t value = vm.pop_int();
+    vm.push_int(value);
+    return {};
+    });
+  vm.override_function("MEM_PushStringParam",[](zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall {
+    const std::string value(vm.pop_string());
+    vm.push_string(value);
+    return {};
+    });
+  vm.override_function("MEM_PushInstParam",[](zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall {
+    const auto id = uint32_t(vm.pop_int());
+    auto* symbol = vm.find_symbol_by_index(id);
+    vm.push_instance(symbol!=nullptr && symbol->type()==zenkit::DaedalusDataType::INSTANCE ? symbol->get_instance() : nullptr);
+    return {};
+    });
   vm.override_function("MEM_GetFuncIdByOffset", [this](int off) { return mem_getfuncidbyoffset(off); });
   vm.override_function("MEM_AssignInst",        [this](int index, int ptr) { mem_assigninst(index, ptr); });
 

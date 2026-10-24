@@ -148,25 +148,26 @@ void DialogMenu::drawTextMultiline(Painter &p, int x, int y, int w, int h, std::
   processTextMultiline(&p,x,y,w,h,txt,isPl);
   }
 
-Size DialogMenu::processTextMultiline(Painter* p, int x, int y, int w, int h, std::string_view txt, bool isPl) {
+Size DialogMenu::processTextMultiline(Painter* p, int x, int y, int w, int h, std::string_view txt, bool /*isPl*/) {
   const float scale = Gothic::interfaceScale(this);
   const int   pdd   = int(10*scale);
 
   auto fnt = Resources::font(scale);
   Size ret = {0,0};
-  if(!isPl && other!=nullptr) {
+  if(!subtitleName.empty()) {
     y += fnt.pixelSize();
     // in a trialog the name is the name of the one who speaks
-    auto txt  = (speaker!=nullptr && speaker!=pl) ? speaker->displayName() : other->displayName();
-    auto sz   = fnt.textSize(w,txt.data());
+    auto sz   = fnt.textSize(w,subtitleName);
     if(p!=nullptr)
-      fnt.drawText(*p,x+(w-sz.w)/2,y,txt.data());
+      fnt.drawText(*p,x+(w-sz.w)/2,y,subtitleName);
     h     -= int(sz.h);
     ret.w  = std::max(ret.w,sz.w);
     ret.h += sz.h;
     }
 
-  fnt = Resources::font(isPl ? Resources::FontType::Normal : Resources::FontType::Yellow, scale);
+  const auto c = subtitleColor;
+  fnt = Resources::font(scale).tinted(Color(float((c>>16)&255)/255.f,float((c>>8)&255)/255.f,
+                                          float(c&255)/255.f,float(c>>24)/255.f));
 
   y     += fnt.pixelSize();
   ret.h += fnt.pixelSize();
@@ -472,6 +473,11 @@ void DialogMenu::startTrade() {
   dlgTrade=false;
   }
 
+void DialogMenu::stopSounds() {
+  // RemoveAllActiveSounds stops voices too, without advancing the phrase or AI.
+  currentSnd = SoundEffect();
+  }
+
 void DialogMenu::skipPhrase() {
   if(current.time>0) {
     if(pl!=nullptr)
@@ -518,6 +524,14 @@ void DialogMenu::paintEvent(Tempest::PaintEvent &e) {
   const int      dh = int(100*scale);
 
   if(current.time>0 && trade.isOpen()==InventoryMenu::State::Closed && haveToShowSubtitles(curentIsPl)) {
+    subtitleName.clear();
+    if(!curentIsPl && other!=nullptr)
+      subtitleName = (speaker!=nullptr && speaker!=pl) ? speaker->displayName() : other->displayName();
+    subtitleColor = curentIsPl ? 0xFFFFFFFFu : 0xFFFFFF1Au;
+    bool bottom = false;
+    if(auto* world = Gothic::inst().world())
+      world->script().dmaDialogMessage(subtitleName,subtitleColor,bottom,curentIsPl);
+    const int subtitleY = bottom ? std::max(20,h()-dh-20) : 20;
     if(ambient!=nullptr) {
       int dlgW = dw;
       int dlgH = dh;
@@ -534,12 +548,12 @@ void DialogMenu::paintEvent(Tempest::PaintEvent &e) {
         }
 
       p.setBrush(*ambient);
-      p.drawRect((w()-dlgW)/2, 20+(dh-dlgH)/2, dlgW, dlgH,
+      p.drawRect((w()-dlgW)/2, subtitleY+(dh-dlgH)/2, dlgW, dlgH,
                  0,0,ambient->w(),ambient->h());
       }
 
     if(current.time>da && current.time<current.msgTime+da)
-      drawTextMultiline(p,(w()-dw)/2,20,dw,dh,current.txt,curentIsPl);
+      drawTextMultiline(p,(w()-dw)/2,subtitleY,dw,dh,current.txt,curentIsPl);
     }
 
   if(prompt.active)

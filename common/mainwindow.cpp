@@ -174,6 +174,7 @@ void MainWindow::setupUi() {
   Gothic::inst().onDialogPipe  .bind(&dialogs,&DialogMenu::openPipe);
   Gothic::inst().onDialogGuest .bind(&dialogs,&DialogMenu::addGuest);
   Gothic::inst().onDialogCameraReset.bind(this,&MainWindow::requestDialogCamera);
+  Gothic::inst().onStopAllSounds.bind(&dialogs,&DialogMenu::stopSounds);
   Gothic::inst().onOpenTrade   .bind(&inventory,&InventoryMenu::trade);
   Gothic::inst().isNpcInDialogFn = std::bind(&DialogMenu::isNpcInDialog, &dialogs, std::placeholders::_1);
 
@@ -253,7 +254,7 @@ void MainWindow::paintEvent(PaintEvent& event) {
       if(auto* pl = Gothic::inst().player())
         world->script().dmaFocus(*pl,focus);
       // CoM hides the status of the player in a camera of a cutscene (OCGAME__UPDATEPLAYERSTATUS_REPLACECHECKINGGLOBALCUTSCENE)
-      const bool inCamera = world->script().dmaInCamera();
+      const bool inCamera = world->script().dmaCutsceneStatusHidden();
       if(!inCamera)
         paintFocus(p,focus,vp);
 
@@ -920,7 +921,7 @@ void MainWindow::drawDmaOverlay(Tempest::Painter& p) {
 
   const float sx    = float(w())/8192.f;
   const float sy    = float(h())/8192.f;
-  const float scale = float(h())/600.f;     // the sizes of the fonts are for the screen of 800x600
+  const float scale = std::min(float(w())/800.f,float(h())/600.f);
 
   auto brushColor = [](uint32_t c) {
     return Color(float((c>>16)&0xFF)/255.f, float((c>>8)&0xFF)/255.f, float(c&0xFF)/255.f, float((c>>24)&0xFF)/255.f);
@@ -963,7 +964,7 @@ void MainWindow::drawDmaOverlay(Tempest::Painter& p) {
         p.drawRect(x,y,iw,ih,0,0,tex->w(),tex->h());
         }
       } else {
-      const auto& fnt = Resources::font(it.font,Resources::FontType::Normal,scale);
+      const auto fnt = Resources::font(it.font,Resources::FontType::Normal,scale).tinted(color);
       fnt.drawText(p,int(it.x*sx),int(it.y*sy)+fnt.pixelSize(),it.name);
       }
     }
@@ -1225,6 +1226,8 @@ void MainWindow::updateAnimation(uint64_t dt) {
 /// The inventory, the menu, the log: a scene of a mod without a dialog does not let the player open them (for at most two minutes,
 /// so that a scene that has hung does not hold him for ever)
 bool MainWindow::sceneLocksUi() const {
+  if(auto* world = Gothic::inst().world(); world!=nullptr && world->script().dmaCutsceneMenuBlocked())
+    return true;
   return sceneLockTime>0 && sceneLockTime<120000;
   }
 

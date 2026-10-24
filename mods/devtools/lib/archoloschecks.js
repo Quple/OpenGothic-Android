@@ -741,6 +741,22 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen, l
                     console.log(`${name}: ${active ? "ACTIVE" : "INACTIVE"}. Compare before casting, while the committed spell effect is visible, and after it expires. Merely equipping a rune must remain INACTIVE. For Q501, cast light in the dark room and check the natural journal/room update.`);
                     break;
                 }
+                case "musiczone": {
+                    for (const name of ["CURRENTMUSICZONE", "CURRENTLEVEL", "INEXTREMO_CANPLAYCONCERT", "INEXTREMO_STARTCONCERT"]) {
+                        const symbol = debug.symbol(name);
+                        if (symbol) console.log(`${name}=${symbol.value}`);
+                    }
+                    console.log("Read only. Cross natural overlapping music zones and wait up to five seconds; compare day/night/combat. Check the In Extremo concert at 18-21, then leave and return. Save/load while its zone is enabled and disabled, and after changing worlds. This command does not enable a zone, advance time or start the concert.");
+                    break;
+                }
+                case "cutscene": {
+                    for (const name of ["ISINCAMERA", "ISINFINALBOARDS", "CURRENTTRIGGEREDCAMERAPTR", "TRIA_RUNNING", "TRIA_CPTR"]) {
+                        const symbol = debug.symbol(name);
+                        if (symbol) console.log(`${name}=${symbol.value}`);
+                    }
+                    console.log("Read only. During a natural CoM camera scene check that status/focus and menu remain blocked, including after two minutes. NPC subtitles moved by the script should use the lower field; final-board lines must hide the speaker name and use the script color. After the scene normal HUD, menu and subtitles return. This command does not start, skip or finish a scene.");
+                    break;
+                }
                 case "scenelock": {
                     const mode = args[1];
                     if (!["load", "save", "both", "off"].includes(mode))
@@ -831,7 +847,7 @@ function registerArcholosChecks({ debug, player, npcs, world, console, screen, l
                     break;
                 default:
                     console.log("Tools for saves: state | scale [instance] [factor] | item <NAME> [n] | clock <h> [m] | world [list|<name> [waypoint]] | wp [part] | tp <waypoint> | heal | god [off] | xp <n> | attr <strength|dexterity|health|mana> <n>.");
-                    console.log("New CoM checks: trialog | crafting | breath [NPC_INSTANCE] | slowdown [NPC_INSTANCE] | attitude NPC_INSTANCE | telekinesis | bestweapon | spellactive [SPL_LIGHT] | torch status|stow | category 0..8|status | map archolos|silbach|city|sewers|off | preview [item]|off | housewall 0..11|status|restore | scenelock load|save|both|off. Details: docs/ARCHOLOS_PROGRESS_2026-10-24.md.");
+                    console.log("New CoM checks: trialog | crafting | cutscene | musiczone | breath [NPC_INSTANCE] | slowdown [NPC_INSTANCE] | attitude NPC_INSTANCE | telekinesis | bestweapon | spellactive [SPL_LIGHT] | torch status|stow | category 0..8|status | map archolos|silbach|city|sewers|off | preview [item]|off | housewall 0..11|status|restore | scenelock load|save|both|off. Details: docs/ARCHOLOS_PROGRESS_2026-10-24.md.");
                     console.log("Manual checks on a disposable save: comcheck wait [seconds] | cancel | drop [item] | chest [vob-name] [item] [count] | text | time [stop] | inventory [off] | trader | party [off] | finish [flag] | faint [keep|drop|go|wake] | vob <NAME> [go|hide|show|ghost|solid] | queue [radius] | lock [code|off|items|talent N|bonus N] | ranged [bow|crossbow|aim|shoot|stop|status|clear] | scene [smokers] | fix [case] [check] | test [all|area] | dlg list|analyze|run|all|report");
                     screen.print("comcheck: see the Console and docs/ARCHOLOS_TESTING.md");
                     break;
