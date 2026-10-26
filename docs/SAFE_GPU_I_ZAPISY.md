@@ -110,3 +110,23 @@ członkami (`vec2`, `vec3`, `vec3`) jako interfejs vertex → fragment. **Nie po
 
 Sprawdzone na hoście: `spirv-val` dla wszystkich 162 shaderów `main_*`, a skrypt porównujący lokacje i typy wyjść vertex z wejściami fragment: 82 pary,
 0 niezgodności.
+
+### Cztery logi 0.8.3 z Adreno (610/619/650/730): crash tylko w pipeline'ach G-buffera
+
+Wszystkie cztery logi pochodzą z natywnej biblioteki sprzed poprawki shaderów `3cf285c1` (te same offsety w `CrashLog::dumpStack`). Nazwy z `vkCreateGraphicsPipelines:`
+w logach:
+
+| GPU | gra | ostatni pipeline przed crashem |
+| --- | --- | --- |
+| Adreno 650 (poziom 1) | G1 | `main.vert [MESH_TYPE=0 FLAT_NORMAL]` + `main.frag [FLAT_NORMAL GBUFFER SIMPLE_MAT]` (`main_lnd_g_s`), po dwóch pipeline'ach głębi, które przeszły |
+| Adreno 619 (poziom 2) | G1 | `main_lnd_g_s` |
+| Adreno 730 (poziom 2) | G2 | `main.vert [MESH_TYPE=1]` + `main.frag [GBUFFER]` (`main_obj_g`) |
+| Adreno 619 (poziom 2) | G2 | ucięty log, ten sam typ stosu |
+
+`main_obj_g` nie ma `isFlat()`, więc to nie samo `isFlat` zabija sterownik. Wspólne dla pipeline'ów G-buffera (a niewystępujące w tych, które się kompilują: głębia,
+niebo, post-efekty): struktura varyingów z `vec3`, dwa wyjścia koloru (w tym `uint` do R32U), `PackSnorm2x16` w `octahedral_32` i wyjście `uint`.
+`3cf285c1` usuwa pierwsze dwie rzeczy (wielokrotne `return` i strukturę); ten krok zastępuje instrukcję `PackSnorm2x16` ręcznym kodem
+(`packSnorm2x16_` w `common.glsl`: `roundEven(clamp(v,-1,1)*32767)`, dwa uzupełnienia do 16 bitów, x w dolnej połowie, ten sam wynik). **Nie potwierdzono
+na urządzeniu**, która z tych zmian jest przyczyną.
+
+Tryb Safe GPU nic tu nie zmienia, bo nie ma czego pominąć: G-buffer jest potrzebny. Poziom 1 i 2 tylko pomijają HiZ.

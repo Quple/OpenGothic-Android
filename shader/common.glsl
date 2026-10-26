@@ -230,10 +230,19 @@ vec2 msign( vec2 v ) {
   }
 
 // https://www.shadertoy.com/view/llfcRl
+// packSnorm2x16 by hand: round(clamp(v,-1,1)*32767) as 16 bit two's complement, x in the low half, the same as the instruction.
+// The G-buffer pipelines are the only ones that use it at the start of the game, and the compilers of Adreno drivers (619, 650, 730)
+// crashed on them (SIGSEGV in libllvm-glnext / libllvm-qgl).
+uint packSnorm2x16_(vec2 v) {
+  const ivec2 i = ivec2(roundEven(clamp(v, vec2(-1.0), vec2(1.0))*32767.0));
+  return (uint(i.x) & 0xFFFFu) | (uint(i.y) << 16);
+  }
+
 uint octahedral_32( in vec3 nor ) {
   nor.xy /= (abs(nor.x) + abs(nor.y) + abs(nor.z));
-  nor.xy  = (nor.z >= 0.0) ? (nor.xy) : (1.0-abs(nor.yx))*msign(nor.xy);
-  return packSnorm2x16(nor.xy);
+  if(!(nor.z >= 0.0))
+    nor.xy = (1.0-abs(nor.yx))*msign(nor.xy);
+  return packSnorm2x16_(nor.xy);
   }
 
 vec3 i_octahedral_32( uint data ) {
