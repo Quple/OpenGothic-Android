@@ -35,6 +35,14 @@ class SafeGpu final {
     /// the shader that is going to be compiled by the driver now; the name stays in the lock if the driver kills the process
     static void  trace(std::string_view shader);
 
+    /// a pipeline that the driver compiles when the game draws it (Tempest, in VPipeline::instance), not in the compilation of the shaders at the start:
+    /// the same lock, the same name. Tempest tells about it in its log: `vkCreateGraphicsPipelines: <shaders>` and `vkCreateGraphicsPipelines: done`
+    static void  driverCompile(std::string_view shaders);
+    static void  driverDone();
+
+    /// handles the lines of the log of Tempest above; returns false for any other line
+    static bool  onLog(std::string_view line);
+
     /// the lock exists while there is a scope alive; compilations of the shaders on other threads can overlap
     class Scope final {
       public:

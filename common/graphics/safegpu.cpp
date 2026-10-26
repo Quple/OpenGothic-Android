@@ -29,6 +29,7 @@ struct State {
   std::FILE*        lock   = nullptr;
   int               armed  = 0;
   bool              lockFailed = false;
+  bool              ready  = false;   // init() has read the lock of the previous start: a lock that is made before is not a crash
   };
 
 State& state() {
@@ -164,6 +165,7 @@ void SafeGpu::init(std::string_view gpuName) {
     level = Minimal;
 
   s.level = level;
+  s.ready = true;
   if(level!=Normal)
     Log::e("Safe GPU mode: level ",level," for ",s.identity.c_str(),
            " (-safegpu off turns it off, or delete ",ModeFile,")");
@@ -179,9 +181,8 @@ void SafeGpu::trace(std::string_view shader) {
   writeLock(s,shader);
   }
 
-SafeGpu::Scope::Scope() {
-  auto& s = state();
-  std::lock_guard<std::mutex> guard(s.sync);
+namespace {
+void arm(State& s, std::string_view shader) {
   if(s.armed++>0)
     return;
   s.lock = std::fopen(LockFile,"wb");
@@ -189,17 +190,62 @@ SafeGpu::Scope::Scope() {
     s.lockFailed = true;
     Log::e("Safe GPU mode: unable to create ",LockFile,", a crash of the driver will not be remembered");
     }
-  writeLock(s,"(start)");
+  writeLock(s,shader);
   }
 
-SafeGpu::Scope::~Scope() {
-  auto& s = state();
-  std::lock_guard<std::mutex> guard(s.sync);
-  if(--s.armed>0)
+void disarm(State& s) {
+  if(s.armed==0 || --s.armed>0)
     return;
   if(s.lock!=nullptr) {
     std::fclose(s.lock);
     s.lock = nullptr;
     removeFile(LockFile);
     }
+  }
+}
+
+SafeGpu::Scope::Scope() {
+  auto& s = state();
+  std::lock_guard<std::mutex> guard(s.sync);
+  arm(s,"(start)");
+  }
+
+SafeGpu::Scope::~Scope() {
+  auto& s = state();
+  std::lock_guard<std::mutex> guard(s.sync);
+  disarm(s);
+  }
+
+namespace {
+thread_local bool driverArmed = false;  // this thread has begun a compilation of Tempest and has not finished it
+}
+
+void SafeGpu::driverCompile(std::string_view shaders) {
+  auto& s = state();
+  std::lock_guard<std::mutex> guard(s.sync);
+  if(!s.ready || driverArmed)
+    return;
+  driverArmed = true;
+  arm(s,shaders);
+  writeLock(s,shaders); // the name of this pipeline, if the lock was already there for another
+  }
+
+void SafeGpu::driverDone() {
+  auto& s = state();
+  std::lock_guard<std::mutex> guard(s.sync);
+  if(!driverArmed)
+    return;
+  driverArmed = false;
+  disarm(s);
+  }
+
+bool SafeGpu::onLog(std::string_view line) {
+  static const std::string_view tag = "vkCreateGraphicsPipelines: ";
+  if(line.substr(0,tag.size())!=tag)
+    return false;
+  line.remove_prefix(tag.size());
+  if(line=="done")
+    driverDone(); else
+    driverCompile(line);
+  return true;
   }

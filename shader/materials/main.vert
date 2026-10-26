@@ -207,11 +207,11 @@ void vertexShader(const uvec4 task) {
   const uint  vertCount  = mesh.x;
   const uint  primCount  = mesh.y;
 
-  const uint  laneID     = gl_VertexIndex/3;
-  if(laneID>=primCount) {
-    gl_Position = vec4(uintBitsToFloat(0x7fc00000));
-    return;
-    }
+  // NOTE: no early return. The compilers of Adreno drivers (610, 619, 650, 730) crash on the pipelines where a `return` leaves the
+  // outputs (bucketIdOut, shOut) unwritten. Every path writes every output: the lanes past the last primitive of the meshlet read
+  // the primitive 0 (always in range) and are moved to NaN, which the rasterizer discards, like before.
+  const bool  isDummy    = (gl_VertexIndex/3)>=primCount;
+  const uint  laneID     = isDummy ? 0 : (gl_VertexIndex/3);
 
 #if defined(MAT_VARYINGS)
   bucketIdOut = bucketId;
@@ -220,7 +220,7 @@ void vertexShader(const uvec4 task) {
   Varyings var;
   uint idx = processPrimitive(meshletId, bucketId, laneID)[gl_VertexIndex%3];
   vec4 pos = processVertex(var, instanceId, meshletId, bucketId, idx);
-  gl_Position = pos;
+  gl_Position = isDummy ? vec4(uintBitsToFloat(0x7fc00000)) : pos;
 #if defined(MAT_VARYINGS)
   shOut       = var;
 #endif

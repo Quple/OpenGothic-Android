@@ -7,6 +7,7 @@
 #include "graphics/mesh/submesh/packedmesh.h"
 #include "graphics/visualobjects.h"
 #include "shaders.h"
+#include "safegpu.h"
 
 #include "gothic.h"
 
@@ -425,9 +426,15 @@ void DrawCommands::drawHiZ(Tempest::Encoder<Tempest::CommandBuffer>& cmd) {
   auto  viewId = SceneGlobals::V_HiZ;
   auto& view   = views[viewId];
 
+  // The depth of this pass only feeds the occlusion culling: fewer occluders cull less and never wrongly. A driver that died in the compiler
+  // of these pipelines (safe GPU mode, the lock names the shader) draws the solid ones only, and after another death none of them.
+  if(SafeGpu::isMinimal())
+    return;
+  const bool alphaTested = !SafeGpu::isSafe();
+
   for(size_t i=0; i<ord.size(); ++i) {
     auto& cx = *ord[i];
-    if(cx.alpha!=Material::Solid && cx.alpha!=Material::AlphaTest)
+    if(cx.alpha!=Material::Solid && !(cx.alpha==Material::AlphaTest && alphaTested))
       continue;
     if(cx.type!=Landscape && cx.type!=Static)
       continue;

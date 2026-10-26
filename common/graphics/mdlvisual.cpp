@@ -1,5 +1,9 @@
 #include "mdlvisual.h"
 
+#include <Tempest/Log>
+
+#include <exception>
+
 #include "graphics/mesh/skeleton.h"
 #include "game/serialize.h"
 #include "world/objects/npc.h"
@@ -40,8 +44,15 @@ void MdlVisual::load(Serialize& fin, Npc& npc) {
   fin.read(s);
   npc.setVisual(s);
 
-  solver.load(fin);
-  skInst->load(fin,solver);
+  // The animations of one character are not worth the whole save-game: the entry is its own, and the loaders above change nothing
+  // when they fail. The character starts with no animation (the routines and the AI play the next one) and the fault is in the log.
+  try {
+    solver.load(fin);
+    skInst->load(fin,solver);
+    }
+  catch(const std::exception& e) {
+    Log::e("save-game: the animations of '",npc.displayName(),"' (",fin.currentEntry(),") could not be restored and are skipped: ",e.what());
+    }
   if(skeleton!=nullptr)
     rebindAttaches(*skeleton);
   }

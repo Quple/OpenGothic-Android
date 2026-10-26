@@ -99,7 +99,8 @@ Resources::Resources(Tempest::Device &device)
   // Set up the DirectMusic loader
   DmResult rv = DmLoader_create(&dmLoader, DmLoader_DOWNLOAD);
   if(rv != DmResult_SUCCESS) {
-    Log::e("Failed to created DmLoader object. Out of memory?");
+    // DmResult_MEMORY_EXHAUSTED is the only one that is about memory: the other codes (the mutex of the loader, for one) are named by their number
+    Log::e("Failed to created DmLoader object. DmResult = ",int(rv),rv==DmResult_MEMORY_EXHAUSTED ? " (out of memory)" : "");
     }
 
   DmLoader_addResolver(dmLoader, [](void* ctx, char const* name, size_t* len) -> void* {

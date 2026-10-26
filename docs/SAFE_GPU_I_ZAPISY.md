@@ -64,3 +64,32 @@ niezainicjowany bufor), a brak wpisu dawał pusty bufor i anonimowy wyjątek. Te
 `setupUi()` dodaje `errorScreen` (składowa okna, nie obiekt na stercie) jako dziecko, a destruktor nie odpinał go przed
 `removeAllWidgets()`. Ta funkcja woła `delete` na każdym pozostałym dziecku, więc `delete` na składowej kończył się
 `SIGABRT` (nieprawidłowe zwolnienie pamięci). Destruktor odpina teraz `errorScreen`, jak pozostałe widgety.
+
+## Crash kompilatora Adreno (610, 619, 650, 730) w `drawHiZ`
+
+Logi z telefonów: `SIGSEGV` w `libllvm-glnext.so` / `libllvm-qgl.so` (`CreateQGLCShader`, `QGLCCompileToIRShader`) w
+`vkCreateGraphicsPipelines`, wołanym z `DrawCommands::drawHiZ` → `VPipeline::instance`, przy wejściu do świata. Pipeline'y
+materiałów są kompilowane przez sterownik dopiero przy pierwszym rysowaniu, a nie przy starcie.
+
+- Wyłączenie bindless (poprzednia próba) **nie pomogło** i zostało cofnięte.
+- Kolejność kompilacji w `drawHiZ` (najpierw bez alpha-testu, potem z nim) i numer padającej pary (3. w G1, 4. w G2) wskazują na wariant
+  głębi **z alpha-testem** (`main_*_d_at`). **Nie potwierdzono tego na urządzeniu.**
+- `shader/materials/main.vert`: wczesny `return` (lane poza zakresem meshletu) zostawiał `bucketIdOut` i `shOut` niezapisane na jednej ścieżce.
+  Teraz każda ścieżka zapisuje wszystkie wyjścia, a lane poza zakresem czyta prymityw 0 i dostaje `gl_Position = NaN` (ten sam efekt).
+- Log pokazuje teraz pełny wariant: `vkCreateGraphicsPipelines: main.vert [MESH_TYPE=1 DEPTH_ONLY ATEST] main.frag [...]`, a po kompilacji
+  `vkCreateGraphicsPipelines: done` (makra czyta Tempest z informacji debugowej SPIR-V).
+- Tryb Safe GPU obejmuje teraz także te pipeline'y: `SafeGpu::onLog()` zakłada `safegpu.lock` z nazwą wariantu na czas kompilacji w
+  trakcie gry. Po crashu: poziom 1 pomija w `drawHiZ` obiekty z alpha-testem, poziom 2 pomija cały `drawHiZ`. Wynik to mniej okluderów w
+  HiZ (mniej odrzuceń, nigdy błędne), nie zmiana obrazu.
+
+## Zapisy: animacje postaci nie blokują wczytania
+
+Log z CoM: `npc/384/visual` — długość napisu 1398755913 to bajty tekstu `IR_S`, czyli odczyt zaczął się w środku napisu. Dokładnego pola
+bez pliku `.sav` nie wskazano. Zmiany:
+
+- `AnimationSolver::addOverlay` nie dubluje już tego samego overlayu (skrypty CoM wołają `Mdl_ApplyOverlayMds` przy każdej zmianie ekwipunku;
+  nadmiar rósł w zapisie, a jedno `Mdl_RemoveOverlayMDS` zdejmowało tylko jeden). Starsze zapisy są oczyszczane przy wczytaniu.
+- `Pose::save` zapisuje liczbę warstw jako bajt: powyżej 255 liczba i dane się rozjeżdżały. Teraz zapisuje najwyżej 255 i liczba jest prawdziwa.
+- `AnimationSolver::load` i `Pose::load` czytają wszystko do zmiennych tymczasowych i przejmują dopiero po całym wpisie.
+- `MdlVisual::load` łapie błąd odczytu animacji jednej postaci, loguje `save-game: the animations of '<npc>' ... skipped` i wczytuje dalej
+  (postać startuje bez animacji, AI/rutyny zagrają następną) zamiast odrzucać cały zapis.

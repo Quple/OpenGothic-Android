@@ -103,9 +103,11 @@ uint8_t Pose::calcAniCombVert(const Vec3& dpos) {
   }
 
 void Pose::save(Serialize &fout) {
-  uint8_t sz=uint8_t(lay.size());
+  // the count is one byte: the layers past 255 (there are never so many) are not written, so the count is true
+  const uint8_t sz=uint8_t(std::min<size_t>(lay.size(),255));
   fout.write(sz);
-  for(auto& i:lay) {
+  for(size_t id=0; id<sz; ++id) {
+    auto& i = lay[id];
     fout.write(i.seq->name,i.sAnim,i.bs,i.sBlend);
     }
   fout.write(lastUpdate);
@@ -125,46 +127,73 @@ void Pose::save(Serialize &fout) {
   }
 
 void Pose::load(Serialize &fin, const AnimationSolver& solver) {
-  modelClock.clear();
+  // Everything is read first and taken at once at the end: a damaged entry throws, and the pose stays what it was (the caller goes on with it).
   std::string name;
-  uint8_t     sz = uint8_t(lay.size());
+  uint8_t     sz = 0;
 
   fin.read(sz);
-  lay.resize(sz);
-  for(auto& i:lay) {
+  std::vector<Layer> layers(sz);
+  for(auto& i:layers) {
     fin.read(name,i.sAnim,i.bs);
     if(fin.version()>43)
       fin.read(i.sBlend);
     i.seq = solver.solveFrm(name);
     }
-  fin.read(lastUpdate);
-  fin.read(combo.bits);
-  removeIf(lay,[](const Layer& l){
+  uint64_t   lastUpdateLd = 0;
+  ComboState comboLd;
+  fin.read(lastUpdateLd);
+  fin.read(comboLd.bits);
+  removeIf(layers,[](const Layer& l){
     return l.seq==nullptr;
     });
   fin.read(name);
-  for(auto& i:lay) {
+  const Animation::Sequence* rotationLd = nullptr;
+  for(auto& i:layers) {
     if(i.seq->name==name)
-      rotation = i.seq;
+      rotationLd = i.seq;
     }
-  fin.read(itemUseSt,itemUseDestSt);
+  int32_t itemUseStLd = 0, itemUseDestStLd = 0;
+  fin.read(itemUseStLd,itemUseDestStLd);
+  float headRotXLd = 0, headRotYLd = 0;
+  fin.read(headRotXLd,headRotYLd);
+
+  auto hasSamplesLd = std::make_unique<SampleStatus[]>(Resources::MAX_NUM_SKELETAL_NODES);
+  auto baseLd       = std::make_unique<zenkit::AnimationSample[]>(Resources::MAX_NUM_SKELETAL_NODES);
+  auto prevLd       = std::make_unique<zenkit::AnimationSample[]>(Resources::MAX_NUM_SKELETAL_NODES);
+  auto trLd         = std::make_unique<Tempest::Matrix4x4[]>(Resources::MAX_NUM_SKELETAL_NODES);
+  for(size_t i=0; i<Resources::MAX_NUM_SKELETAL_NODES; ++i)
+    fin.read(reinterpret_cast<uint8_t&>(hasSamplesLd[i]));
+  for(size_t i=0; i<Resources::MAX_NUM_SKELETAL_NODES; ++i)
+    fin.read(baseLd[i]);
+  for(size_t i=0; i<Resources::MAX_NUM_SKELETAL_NODES; ++i)
+    fin.read(prevLd[i]);
+  for(size_t i=0; i<Resources::MAX_NUM_SKELETAL_NODES; ++i)
+    fin.read(trLd[i]);
+
+  // the whole entry is good
+  modelClock.clear();
+  lay           = std::move(layers);
+  lastUpdate    = lastUpdateLd;
+  combo         = comboLd;
+  rotation      = rotationLd;
+  itemUseSt     = itemUseStLd;
+  itemUseDestSt = itemUseDestStLd;
   hasEvents = 0;
   isFlyCombined = 0;
   hasTransitions = 0;
   for(auto& i:lay)
     onAddLayer(i);
-  fin.read(headRotX,headRotY);
+  headRotX = headRotXLd;
+  headRotY = headRotYLd;
   needToUpdate = true;
 
   numBones = skeleton==nullptr ? 0 : skeleton->nodes.size();
-  for(auto& i:hasSamples)
-    fin.read(reinterpret_cast<uint8_t&>(i));
-  for(auto& i:base)
-    fin.read(i);
-  for(auto& i:prev)
-    fin.read(i);
-  for(auto& i:tr)
-    fin.read(i);
+  for(size_t i=0; i<Resources::MAX_NUM_SKELETAL_NODES; ++i) {
+    hasSamples[i] = hasSamplesLd[i];
+    base[i]       = baseLd[i];
+    prev[i]       = prevLd[i];
+    tr[i]         = trLd[i];
+    }
   }
 
 void Pose::setFlags(Pose::Flags f) {

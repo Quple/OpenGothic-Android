@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /**
  * Is there a newer version of the application: the release of the repository has the number of the version in its name
- * (the tag of it does not change). Nothing is downloaded or installed, the page of the release is opened for the player.
+ * (the tag of it does not change). The release also carries the APK: {@link AppUpdate} downloads and installs it.
  */
 final class UpdateCheck {
     private UpdateCheck() {
@@ -24,8 +24,26 @@ final class UpdateCheck {
     static final String PAGE = "https://github.com/borsuczyna/OpenGothic-Android/releases/tag/release";
     private static final String API = "https://api.github.com/repos/borsuczyna/OpenGothic-Android/releases/tags/release";
 
+    /** The published release: its version and the APK that it carries (empty url when it has none). */
+    static final class Release {
+        final String version;
+        final String apkUrl;
+        final long   apkSize;
+
+        Release(String version, String apkUrl, long apkSize) {
+            this.version = version;
+            this.apkUrl  = apkUrl;
+            this.apkSize = apkSize;
+        }
+    }
+
     /** The version of the published release, for example "0.7.2". Blocks: not for the main thread. */
     static String latest() throws IOException {
+        return release().version;
+    }
+
+    /** The published release with the link of its APK. Blocks: not for the main thread. */
+    static Release release() throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(API).openConnection();
         try {
             c.setConnectTimeout(10000);
@@ -52,7 +70,24 @@ final class UpdateCheck {
                 version = release.optString("tag_name");
             if (parse(version).isEmpty())
                 throw new IOException("The release has no version");
-            return version;
+
+            String apkUrl = "";
+            long   apkSize = 0;
+            org.json.JSONArray assets = release.optJSONArray("assets");
+            for (int i = 0; assets != null && i < assets.length(); ++i) {
+                JSONObject a = assets.optJSONObject(i);
+                if (a == null)
+                    continue;
+                String name = a.optString("name");
+                String url  = a.optString("browser_download_url");
+                // only what GitHub itself serves for this repository
+                if (!name.toLowerCase(java.util.Locale.ROOT).endsWith(".apk") || !url.startsWith("https://github.com/borsuczyna/OpenGothic-Android/"))
+                    continue;
+                apkUrl  = url;
+                apkSize = a.optLong("size", 0);
+                break;
+            }
+            return new Release(version, apkUrl, apkSize);
         } catch (JSONException e) {
             throw new IOException("The answer of GitHub is not JSON");
         } finally {

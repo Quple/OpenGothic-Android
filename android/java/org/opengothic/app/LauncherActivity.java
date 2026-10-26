@@ -110,6 +110,7 @@ public final class LauncherActivity extends Activity {
     private TextView accountButton;
     private TextView updateButton;
     private boolean updateAvailable;
+    private UpdateCheck.Release updateRelease;
 
     private File external;
     private int lastPlayed = 1;
@@ -144,16 +145,106 @@ public final class LauncherActivity extends Activity {
         final String mine = version();
         new Thread(() -> {
             try {
-                final boolean newer = UpdateCheck.newer(UpdateCheck.latest(), mine);
+                final UpdateCheck.Release release = UpdateCheck.release();
+                final boolean newer = UpdateCheck.newer(release.version, mine);
                 runOnUiThread(() -> {
                     updateAvailable = newer;
+                    updateRelease   = release;
                     if (updateButton != null)
                         updateButton.setVisibility(newer ? View.VISIBLE : View.GONE);
+                    // offered by itself once for every version: the chip stays for the player who said "later"
+                    if (newer && !isFinishing() && !release.version.equals(prefs.getString("updateAsked", ""))) {
+                        prefs.edit().putString("updateAsked", release.version).apply();
+                        showUpdate();
+                    }
                 });
             } catch (IOException ignored) {
                 // no connection or no answer: no label
             }
         }, "update-check").start();
+    }
+
+    /** The newer version: the player is asked, then the APK of the release is downloaded and the system asks to install it. */
+    private void showUpdate() {
+        final UpdateCheck.Release release = updateRelease;
+        if (release == null || AppUpdate.running())
+            return;
+        final boolean hasApk = !release.apkUrl.isEmpty();
+        String size = release.apkSize > 0 ? " (" + (release.apkSize + 1048575) / 1048576 + " MB)" : "";
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
+                .setTitle(Texts.t("Update available", "Dostępna aktualizacja") + " " + release.version)
+                .setMessage(Texts.t("Your version: ", "Twoja wersja: ") + version() + "\n\n"
+                        + (hasApk
+                        ? Texts.t("Download the new version" + size + " and install it now? Android asks to confirm the installation. Your games and saves stay.",
+                                "Pobrać nową wersję" + size + " i zainstalować teraz? Android poprosi o potwierdzenie instalacji. Gry i zapisy zostają.")
+                        : Texts.t("The release has no APK to install by itself. Open its page?", "Wydanie nie ma pliku APK do automatycznej instalacji. Otworzyć jego stronę?")))
+                .setNegativeButton(Texts.t("Later", "Później"), null);
+        if (hasApk) {
+            b.setPositiveButton(Texts.t("Install", "Zainstaluj"), (d, w) -> startUpdate());
+            b.setNeutralButton(Texts.t("Release page", "Strona wydania"), (d, w) -> openReleasePage());
+        } else {
+            b.setPositiveButton(Texts.t("Release page", "Strona wydania"), (d, w) -> openReleasePage());
+        }
+        b.show();
+    }
+
+    private void openReleasePage() {
+        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UpdateCheck.PAGE)));
+    }
+
+    private void startUpdate() {
+        if (updateRelease == null)
+            return;
+        if (!AppUpdate.canInstall(this)) {
+            // Android lets an application install packages only after the player has allowed it, once, in the settings of the application
+            new AlertDialog.Builder(this)
+                    .setMessage(Texts.t("Android needs your permission for the launcher to install updates. Allow it on the next screen, come back and choose the update again.",
+                            "Android wymaga Twojej zgody, żeby launcher mógł instalować aktualizacje. Zezwól na następnym ekranie, wróć i wybierz aktualizację jeszcze raz."))
+                    .setPositiveButton(Texts.t("Open settings", "Otwórz ustawienia"), (d, w) -> {
+                        try {
+                            startActivity(AppUpdate.permissionIntent(this));
+                        } catch (RuntimeException e) {
+                            openReleasePage();
+                        }
+                    })
+                    .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
+                    .show();
+            return;
+        }
+        // the APK is written to the session of the installer, and the installer unpacks it: twice its size at least
+        if (getFilesDir().getUsableSpace() < Math.max(300L * 1024 * 1024, 2 * updateRelease.apkSize)) {
+            new AlertDialog.Builder(this)
+                    .setMessage(Texts.t("There is not enough free space on the phone.", "Brakuje wolnego miejsca w telefonie."))
+                    .setPositiveButton("OK", null).show();
+            return;
+        }
+        AppUpdate.start(this, updateRelease, () -> runOnUiThread(this::updateProgress));
+        updateProgress();
+    }
+
+    /** The chip shows the download; a failure is told once. */
+    private void updateProgress() {
+        if (updateButton == null || isFinishing())
+            return;
+        int p = AppUpdate.percent;
+        if (p >= 0) {
+            updateButton.setText(p >= 101 ? Texts.t("Installing...", "Instalacja...")
+                    : Texts.t("Downloading ", "Pobieranie ") + p + "%");
+            updateButton.setVisibility(View.VISIBLE);
+            return;
+        }
+        updateButton.setText(Texts.t("Update available", "Dostępna aktualizacja"));
+        updateButton.setVisibility(updateAvailable ? View.VISIBLE : View.GONE);
+        if (!AppUpdate.error.isEmpty()) {
+            final String why = AppUpdate.error;
+            AppUpdate.error = "";
+            new AlertDialog.Builder(this)
+                    .setTitle(Texts.t("The update failed", "Aktualizacja się nie udała"))
+                    .setMessage(why)
+                    .setPositiveButton(Texts.t("Release page", "Strona wydania"), (d, w) -> openReleasePage())
+                    .setNegativeButton(Texts.t("Close", "Zamknij"), null)
+                    .show();
+        }
     }
 
     private String version() {
@@ -328,7 +419,7 @@ public final class LauncherActivity extends Activity {
         updateButton.setTextColor(GOLD);
         updateButton.setBackground(round(0x33c9a24a, 0xff8a7640, dp(1), dp(20)));
         updateButton.setVisibility(View.GONE);
-        updateButton.setOnClickListener(v -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UpdateCheck.PAGE))));
+        updateButton.setOnClickListener(v -> showUpdate());
         header.addView(updateButton);
 
         TextView mods = chip(Texts.t("Mods", "Mody"));

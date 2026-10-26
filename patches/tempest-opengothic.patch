@@ -1,3 +1,60 @@
+diff --git a/Engine/gapi/shader.cpp b/Engine/gapi/shader.cpp
+index a8a935b6..9a0b5dce 100644
+--- a/Engine/gapi/shader.cpp
++++ b/Engine/gapi/shader.cpp
+@@ -3,6 +3,9 @@
+ #include <Tempest/Except>
+ #include <libspirv/libspirv.h>
+ 
++#include <cstring>
++#include <string_view>
++
+ using namespace Tempest;
+ using namespace Tempest::Detail;
+ 
+@@ -43,6 +46,21 @@ void Shader::fetchBindings(const uint32_t* source, const size_t size){
+   for(auto& i:code) {
+     if(i.op()!=spv::OpSource)
+       continue;
++    if(i.length()>4) {
++      // glslang puts `// OpModuleProcessed define-macro NAME[=VALUE]` lines first in the text of the source
++      const char*  text  = reinterpret_cast<const char*>(&i[4]);
++      const size_t limit = (i.length()-4)*4;
++      const std::string_view all(text, strnlen(text, limit));
++      const std::string_view tag = "define-macro ";
++      for(size_t at=all.find(tag); at!=std::string_view::npos && at<4096; at=all.find(tag, at)) {
++        at += tag.size();
++        const size_t end = all.find('\n', at);
++        if(!dbg.defines.empty())
++          dbg.defines += ' ';
++        dbg.defines.append(all.substr(at, end==std::string_view::npos ? std::string_view::npos : end-at));
++        }
++      }
++
+     uint32_t src = i.length()>3 ? i[3] : 0;
+     if(src==0)
+       continue;
+diff --git a/Engine/gapi/shader.h b/Engine/gapi/shader.h
+index 958592da..cfa413d5 100644
+--- a/Engine/gapi/shader.h
++++ b/Engine/gapi/shader.h
+@@ -18,6 +18,8 @@ class Shader : public AbstractGraphicsApi::Shader {
+ 
+   public:
+     const char* dbgShortName() const;
++    /// the macros that the shader is built with (from the debug info), for example `MESH_TYPE=1 DEPTH_ONLY ATEST`
++    const char* dbgDefines() const { return dbg.defines.c_str(); }
+ 
+     struct Vert {
+       std::vector<Decl::ComponentType> decl;
+@@ -30,6 +32,7 @@ class Shader : public AbstractGraphicsApi::Shader {
+       };
+     struct Dbg {
+       std::string source;
++      std::string defines;
+       };
+ 
+     ShaderReflection::Stage stage = ShaderReflection::Stage::Compute;
 diff --git a/Engine/gapi/vulkan/vdescriptorarray.cpp b/Engine/gapi/vulkan/vdescriptorarray.cpp
 index 0919283f..cf0f816f 100644
 --- a/Engine/gapi/vulkan/vdescriptorarray.cpp
@@ -115,7 +172,7 @@ index 73272e50..39655b2c 100644
      void                    createLogicalDevice(VkPhysicalDevice pdev);
  
 diff --git a/Engine/gapi/vulkan/vpipeline.cpp b/Engine/gapi/vulkan/vpipeline.cpp
-index a9532d8b..a7314f32 100644
+index a9532d8b..839e4ab9 100644
 --- a/Engine/gapi/vulkan/vpipeline.cpp
 +++ b/Engine/gapi/vulkan/vpipeline.cpp
 @@ -6,6 +6,7 @@
@@ -126,7 +183,7 @@ index a9532d8b..a7314f32 100644
  
  using namespace Tempest;
  using namespace Tempest::Detail;
-@@ -322,7 +323,18 @@ VkPipeline VPipeline::initGraphicsPipeline(VDevice& device,
+@@ -322,7 +323,32 @@ VkPipeline VPipeline::initGraphicsPipeline(VDevice& device,
      }
  
    VkPipeline graphicsPipeline = VK_NULL_HANDLE;
@@ -134,19 +191,33 @@ index a9532d8b..a7314f32 100644
 +  VkResult   err = VK_SUCCESS;
 +#if defined(__ANDROID__)
 +  // the shader compiler of a mobile driver can take the whole process down (SIGSEGV in the driver, nothing to catch):
-+  // the last line of the log tells which shaders it was. Debug lines are flushed by the application.
-+  for(size_t i=0; i<5; ++i)
-+    if(shaders[i].handler!=nullptr)
-+      Log::d("vkCreateGraphicsPipelines: ", shaders[i].handler->dbgShortName());
++  // the last line of the log tells which shaders it was, with the macros they are built with. The application reads these two lines
++  // for its safe GPU mode: `vkCreateGraphicsPipelines: <shaders>` before the driver gets them and `vkCreateGraphicsPipelines: done` after.
++  // Debug lines are flushed by the application.
++  {
++    std::string names;
++    for(size_t i=0; i<5; ++i) {
++      if(shaders[i].handler==nullptr)
++        continue;
++      names += shaders[i].handler->dbgShortName();
++      names += " [";
++      names += shaders[i].handler->dbgDefines();
++      names += "] ";
++      }
++    Log::d("vkCreateGraphicsPipelines: ", names);
++  }
 +#endif
 +  {
 +    std::lock_guard<std::mutex> guard(device.pipelineSync);
 +    err = vkCreateGraphicsPipelines(device.device.impl,VK_NULL_HANDLE,1,&pipelineInfo,nullptr,&graphicsPipeline);
 +  }
++#if defined(__ANDROID__)
++  Log::d("vkCreateGraphicsPipelines: done");
++#endif
    if(err!=VK_SUCCESS)
      throw std::system_error(Tempest::GraphicsErrc::InvalidShaderModule);
    return graphicsPipeline;
-@@ -401,38 +413,40 @@ VCompPipeline::VCompPipeline(VDevice& device, const VShader& comp)
+@@ -401,38 +427,40 @@ VCompPipeline::VCompPipeline(VDevice& device, const VShader& comp)
    shader         = Detail::DSharedPtr<const VShader*>{&comp};
  
    VkDevice dev = device.device.impl;
@@ -215,7 +286,7 @@ index a9532d8b..a7314f32 100644
    }
  
  VCompPipeline::~VCompPipeline() {
-@@ -474,12 +488,16 @@ VkPipeline VCompPipeline::instance(VkPipelineLayout pLay) {
+@@ -474,12 +502,16 @@ VkPipeline VCompPipeline::instance(VkPipelineLayout pLay) {
      info.stage.module       = shader.handler->impl;
      info.stage.pName        = "main";
      info.layout             = pLay;

@@ -26,20 +26,25 @@ void AnimationSolver::load(Serialize &fin) {
   uint32_t sz=0;
   std::string s;
 
+  // read it all first: a damaged save-game must not leave half of the list
   fin.read(sz);
-  overlay.resize(sz);
-  for(auto& i:overlay){
+  std::vector<Overlay> loaded(sz);
+  for(auto& i:loaded){
     fin.read(s,i.time);
     i.skeleton = Resources::loadSkeleton(s);
     }
 
-  sz=0;
-  for(size_t i=0;i<overlay.size();++i){
-    overlay[sz]=overlay[i];
-    if(overlay[i].skeleton!=nullptr)
-      ++sz;
+  overlay.clear();
+  for(auto& i:loaded) {
+    if(i.skeleton==nullptr)
+      continue;
+    // the saves of the older versions have the piles of the same overlay
+    bool dup = false;
+    for(auto& r:overlay)
+      dup |= (r.skeleton==i.skeleton);
+    if(!dup)
+      overlay.push_back(i);
     }
-  overlay.resize(sz);
   invalidateCache();
   }
 
@@ -63,6 +68,18 @@ void AnimationSolver::addOverlay(const Skeleton* sk, uint64_t time) {
     Log::d("overlay '", sk->name(), "' is not compatible with the skeleton and is skipped");
     return;
     }
+  // The same overlay twice is the same overlay: the original engine keeps one, a script (Archolos applies the overlays of its weapons at every
+  // change of the equipment) that applies it again must not pile them up. The pile grew the save-game by the kilobytes and one
+  // Mdl_RemoveOverlayMDS did not remove it.
+  for(auto& i:overlay) {
+    if(i.skeleton!=sk)
+      continue;
+    // the timed overlay applied again lives as long as the new one asks; the one without a time is permanent
+    if(i.time!=0)
+      i.time = (time==0 ? 0 : std::max(i.time,time));
+    return;
+    }
+
   Overlay ov;
   ov.skeleton = sk;
   ov.time     = time;

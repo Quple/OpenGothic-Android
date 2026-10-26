@@ -21,6 +21,7 @@
 
 #include "utils/crashlog.h"
 #include "utils/gamelog.h"
+#include "graphics/safegpu.h"
 #include "mainwindow.h"
 #include "gothic.h"
 #include "build.h"
@@ -92,8 +93,11 @@ int main(int argc,const char** argv) {
         logFile.flush();
 #if defined(__ANDROID__)
       // the engine reports a pipeline before the driver compiles it: if the driver takes the process down, the line is the last one
-      if(mode==Tempest::Log::Debug)
+      if(mode==Tempest::Log::Debug) {
+        // ... and the safe GPU mode keeps its name in the lock for the next start
+        SafeGpu::onLog(text);
         logFile.flush();
+        }
 #endif
       });
     }

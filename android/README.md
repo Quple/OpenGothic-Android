@@ -25,6 +25,8 @@ The first screen is the login to Steam (`SteamLoginActivity`) when nobody is sig
 
 The launcher asks GitHub for the release of the repository at the start (`UpdateCheck.java`): when the version in the name of the release is higher than the `VERSION_NAME` of the application (`add_android_apk` in `CMakeLists.txt`), "Update available" shows in the header and opens the page of the release. Raise the version there with every release.
 
+The update installs itself (`AppUpdate.java`): the launcher offers it once for every version (the chip stays for later), downloads the first `.apk` of the release straight into a session of the system installer and commits it. Android always asks the player to confirm the installation, and asks once to allow the launcher to install packages ("install unknown apps"). Attach the APK to the release; it has to be **signed with the same key** as the installed one, or the system refuses it with the reason.
+
 ## Steam
 
 The login is the one of the client of Steam, with the library [JavaSteam](https://github.com/Longi94/JavaSteam) (MIT); `SteamSession.java` is the only place that uses it, the launcher reaches it by names (`SteamBridge`). The password goes to Steam only (the library encrypts it) and is not kept. The session is a refresh token, kept encrypted with a key of the Android Keystore (`SteamStore`); signing out deletes it. A download asks for the language of the game, then it is a foreground service with a notification (`SteamDownloadService`); it takes the Windows files of that language into `<folder>.download` and moves them when the game is whole, and it goes on from what is on the disk after an interruption.
