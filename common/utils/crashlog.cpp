@@ -43,6 +43,19 @@ static LONG WINAPI exceptionHandler(PEXCEPTION_POINTERS) {
   }
 #endif
 
+#if defined(__ANDROID__)
+// what the kernel says about the fault: the code tells a bad address (SEGV_MAPERR 1, SEGV_ACCERR 2) from a tag mismatch of the
+// memory tagging of the phone (SEGV_MTEAERR 8, SEGV_MTESERR 9), which names a bug in the heap and not in the place of the crash
+static volatile int       faultCode = 0;
+static volatile uintptr_t faultAddr = 0;
+
+static void writeFault(std::ostream& out) {
+  if(faultCode==0)
+    return;
+  out << "fault: si_code=" << int(faultCode) << " si_addr=0x" << std::hex << uintptr_t(faultAddr) << std::dec << std::endl;
+  }
+#endif
+
 static void signalHandler(int sig) {
   std::signal(sig, SIG_DFL);
   const char* sname = nullptr;
@@ -112,7 +125,24 @@ void CrashLog::setup() {
   SetUnhandledExceptionFilter(exceptionHandler);
 #endif
 
+#if defined(__ANDROID__)
+  {
+    struct sigaction sa = {};
+    sa.sa_sigaction = [](int sig, siginfo_t* info, void*) {
+      if(info!=nullptr) {
+        faultCode = info->si_code;
+        faultAddr = uintptr_t(info->si_addr);
+        }
+      signalHandler(sig);
+      };
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = int(SA_SIGINFO | SA_RESETHAND);
+    sigaction(SIGSEGV, &sa, nullptr);
+    sigaction(SIGBUS,  &sa, nullptr);
+  }
+#else
   std::signal(SIGSEGV, &signalHandler);
+#endif
   std::signal(SIGABRT, &signalHandler);
   std::signal(SIGFPE,  &signalHandler);
   std::signal(SIGABRT, &signalHandler);
@@ -152,6 +182,9 @@ void CrashLog::dumpStack(const char *sig, const char *extGpuLog) {
   std::ofstream fout("crash.log");
   fout.setf(std::ios::unitbuf);
   fout << "---crashlog(" <<  sig << ")---" << std::endl;
+#if defined(__ANDROID__)
+  writeFault(fout);
+#endif
   writeSysInfo(fout);
   tracebackGpu(fout, extGpuLog);
 #if defined(__cpp_lib_stacktrace)

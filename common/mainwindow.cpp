@@ -1173,7 +1173,7 @@ uint64_t MainWindow::tick() {
     if(st==Gothic::LoadState::FailedLoad) {
       // the game was dropped by the start of loading: nothing to continue, back to the menu with the reason on the screen
       rootMenu.setMainMenu();
-      errorScreen.report("Unable to load the save-game",
+      errorScreen.report("Unable to load the game",
                          failure.empty() ? std::string("unknown error") : failure);
       }
     if(st==Gothic::LoadState::FailedSave) {

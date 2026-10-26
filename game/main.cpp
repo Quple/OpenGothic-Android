@@ -17,6 +17,7 @@
 #if defined(__IOS__) || defined(__ANDROID__)
 #include "utils/installdetect.h"
 #include <filesystem>
+#include <cstdlib>
 #endif
 
 #include "utils/crashlog.h"
@@ -70,6 +71,10 @@ std::unique_ptr<Tempest::AbstractGraphicsApi> mkApi(const CommandLine& g) {
 #endif
   }
 
+#if defined(__ANDROID__)
+static Tempest::WFile* appLogFile = nullptr; // the log of this run, to be flushed when the process ends
+#endif
+
 int main(int argc,const char** argv) {
 #if defined(__ANDROID__)
   {
@@ -85,6 +90,9 @@ int main(int argc,const char** argv) {
 
   try {
     static Tempest::WFile logFile("log.txt");
+#if defined(__ANDROID__)
+    appLogFile = &logFile;
+#endif
     Tempest::Log::setOutputCallback([](Tempest::Log::Mode mode, const char* text) {
       GameLog::push(mode==Tempest::Log::Error ? GameLog::Error : mode==Tempest::Log::Debug ? GameLog::Debug : GameLog::Info, text);
       logFile.write(text,std::strlen(text));
@@ -164,5 +172,15 @@ int main(int argc,const char** argv) {
 
   MainWindow           wx(device);
   Tempest::Application app;
-  return app.exec();
+  const int ret = app.exec();
+#if defined(__ANDROID__)
+  // The game runs in a process of its own and the process ends with it: the objects above do not have to be taken apart one by one.
+  // Their destruction crashed after the game had ended (SIGSEGV in zenkit::Vfs::~Vfs from ~Resources, Mali-G720, Android 16) and the launcher
+  // took it for a crash of the game. Nothing is kept in them that is not written already (the settings are flushed when they change).
+  Tempest::Log::i("exit ",ret);
+  if(appLogFile!=nullptr)
+    appLogFile->flush();
+  std::_Exit(ret);
+#endif
+  return ret;
   }

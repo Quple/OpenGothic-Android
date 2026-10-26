@@ -2,6 +2,7 @@
 #include "world/objects/vob.h"
 
 #include <functional>
+#include <stdexcept>
 #include <future>
 #include <cctype>
 #include <cmath>
@@ -70,8 +71,9 @@ World::World(GameSession& game, std::string_view file, bool startup, std::functi
   const auto* entry = Resources::vdfsIndex().find(wname);
 
   if(entry == nullptr) {
+    // without the world there is nothing to play: the loader reports it (a world without a way net crashed in createPlayer)
     Tempest::Log::e("unable to open Zen-file: \"",wname,"\"");
-    return;
+    throw std::runtime_error("the world '" + wname + "' is not in the files of the game: they are damaged or incomplete, install the game again");
     }
 
   try {
