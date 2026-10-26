@@ -14,7 +14,7 @@
 
 #if defined(MAT_VARYINGS)
 layout(location = 0) in flat uint bucketId;
-layout(location = 1) in Varyings  shInp;
+// the varyings: shInp is filled by loadVaryings() of materials_common.glsl
 #endif
 
 #if defined(VIRTUAL_SHADOW)
@@ -52,18 +52,20 @@ float unproject(float depth) {
   }
 #endif
 
+// NOTE: one exit of every function (here and in the other shaders of the materials): the compilers of Adreno drivers (610, 619, 650, 730)
+// crashed on the pipelines with a function that returns from the middle of a branch (SIGSEGV in libllvm-glnext, the log names main_lnd_g_s)
 bool isFlat() {
+  bool ret = false;
 #if defined(GBUFFER) && defined(FLAT_NORMAL)
   {
     vec3 pos   = shInp.pos;
     vec3 dx    = dFdx(pos);
     vec3 dy    = dFdy(pos);
     vec3 flatN = (cross(dx,dy));
-    if(dot(normalize(flatN),scene.sunDir)<=0.01)
-      return true;
+    ret = (dot(normalize(flatN),scene.sunDir)<=0.01);
   }
 #endif
-  return false;
+  return ret;
   }
 
 float encodeHintBits() {
@@ -291,15 +293,17 @@ vec4 waterShading(vec4 t, const vec3 normal) {
 
   const float f      = fresnel(refl,normal,ior);
 
+  vec4 ret;
   if(underWater) {
     vec3 back = texelFetch(sceneColor, ivec2(gl_FragCoord.xy), 0).rgb;
-    return vec4(back.rgb * (1.0-f),1);
+    ret = vec4(back.rgb * (1.0-f),1);
+    } else {
+    const vec4 back  = underWaterColorDepth(normal);
+    const vec3 color = waterScatter(back.rgb, normal, back.a) * (1.0-f);
+    // color = waterColor(color,normal) * WaterAlbedo ;
+    ret = vec4(color,1);
     }
-
-  const vec4 back  = underWaterColorDepth(normal);
-  const vec3 color = waterScatter(back.rgb, normal, back.a) * (1.0-f);
-  // color = waterColor(color,normal) * WaterAlbedo ;
-  return vec4(color,1);
+  return ret;
   }
 
 void mainWater(vec4 t) {
@@ -323,6 +327,9 @@ void mainWater(vec4 t) {
 #endif
 
 void main() {
+#if defined(MAT_VARYINGS)
+  loadVaryings();
+#endif
 #if defined(MAT_UV)
   vec4 t = diffuseTex();
 #  if defined(ATEST)

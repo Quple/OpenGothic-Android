@@ -111,6 +111,89 @@ struct Varyings {
 #endif
   };
 
+// The vertex and the fragment shaders pass the varyings as plain variables, not as a struct: the compilers of Adreno drivers crashed on the
+// pipelines of the materials (SIGSEGV in libllvm-glnext). The locations are the ones that the members of the struct take, one each, in its order,
+// so the stages that still use the struct (mesh, tessellation) stay compatible with them.
+#define VLOC_UV 1
+#if defined(MAT_UV)
+#define VLOC_NORMAL 2
+#else
+#define VLOC_NORMAL 1
+#endif
+#if defined(MAT_NORMAL)
+#define VLOC_POS (VLOC_NORMAL+1)
+#else
+#define VLOC_POS VLOC_NORMAL
+#endif
+#if defined(MAT_POSITION)
+#define VLOC_COLOR (VLOC_POS+1)
+#else
+#define VLOC_COLOR VLOC_POS
+#endif
+
+#if defined(GL_VERTEX_SHADER) && defined(MAT_VARYINGS)
+#  if defined(MAT_UV)
+layout(location = VLOC_UV)     out vec2 shOutUv;
+#  endif
+#  if defined(MAT_NORMAL)
+layout(location = VLOC_NORMAL) out vec3 shOutNormal;
+#  endif
+#  if defined(MAT_POSITION)
+layout(location = VLOC_POS)    out vec3 shOutPos;
+#  endif
+#  if defined(MAT_COLOR)
+layout(location = VLOC_COLOR)  out vec4 shOutColor;
+#  endif
+
+void writeVaryings(const Varyings v) {
+#  if defined(MAT_UV)
+  shOutUv     = v.uv;
+#  endif
+#  if defined(MAT_NORMAL)
+  shOutNormal = v.normal;
+#  endif
+#  if defined(MAT_POSITION)
+  shOutPos    = v.pos;
+#  endif
+#  if defined(MAT_COLOR)
+  shOutColor  = v.color;
+#  endif
+  }
+#endif
+
+#if defined(GL_FRAGMENT_SHADER) && defined(MAT_VARYINGS)
+#  if defined(MAT_UV)
+layout(location = VLOC_UV)     in vec2 shInUv;
+#  endif
+#  if defined(MAT_NORMAL)
+layout(location = VLOC_NORMAL) in vec3 shInNormal;
+#  endif
+#  if defined(MAT_POSITION)
+layout(location = VLOC_POS)    in vec3 shInPos;
+#  endif
+#  if defined(MAT_COLOR)
+layout(location = VLOC_COLOR)  in vec4 shInColor;
+#  endif
+
+// the same name and members as the struct that the fragment shader had as its input: the rest of the code does not change
+Varyings shInp;
+
+void loadVaryings() {
+#  if defined(MAT_UV)
+  shInp.uv     = shInUv;
+#  endif
+#  if defined(MAT_NORMAL)
+  shInp.normal = shInNormal;
+#  endif
+#  if defined(MAT_POSITION)
+  shInp.pos    = shInPos;
+#  endif
+#  if defined(MAT_COLOR)
+  shInp.color  = shInColor;
+#  endif
+  }
+#endif
+
 layout(binding = L_Scene,    std140) uniform UboScene     { SceneDesc scene;       };
 
 #if (MESH_TYPE!=T_PFX)

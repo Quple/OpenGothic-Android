@@ -71,20 +71,20 @@ vec3 morphOffset(uint bucketId, uint animPtr, uint vertexIndex) {
   vec2      ai        = unpackUnorm2x16(md.alpha16_intensity16);
   float     alpha     = ai.x;
   float     intensity = ai.y;
-  if(intensity<=0)
-    return vec3(0);
+  vec3 ret = vec3(0);
+  if(!(intensity<=0)) {
+    uint  vId   = vertexIndex + md.indexOffset;
+    int   index = morphId[i].index[vId];
+    if(index>=0) {
+      uint  f0 = md.sample0;
+      uint  f1 = md.sample1;
+      vec3  a  = morph[i].samples[f0 + index].xyz;
+      vec3  b  = morph[i].samples[f1 + index].xyz;
 
-  uint  vId   = vertexIndex + md.indexOffset;
-  int   index = morphId[i].index[vId];
-  if(index<0)
-    return vec3(0);
-
-  uint  f0 = md.sample0;
-  uint  f1 = md.sample1;
-  vec3  a  = morph[i].samples[f0 + index].xyz;
-  vec3  b  = morph[i].samples[f1 + index].xyz;
-
-  return mix(a,b,alpha) * intensity;
+      ret = mix(a,b,alpha) * intensity;
+      }
+    }
+  return ret;
   }
 #endif
 

@@ -46,7 +46,7 @@ out gl_MeshPerVertexEXT {
 
 #if defined(GL_VERTEX_SHADER) && defined(MAT_VARYINGS)
 layout(location = 0) out flat uint bucketIdOut;
-layout(location = 1) out Varyings  shOut;
+// the varyings: writeVaryings() of materials_common.glsl
 #elif defined(MAT_VARYINGS)
 layout(location = 0) out flat uint bucketIdOut[]; //TODO: per-primitive
 layout(location = 1) out Varyings  shOut[];
@@ -108,9 +108,11 @@ vec4 mapViewportOrtho(const uint data, vec4 pos, out float clipDistance[4]) {
 
 vec4 mapViewport(vec4 pos, out float clipDistance[4]) {
   const uint  data = vsm.pageList[shadowPageId];
+  vec4 ret;
   if(vsmPageIsOmni(data))
-    return mapViewportProj(data, pos, clipDistance);
-  return mapViewportOrtho(data, pos, clipDistance);
+    ret = mapViewportProj(data, pos, clipDistance); else
+    ret = mapViewportOrtho(data, pos, clipDistance);
+  return ret;
   }
 
 vec4 processVertexVsm(out Varyings var, const Vertex vert, const uint bucketId, uint instanceId, const uint vboOffset, const uint laneID) {
@@ -222,7 +224,7 @@ void vertexShader(const uvec4 task) {
   vec4 pos = processVertex(var, instanceId, meshletId, bucketId, idx);
   gl_Position = isDummy ? vec4(uintBitsToFloat(0x7fc00000)) : pos;
 #if defined(MAT_VARYINGS)
-  shOut       = var;
+  writeVaryings(var);
 #endif
   }
 #else

@@ -58,14 +58,14 @@ float fresnel(const vec3 incident, const vec3 normal, const float ior) {
   // Compute sini using Snell's law
   float sint = etai / etat * sqrt(max(0.f, 1 - cosi * cosi));
   // Total internal reflection
-  if(sint >= 1)
-    return 1;
-
-  float cost = sqrt(max(0.f, 1 - sint * sint));
-  cosi = abs(cosi);
-  float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
-  float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
-  float kr = (Rs * Rs + Rp * Rp) / 2;
+  float kr = 1;
+  if(!(sint >= 1)) {
+    float cost = sqrt(max(0.f, 1 - sint * sint));
+    cosi = abs(cosi);
+    float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
+    float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
+    kr = (Rs * Rs + Rp * Rp) / 2;
+    }
 
   // As a consequence of the conservation of energy, transmittance is given by:
   // kt = 1 - kr;

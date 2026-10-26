@@ -93,3 +93,20 @@ bez pliku `.sav` nie wskazano. Zmiany:
 - `AnimationSolver::load` i `Pose::load` czytają wszystko do zmiennych tymczasowych i przejmują dopiero po całym wpisie.
 - `MdlVisual::load` łapie błąd odczytu animacji jednej postaci, loguje `save-game: the animations of '<npc>' ... skipped` i wczytuje dalej
   (postać startuje bez animacji, AI/rutyny zagrają następną) zamiast odrzucać cały zapis.
+
+### Adreno 619, log z 0.8.3: crash przeszedł z `drawHiZ` do `drawGBuffer`
+
+`safegpu.lock` z telefonu (OPPO CPH2197, Adreno 619) wskazał `main.vert [MESH_TYPE=0 FLAT_NORMAL] main.frag [FLAT_NORMAL GBUFFER SIMPLE_MAT]`, czyli
+`main_lnd_g_s` (G-buffer landszaftu). Przebieg HiZ (wszystkie 4 warianty głębi) po usunięciu wczesnego `return` z vertex shadera **już się kompiluje**, więc
+ta poprawka zadziałała. Pozostałe różnice tego pipeline'u: `isFlat()` (dwa `return`, po pochodnych `dFdx/dFdy`) i struktura `Varyings` z trzema
+członkami (`vec2`, `vec3`, `vec3`) jako interfejs vertex → fragment. **Nie potwierdzono na urządzeniu**, która z nich jest przyczyną, więc zmieniono obie
+(bez zmiany obrazu):
+
+- jedno wyjście z każdej funkcji materiałów: `isFlat`, `waterShading`, `fresnel`, `calcShadow` (dwa przeciążenia), `mapViewport`, `morphOffset`;
+  przy NaN zachowanie jest takie samo jak przy wczesnych `return` (porównania zapisane jako `!(x>=1)` i `!(x<=0)`);
+- varyingi vertex/fragment jako zwykłe zmienne (`shOutUv`, `shOutNormal`, `shOutPos`, `shOutColor`, `shInUv`...), nie struktura: lokacje są takie, jakie
+  zajmowały członkowie struktury (`VLOC_*` w `materials_common.glsl`), więc shadery mesh i tesselacji, które zostają przy strukturze, są zgodne.
+  Fragment dostaje `shInp` jako zmienną globalną wypełnianą w `loadVaryings()`, reszta kodu się nie zmienia.
+
+Sprawdzone na hoście: `spirv-val` dla wszystkich 162 shaderów `main_*`, a skrypt porównujący lokacje i typy wyjść vertex z wejściami fragment: 82 pary,
+0 niezgodności.

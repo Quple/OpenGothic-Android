@@ -27,7 +27,7 @@ out gl_PerVertex {
   };
 #if defined(MAT_VARYINGS)
 layout(location = 0) out flat uint bucketId;
-layout(location = 1) out Varyings  shOut;
+// the varyings: writeVaryings() of materials_common.glsl
 #endif
 
 #if DEBUG_DRAW
@@ -178,6 +178,6 @@ void main() {
   gl_Position = processVertex(var, vert, gl_InstanceIndex, gl_VertexIndex);
 #if defined(MAT_VARYINGS)
   bucketId = 0;
-  shOut    = var;
+  writeVaryings(var);
 #endif
   }

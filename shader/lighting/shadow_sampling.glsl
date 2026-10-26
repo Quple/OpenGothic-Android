@@ -55,14 +55,14 @@ float calcShadow(in SceneDesc scene,
   vec4 lay1   = shadowSample(shadowMap1,shPos1.xy, m1);
   lay1.x = max(max(lay1.x,lay1.y), max(lay1.z,lay1.w));
 
+  float ret = 1.0;
   if(abs(shPos0.x)<0.99 && abs(shPos0.y)<0.99 && lay1.x<minMax[1]) {
-    return calcShadowMs4(shadowMap0,shPos0);
-    }
-
+    ret = calcShadowMs4(shadowMap0,shPos0);
+    } else
   if(abs(shPos1.x)<1.0 && abs(shPos1.y)<1.0) {
-    return calcShadowMs4(shadowMap1,shPos1);
+    ret = calcShadowMs4(shadowMap1,shPos1);
     }
-  return 1.0;
+  return ret;
   }
 
 float calcShadow(in vec3 pos, const vec3 normal, in SceneDesc scene, in sampler2D shadowMap0, in sampler2D shadowMap1) {
