@@ -2470,7 +2470,7 @@ void DirectMemory::setupNpcFunctions() {
     auto* owned = npc->getItem(cls);
     if(owned==nullptr)
       return;
-    if((owned->itemFlag() & ITM_TORCH)!=0)
+    if((uint32_t(owned->itemFlag()) & uint32_t(ITM_TORCH))!=0)
       npc->setTorch(false);
     else
       npc->unequipItem(cls);

@@ -1,3 +1,23 @@
+diff --git a/Engine/cmake/android/build.gradle.in b/Engine/cmake/android/build.gradle.in
+index 2a75ab62..20183fd3 100644
+--- a/Engine/cmake/android/build.gradle.in
++++ b/Engine/cmake/android/build.gradle.in
+@@ -97,6 +97,15 @@ android {
+     androidResources {
+         noCompress.addAll(@NO_COMPRESS@)
+     }
++    packaging {
++        resources {
++            // The jars of the dependencies of an application (BouncyCastle, OkHttp, Kotlin, ...) carry the same metadata files:
++            // none of them is read at run time.
++            pickFirsts.addAll(['META-INF/versions/9/OSGI-INF/MANIFEST.MF'])
++            excludes.addAll(['META-INF/AL2.0', 'META-INF/LGPL2.1', 'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/DEPENDENCIES',
++                             'META-INF/INDEX.LIST', 'META-INF/*.kotlin_module'])
++        }
++    }
+     lint {
+         disable 'ChromeOsAbiSupport'
+     }
 diff --git a/Engine/gapi/shader.cpp b/Engine/gapi/shader.cpp
 index a8a935b6..9a0b5dce 100644
 --- a/Engine/gapi/shader.cpp
@@ -420,3 +440,62 @@ index 2bd16bc0..1cfb2b0d 100644
    }
  
  bool SoundEffect::isEmpty() const {
+diff --git a/Engine/system/api/androidapi.cpp b/Engine/system/api/androidapi.cpp
+index 96b78295..7804accd 100644
+--- a/Engine/system/api/androidapi.cpp
++++ b/Engine/system/api/androidapi.cpp
+@@ -36,6 +36,8 @@ static Tempest::Point AMotionEvent_getXY(const AInputEvent* event, size_t i) {
+ 
+ static android_app*     app        = nullptr;
+ static Tempest::Window* mainWindow = nullptr;
++static std::atomic<AndroidApi::InputHandler> inputHandler = nullptr;
++static std::atomic<void*>                    inputUser    = nullptr;
+ static std::atomic_bool isExit     = false;
+ static bool             resumed    = false;
+ static bool             focused    = false;
+@@ -170,8 +172,17 @@ void AndroidApi::onAppCmd(void*, int32_t cmd) {
+     }
+   }
+ 
++void AndroidApi::setInputHandler(InputHandler handler, void* user) {
++  inputUser.store(user);
++  inputHandler.store(handler);
++  }
++
+ int32_t AndroidApi::onInputEvent(const void* input) {
+   const auto event = static_cast<const AInputEvent*>(input);
++  if(auto handler = inputHandler.load()) {
++    if(handler(const_cast<AInputEvent*>(event), inputUser.load())!=0)
++      return 1;
++    }
+   if(AInputEvent_getType(event)!=AINPUT_EVENT_TYPE_MOTION ||
+      (AInputEvent_getSource(event) & AINPUT_SOURCE_TOUCHSCREEN)!=AINPUT_SOURCE_TOUCHSCREEN)
+     return 0;
+diff --git a/Engine/system/api/androidapi.h b/Engine/system/api/androidapi.h
+index 54d4ec55..ceac2519 100644
+--- a/Engine/system/api/androidapi.h
++++ b/Engine/system/api/androidapi.h
+@@ -1,8 +1,11 @@
+ #pragma once
+ 
+ #include <Tempest/SystemApi>
++#include <cstdint>
+ #include <filesystem>
+ 
++struct AInputEvent;
++
+ namespace Tempest {
+ 
+ class AndroidApi final : SystemApi {
+@@ -10,6 +13,11 @@ class AndroidApi final : SystemApi {
+     static std::filesystem::path internalDataPath();
+     static std::filesystem::path externalDataPath();
+ 
++    /// The application gets every input event of Android (keys, pads, touches) before Tempest: a non-zero result means that it is handled.
++    /// Called on the thread of the application; nullptr removes the handler.
++    using InputHandler = int32_t(*)(AInputEvent* event, void* user);
++    static void setInputHandler(InputHandler handler, void* user);
++
+   private:
+     AndroidApi() = default;
+ 

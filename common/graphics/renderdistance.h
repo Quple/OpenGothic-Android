@@ -28,11 +28,11 @@ inline bool sphereVisible(float distanceSquared, float radius, float range) {
 template<class Matrix>
 float maxScale(const Matrix& matrix) {
   float bound = 0;
-  for(int i=0; i<3; ++i) {
+  for(size_t i=0; i<3; ++i) {
     float row = 0;
-    for(int j=0; j<3; ++j) {
+    for(size_t j=0; j<3; ++j) {
       float dot = 0;
-      for(int k=0; k<3; ++k)
+      for(size_t k=0; k<3; ++k)
         dot += matrix[i][k]*matrix[j][k];
       row += std::abs(dot);
       }

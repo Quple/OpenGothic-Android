@@ -512,14 +512,14 @@ void PackedMesh::appendLods(const zenkit::MultiResolutionMesh& mesh, PkgType typ
       const size_t vertexCount = (src.iboLength/MaxInd)*MaxVert;
       dst.lod[level] = {uint32_t(indices.size()/MaxInd), uint32_t(src.iboLength/MaxInd)};
       if(skeletal==nullptr)
-        vertices.insert(vertices.end(), lod.vertices.begin()+firstVertex, lod.vertices.begin()+firstVertex+vertexCount);
+        vertices.insert(vertices.end(), lod.vertices.begin()+ptrdiff_t(firstVertex), lod.vertices.begin()+ptrdiff_t(firstVertex+vertexCount));
       else
-        verticesA.insert(verticesA.end(), lod.verticesA.begin()+firstVertex, lod.verticesA.begin()+firstVertex+vertexCount);
+        verticesA.insert(verticesA.end(), lod.verticesA.begin()+ptrdiff_t(firstVertex), lod.verticesA.begin()+ptrdiff_t(firstVertex+vertexCount));
       for(size_t n=src.iboOffset; n<src.iboOffset+src.iboLength; ++n)
         indices.push_back(uint32_t(vertexBase + lod.indices[n]-firstVertex));
       const size_t firstByte = (src.iboOffset/MaxInd)*MaxPrim*4;
       const size_t byteCount = (src.iboLength/MaxInd)*MaxPrim*4;
-      indices8.insert(indices8.end(), lod.indices8.begin()+firstByte, lod.indices8.begin()+firstByte+byteCount);
+      indices8.insert(indices8.end(), lod.indices8.begin()+ptrdiff_t(firstByte), lod.indices8.begin()+ptrdiff_t(firstByte+byteCount));
       }
     }
   }

@@ -4362,7 +4362,7 @@ void Npc::equipItem(size_t item) {
   if(it==nullptr)
     return;
   // Equip is idempotent. Inventory::use toggles equipment, including torches.
-  if((it->itemFlag() & ITM_TORCH)!=0) {
+  if((uint32_t(it->itemFlag()) & uint32_t(ITM_TORCH))!=0) {
     setTorch(true);
     return;
     }
