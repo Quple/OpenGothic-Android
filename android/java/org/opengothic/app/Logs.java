@@ -53,10 +53,23 @@ final class Logs {
             if (!chosen.isEmpty())
                 b.append("game: ").append(chosen).append('\n');
         }
+        // the safe GPU mode of the game: the shader that the driver was compiling when it killed the game
+        for (String name : new String[] {"safegpu.lock", "safegpu.mode"}) {
+            String text = tail(new File(dir, name), 1000).trim();
+            if (!text.isEmpty())
+                b.append("\n---- ").append(name).append('\n').append(text).append('\n');
+        }
+        // the last lines first: that is where the pipeline of the crash is named
+        String log = tail(new File(dir, "log.txt"), maxBytes);
+        String[] lines = log.split("\n");
+        StringBuilder last = new StringBuilder();
+        for (int i = Math.max(0, lines.length - 12); i < lines.length; ++i)
+            last.append(lines[i]).append('\n');
+        b.append("\n---- the last lines of log.txt\n").append(last);
         String crash = tail(new File(dir, "crash.log"), maxBytes / 3);
         if (!crash.isEmpty())
             b.append("\n---- crash.log\n").append(crash).append('\n');
-        b.append("\n---- log.txt\n").append(tail(new File(dir, "log.txt"), maxBytes));
+        b.append("\n---- log.txt\n").append(log);
         return b.toString();
     }
 
