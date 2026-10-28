@@ -1903,6 +1903,8 @@ void MainWindow::updateMobileAvailability() {
           allowed |= keyMask(Key::Action);
         if(melee)
           allowed |= keyMask(Key::AttackLeft) | keyMask(Key::AttackRight) | keyMask(Key::Block);
+        if(armed)
+          allowed |= keyMask(Key::StrafeLeft) | keyMask(Key::StrafeRight);
 
         target = armed && player.focus().npc!=nullptr;
 

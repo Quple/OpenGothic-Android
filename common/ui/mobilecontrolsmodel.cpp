@@ -303,6 +303,9 @@ void Controls::buildGame(const Anchor&) {
   stick = {left(153.5f)-stickSize/2,bottom(166.5f)-stickSize/2,stickSize,stickSize};
   icon(left(61),  bottom(36.5f), 50, "SNEAK", Key::Sneak);
   icon(left(123), bottom(36.5f), 50, "WALK",  Key::Walk);
+  // side steps, right next to the floating stick
+  icon(left(284), bottom(166.5f), 56, "< STEP", Key::StrafeLeft,  true);
+  icon(left(350), bottom(166.5f), 56, "STEP >", Key::StrafeRight, true);
 
   icon(right(198),   bottom(221.5f), 88, "ACTION", Key::Action, true);
   icon(right(285),   bottom(166.5f), 68, "< HIT",  Key::AttackLeft, true);

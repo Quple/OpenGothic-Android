@@ -534,6 +534,33 @@ void settingsAreIsolated() {
   CHECK(!has(c.drain(),Event::Look));
   }
 
+void strafeButtons() {
+  Controls c;
+  c.configure(2400,1080,Mode::Game);
+  c.resetPointers();
+  c.drain();
+
+  // Held while the finger is down, independent of the stick
+  press(c,Key::StrafeLeft,1);
+  auto e = c.drain();
+  CHECK(e.size()==1 && e[0].kind==Event::Down && e[0].key==Key::StrafeLeft);
+  stickPush(c,2,0.f,-0.45f);
+  CHECK(c.held(Key::Up) && c.held(Key::StrafeLeft));
+  lift(c,Key::StrafeLeft,1);
+  CHECK(!c.held(Key::StrafeLeft) && c.held(Key::Up));
+  CHECK(has(c.drain(),Key::StrafeLeft,Event::Up));
+  c.up(2,0,0);
+
+  // Both sides can be held, hidden buttons are not usable
+  press(c,Key::StrafeLeft,3);
+  press(c,Key::StrafeRight,4);
+  CHECK(c.held(Key::StrafeLeft) && c.held(Key::StrafeRight));
+  c.resetPointers();
+  c.drain();
+  c.availability(~(keyMask(Key::StrafeLeft)|keyMask(Key::StrafeRight)),true,true,true);
+  CHECK(!button(c,Key::StrafeLeft).visible && !button(c,Key::StrafeRight).visible);
+  }
+
 void resetStress() {
   // No held controls survive a reset, whatever the mode transitions in between.
   Controls c;
@@ -566,6 +593,7 @@ int main() {
   cameraIsResolutionIndependent();
   menuGestures();
   availabilityKeepsMovement();
+  strafeButtons();
   inventoryActions();
   settingsAreIsolated();
   resetStress();
