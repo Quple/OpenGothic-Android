@@ -566,6 +566,8 @@ int AndroidInput::Controller::iconFor(const Mobile::Button& b) const {
     case Key::Walk:       return IconWalk;
     case Key::Left:       return IconLeft;
     case Key::Right:      return IconRight;
+    case Key::StrafeLeft: return IconLeft;
+    case Key::StrafeRight:return IconRight;
     case Key::Block:      return IconBlock;
     case Key::Sneak:      return IconSneak;
     case Key::Inventory:  return IconInventory;
