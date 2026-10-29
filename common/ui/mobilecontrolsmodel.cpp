@@ -214,7 +214,7 @@ void Controls::buildSettings(const Anchor& a) {
   static const char* labels[SettingCount] = {
     "Button size", "3D resolution", "Shadow quality", "SSAO effects",
     "FPS limit", "Joystick deadzone", "Camera sensitivity", "Vibration", "GUI scale",
-    "Fast forward"
+    "Fast forward", "HP/Mana numbers", "XP counter"
     };
   // The rows shrink when there are too many of them for the height of the screen (every new setting adds a row)
   const float pitch = std::min(40.f*scale,(a.b-a.t-36.f*scale)/float(std::max(SettingCount-1,1)));

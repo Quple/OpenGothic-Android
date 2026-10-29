@@ -46,7 +46,7 @@ const char* const IconFiles[AndroidInput::IconCount] = {
   };
 
 const char* const SettingNames[Mobile::SettingCount] = {
-  "buttons", "resolution", "shadows", "effects", "fps", "deadzone", "sensitivity", "vibration", "gui", "speed"
+  "buttons", "resolution", "shadows", "effects", "fps", "deadzone", "sensitivity", "vibration", "gui", "speed", "hudnumbers", "hudxp"
   };
 
 // Gives access to the dispatch functions of SystemApi
@@ -176,6 +176,9 @@ int nextValue(int setting, int value) {
       return value>=160 ? 60 : value+10;
     case Mobile::SettingSpeed:
       return value>=300 ? 100 : value+50;
+    case Mobile::SettingHudNumbers:
+    case Mobile::SettingHudXp:
+      return value ? 0 : 1;
     }
   return value;
   }
@@ -186,6 +189,10 @@ std::string settingText(int setting, const std::string& label) {
     return value ? "SSAO effects: ON" : "SSAO effects: OFF";
   if(setting==Mobile::SettingVibration)
     return value ? "Vibration: ON" : "Vibration: OFF";
+  if(setting==Mobile::SettingHudNumbers)
+    return value ? "HP/Mana numbers: ON" : "HP/Mana numbers: OFF";
+  if(setting==Mobile::SettingHudXp)
+    return value ? "XP counter: ON" : "XP counter: OFF";
   if(setting==Mobile::SettingSpeed)
     return label+"   "+std::to_string(value/100)+"."+std::to_string(value%100/10)+"x";
 
@@ -275,6 +282,10 @@ AndroidInput::Preferences AndroidInput::preferences() {
     ret.gui = std::clamp(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingGui]),50,200);
   if(Gothic::settingsGetI(Section,"version")>=4)
     ret.speed = std::clamp(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingSpeed]),100,300);
+  if(Gothic::settingsGetI(Section,"version")>=5) {
+    ret.hudNumbers = Gothic::settingsGetI(Section,SettingNames[Mobile::SettingHudNumbers])!=0 ? 1 : 0;
+    ret.hudXp      = Gothic::settingsGetI(Section,SettingNames[Mobile::SettingHudXp])!=0 ? 1 : 0;
+    }
   return ret;
   }
 
@@ -291,10 +302,12 @@ void AndroidInput::Controller::bind() {
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingVibration],  def.vibration);
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingGui],        def.gui);
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingSpeed],      def.speed);
-    Gothic::settingsSetI(Section,"version",4);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingHudNumbers], def.hudNumbers);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingHudXp],      def.hudXp);
+    Gothic::settingsSetI(Section,"version",5);
     Gothic::flushSettings();
     } else
-  if(Gothic::settingsGetI(Section,"version")<4) {
+  if(Gothic::settingsGetI(Section,"version")<5) {
     // settings saved before the vibration, the scale of the interface and the fast forward were added
     const Preferences def;
     const int version = Gothic::settingsGetI(Section,"version");
@@ -302,8 +315,11 @@ void AndroidInput::Controller::bind() {
       Gothic::settingsSetI(Section,SettingNames[Mobile::SettingVibration],def.vibration);
     if(version<3)
       Gothic::settingsSetI(Section,SettingNames[Mobile::SettingGui],def.gui);
-    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingSpeed],def.speed);
-    Gothic::settingsSetI(Section,"version",4);
+    if(version<4)
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingSpeed],def.speed);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingHudNumbers],def.hudNumbers);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingHudXp],def.hudXp);
+    Gothic::settingsSetI(Section,"version",5);
     Gothic::flushSettings();
     }
 

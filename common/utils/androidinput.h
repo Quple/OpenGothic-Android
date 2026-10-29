@@ -59,6 +59,8 @@ struct Preferences {
   int vibration   = 1;   // feedback on damage
   int gui         = 100; // scale of the interface, percent
   int speed       = 200; // fast forward, percent of the normal speed
+  int hudNumbers  = 0;   // 1: the numbers of life and mana (5/10) over the bars
+  int hudXp       = 0;   // 1: the experience (500/1000) between the bars
   };
 
 Preferences preferences();

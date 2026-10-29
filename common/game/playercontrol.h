@@ -32,6 +32,7 @@ class PlayerControl final {
     void  tickFocus();
     void  clearFocus();
     void  cycleTarget();
+    void  unlockTarget(Npc& pl);
     bool  hasLock() const { return lockedNpc!=nullptr; }
     void  releaseLock() { lockedNpc = nullptr; }
 

@@ -1146,14 +1146,23 @@ bool PlayerControl::validateLock() {
   return pl->qDistTo(*lockedNpc)<=LockRange*LockRange;
   }
 
+void PlayerControl::unlockTarget(Npc& pl) {
+  lockedNpc    = nullptr;
+  currentFocus = Focus();
+  pl.setTarget(nullptr);
+  }
+
 void PlayerControl::cycleTarget() {
   auto w  = Gothic::inst().world();
   auto c  = Gothic::inst().camera();
   auto pl = w!=nullptr ? w->player() : nullptr;
   if(w==nullptr || c==nullptr || pl==nullptr || pl->isDown())
     return;
-  if(pl->weaponState()==WeaponState::NoWeapon)
+  if(pl->weaponState()==WeaponState::NoWeapon) {
+    if(lockedNpc!=nullptr)
+      unlockTarget(*pl);
     return;
+    }
   if(lockedNpc!=nullptr && !validateLock())
     lockedNpc = nullptr;
 
@@ -1189,8 +1198,12 @@ void PlayerControl::cycleTarget() {
     cand.hostile = pl->isEnemy(*npc);
     list.push_back(cand);
     }
-  if(list.empty())
+  if(list.empty()) {
+    // nobody to take: the button lets the held target go
+    if(lockedNpc!=nullptr)
+      unlockTarget(*pl);
     return;
+    }
 
   // enemies first: the others only when there is nobody to fight
   const bool anyHostile = std::any_of(list.begin(),list.end(),[](const Candidate& c) { return c.hostile; });
@@ -1200,12 +1213,21 @@ void PlayerControl::cycleTarget() {
 
   Npc* next = nullptr;
   if(lockedNpc!=nullptr) {
-    // the next one to the right, after the last one the first one
+    // the next one to the right; after the last one (or when the held target is out of the view) the lock is
+    // released, so the button can turn the lock off. The next press takes the nearest to the center again.
+    bool found = false;
     for(size_t i=0; i<list.size(); ++i) {
       if(list[i].npc==lockedNpc) {
-        next = list[(i+1)%list.size()].npc;
+        found = true;
+        if(i+1<list.size())
+          next = list[i+1].npc;
         break;
         }
+      }
+    (void)found;
+    if(next==nullptr) {
+      unlockTarget(*pl);
+      return;
       }
     }
   if(next==nullptr) {

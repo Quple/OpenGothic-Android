@@ -70,6 +70,8 @@ enum Setting : int {
   SettingVibration,
   SettingGui,
   SettingSpeed,
+  SettingHudNumbers,
+  SettingHudXp,
   SettingCount
   };
 

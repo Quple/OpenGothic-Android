@@ -870,10 +870,37 @@ void MainWindow::drawTouchBars(Painter& p, Npc& pl) {
   const float hp  = float(pl.attribute(ATR_HITPOINTS))/float(std::max(1,pl.attribute(ATR_HITPOINTSMAX)));
   const float mp  = float(pl.attribute(ATR_MANA))/float(std::max(1,pl.attribute(ATR_MANAMAX)));
 
+  // optional numbers (the settings of the touch interface): never inside of a bar, so the bars stay as they are
+  const auto  pref      = AndroidInput::preferences();
+  const bool  numbers   = pref.hudNumbers!=0;
+  const bool  xp        = pref.hudXp!=0;
+  const auto  hpText    = std::to_string(pl.attribute(ATR_HITPOINTS))+"/"+std::to_string(pl.attribute(ATR_HITPOINTSMAX));
+  const auto  mpText    = std::to_string(pl.attribute(ATR_MANA))+"/"+std::to_string(pl.attribute(ATR_MANAMAX));
+  const auto  xpText    = std::to_string(pl.experience())+"/"+std::to_string(pl.experienceNext());
+  auto&       hudFont   = Resources::font(Gothic::interfaceScale(this));
+  // the text is drawn twice, the dark one is a shadow: it can be read on any background
+  auto drawText = [&](const std::string& text, int x, int baseline) {
+    hudFont.tinted(Tempest::Color(0.f,0.f,0.f,0.85f)).drawText(p,x+1,baseline+1,text);
+    hudFont.tinted(Tempest::Color(1.f,1.f,1.f,1.f)).drawText(p,x,baseline,text);
+    };
+  auto barHeight = [&](int width) {
+    return barBack==nullptr ? 0 : int(float(barBack->h())*float(width)/float(std::max(barBack->w(),1)));
+    };
+
   if(mode==Mobile::Mode::Inventory) {
     const int width = int(200.f*Gothic::interfaceScale(this)*float(std::min(w(),800))/800.f);
+    const int yMana = 10+int(float(width)*0.125f)+2;
     drawBar(p,barHp,10,10,width,hp,AlignLeft);
-    drawBar(p,barMana,10,10+int(float(width)*0.125f)+2,width,mp,AlignLeft);
+    drawBar(p,barMana,10,yMana,width,mp,AlignLeft);
+    // the numbers stand to the right of the bars, the experience under them
+    const int bh = barHeight(width);
+    const int th = hudFont.textSize(hpText).h;
+    if(numbers) {
+      drawText(hpText,10+width+8,10+(bh+th)/2);
+      drawText(mpText,10+width+8,yMana+(bh+th)/2);
+      }
+    if(xp)
+      drawText(xpText,10,yMana+bh+th+4);
     return;
     }
   if(mode!=Mobile::Mode::Game)
@@ -894,6 +921,20 @@ void MainWindow::drawTouchBars(Painter& p, Npc& pl) {
     drawBar(p,barMisc,xr,y,width,left,AlignLeft | AlignBottom);
     } else {
     drawBar(p,barMana,xr,y,width,mp,AlignLeft | AlignBottom);
+    }
+
+  const int bh = barHeight(width);
+  const int th = hudFont.textSize(hpText).h;
+  if(numbers) {
+    // centered over the bars (the text is above the frame, not in it)
+    const int top = y-bh-2;
+    drawText(hpText,w()/2-half+(width-hudFont.textSize(hpText).w)/2,top);
+    if(!pl.isDive())
+      drawText(mpText,xr+(width-hudFont.textSize(mpText).w)/2,top);
+    }
+  if(xp) {
+    // between the bars, on the level of the frames
+    drawText(xpText,w()/2-hudFont.textSize(xpText).w/2,y-(bh-th)/2);
     }
   }
 #endif
