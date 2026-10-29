@@ -213,12 +213,11 @@ void Controls::rebuild() {
 void Controls::buildSettings(const Anchor& a) {
   static const char* labels[SettingCount] = {
     "Button size", "3D resolution", "Shadow quality", "SSAO effects",
-    "FPS limit", "Joystick deadzone", "Camera sensitivity", "Vibration", "GUI scale"
+    "FPS limit", "Joystick deadzone", "Camera sensitivity", "Vibration", "GUI scale",
+    "Fast forward"
     };
   for(int i=0; i<SettingCount; ++i)
-    add(width*0.22f,a.t+float(i)*44*scale,560,40,labels[i],Key::Enter).special = Special::FirstSetting+i;
-  add(a.r-64*scale,a.b-60*scale,64,60,"BACK",Key::Escape).special = Special::Settings;
-  add(a.l,a.b-60*scale,100,60,"MODS",Key::Enter).special = Special::Mods;
+    add(width*0.22f,a.t+float(i)*40*scale,560,36,labels[i],Key::Enter).special = Special::FirstSetting+i;
   }
 
 namespace {
@@ -296,6 +295,7 @@ void Controls::buildGame(const Anchor&) {
 
   icon(left(61),   top(36), 50, "MENU",      Key::Escape);
   icon(left(122),  top(36), 50, "CHARACTER", Key::Status);
+  icon(left(183),  top(36), 50, "SPEED",     Key::Enter, false, Special::Speed);
   icon(right(124), top(36), 50, "LOG",       Key::Log);
   icon(right(62),  top(36), 50, "MAP",       Key::Map);
 
@@ -672,7 +672,9 @@ void Controls::applyAvailability() {
     if(b.special==Special::Target)
       usable = availableTarget; else
     if(b.special==Special::Spell)
-      usable = availableSpells;
+      usable = availableSpells; else
+    if(b.special==Special::Speed)
+      usable = true;
 
     // The hotbar stays visible while the player can move, other controls hide when unusable
     // Inventory actions disappear when there is no item to act on, the tabs and the close button stay.

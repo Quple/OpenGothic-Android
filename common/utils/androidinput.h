@@ -36,7 +36,7 @@ enum Icon : int {
   IconCategoryAll, IconCategoryWeapons, IconCategoryArmor, IconCategoryJewelry, IconCategoryMagic,
   IconCategoryFood, IconCategoryPotion, IconCategoryDocuments, IconCategoryMisc,
   IconInvUse, IconInvDrop, IconInvTransfer, IconInvUp, IconInvDown, IconInvSlot, IconInvSlotSelected,
-  IconSkip, IconTalk, IconTargetLock,
+  IconSkip, IconTalk, IconTargetLock, IconFastForward,
   IconCount
   };
 
@@ -58,6 +58,7 @@ struct Preferences {
   int sensitivity = 100; // percent
   int vibration   = 1;   // feedback on damage
   int gui         = 100; // scale of the interface, percent
+  int speed       = 200; // fast forward, percent of the normal speed
   };
 
 Preferences preferences();
@@ -77,6 +78,8 @@ class Controller {
       int   inventoryCategory = 0;
       bool  inventoryTransfer = false;
       std::string useLabel;           // action of the selected item in the inventory
+      bool  targetLocked = false;
+      bool  fastForward  = false;
       };
 
     void  bind();

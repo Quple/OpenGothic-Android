@@ -1214,19 +1214,28 @@ uint64_t MainWindow::tick() {
     return 0;
     }
 
+  realTickDt = dt;
   dialogs.tick(dt);
   inventory.tick(dt);
-  Gothic::inst().tick(dt);
-  player.tickFocus();
 
-  if(dialogs.isActive())
-    ;//clearInput();
-  if(document.isActive())
-    clearInput();
-  tickMouse(dt);
-  player.tickMove(dt);
+  // fast forward: more game steps in a frame, none of them longer than 50 ms
+  uint64_t total = dt;
+#ifdef OPENGOTHIC_TOUCH_UI
+  total = fastForwardDt(dt);
+#endif
+  const uint64_t steps = std::max<uint64_t>(1,(total+49)/50);
+  for(uint64_t i=0; i<steps; ++i) {
+    const uint64_t step = total/steps + (i<total%steps ? 1 : 0);
+    Gothic::inst().tick(step);
+    player.tickFocus();
+    if(document.isActive())
+      clearInput();
+    if(i==0)
+      tickMouse(dt);
+    player.tickMove(step);
+    }
   update();
-  return dt;
+  return total;
   }
 
 void MainWindow::updateAnimation(uint64_t dt) {
@@ -1474,6 +1483,10 @@ void MainWindow::onVideo(std::string_view fname) {
 void MainWindow::onStartLoading() {
   dialogCameraReset = false;
   player   .clearInput();
+  player   .clearFocus();
+#ifdef OPENGOTHIC_TOUCH_UI
+  fastForward = false;
+#endif
   inventory.onWorldChanged();
   dialogs  .onWorldChanged();
   }
@@ -1599,7 +1612,7 @@ void MainWindow::render(){
     try {
       dt = tick();
       updateAnimation(dt);
-      tickCamera(dt);
+      tickCamera(dt==0 ? 0 : realTickDt);
       }
     catch(const Tempest::SwapchainSuboptimal&) {
       throw;
@@ -1815,6 +1828,20 @@ void MainWindow::setupMobileControls() {
   androidControls.bind();
   }
 
+uint64_t MainWindow::fastForwardDt(uint64_t dt) {
+  if(!fastForward)
+    return dt;
+  auto* world  = Gothic::inst().world();
+  auto* camera = Gothic::inst().camera();
+  if(world==nullptr || camera==nullptr || mobileContext()!=Mobile::Mode::Game)
+    return dt;
+  if(dialogs.isActive() || inventory.isActive() || document.isActive() ||
+     camera->isCutscene() || world->isCutsceneLock() || Gothic::inst().isInDialog())
+    return dt;
+  const int speed = std::clamp(AndroidInput::preferences().speed,100,300);
+  return dt*uint64_t(speed)/100;
+  }
+
 void MainWindow::onMobileAction(int id) {
   if(id==Mobile::Special::Mods) {
     modMenu.open();
@@ -1828,6 +1855,10 @@ void MainWindow::onMobileAction(int id) {
     return;
     }
 
+    if(id==Mobile::Special::Speed) {
+    fastForward = !fastForward;
+    return;
+    }
   if(mobileContext()!=Mobile::Mode::Game)
     return;
   if(id==Mobile::Special::Target)
@@ -1906,7 +1937,7 @@ void MainWindow::updateMobileAvailability() {
         if(armed)
           allowed |= keyMask(Key::StrafeLeft) | keyMask(Key::StrafeRight);
 
-        target = armed && player.focus().npc!=nullptr;
+        target = armed;
 
         int spellCount = 0;
         for(int i=0; i<10; ++i) {
@@ -1951,6 +1982,8 @@ void MainWindow::updateMobileOverlay() {
   hud = {};
   hud.inventoryCategory = inventory.category();
   hud.inventoryTransfer = inventory.isOpen()!=InventoryMenu::State::Equip;
+  hud.targetLocked = player.hasLock();
+  hud.fastForward  = fastForward;
   if(mobileContext()==Mobile::Mode::Inventory)
     hud.useLabel = std::string(inventory.mobileActionLabel());
 

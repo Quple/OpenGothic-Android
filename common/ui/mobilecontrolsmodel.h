@@ -53,6 +53,7 @@ namespace Special {
     Spell,
     Mods,
     Shift,
+    Speed,
     FirstSetting  = 8,
     FirstCategory = 24
     };
@@ -68,6 +69,7 @@ enum Setting : int {
   SettingSensitivity,
   SettingVibration,
   SettingGui,
+  SettingSpeed,
   SettingCount
   };
 

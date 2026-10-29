@@ -580,6 +580,19 @@ void resetStress() {
 
 }
 
+void speedButton() {
+  Controls c;
+  c.configure(2400,1080,Mode::Game);
+  c.resetPointers();
+  c.drain();
+
+  c.availability(keyMask(Key::Escape),false,false,true);
+  CHECK(special(c,Special::Speed).visible);
+  tap(c,special(c,Special::Speed).rect);
+  auto e = c.drain();
+  CHECK(e.size()==1 && e[0].kind==Event::Special && e[0].code==uint32_t(Special::Speed));
+  }
+
 int main() {
   menuSwipeDoesNotConfirm();
   explicitConfirmation();
@@ -594,6 +607,7 @@ int main() {
   menuGestures();
   availabilityKeepsMovement();
   strafeButtons();
+  speedButton();
   inventoryActions();
   settingsAreIsolated();
   resetStress();

@@ -42,11 +42,11 @@ const char* const IconFiles[AndroidInput::IconCount] = {
   "all.png", "weapons.png", "armor.png", "jewelry.png", "magic.png",
   "food.png", "potion.png", "documents.png", "misc.png",
   "use_new.png", "drop.png", "transfer_new.png", "up_new.png", "down_new.png", "inv_slot.png", "inv_slot_selected.png",
-  "skip.png", "talk.png", "target_lock.png"
+  "skip.png", "talk.png", "target_lock.png", "fast_forward.png"
   };
 
 const char* const SettingNames[Mobile::SettingCount] = {
-  "buttons", "resolution", "shadows", "effects", "fps", "deadzone", "sensitivity", "vibration", "gui"
+  "buttons", "resolution", "shadows", "effects", "fps", "deadzone", "sensitivity", "vibration", "gui", "speed"
   };
 
 // Gives access to the dispatch functions of SystemApi
@@ -174,6 +174,8 @@ int nextValue(int setting, int value) {
       return value ? 0 : 1;
     case Mobile::SettingGui:
       return value>=160 ? 60 : value+10;
+    case Mobile::SettingSpeed:
+      return value>=300 ? 100 : value+50;
     }
   return value;
   }
@@ -184,6 +186,8 @@ std::string settingText(int setting, const std::string& label) {
     return value ? "SSAO effects: ON" : "SSAO effects: OFF";
   if(setting==Mobile::SettingVibration)
     return value ? "Vibration: ON" : "Vibration: OFF";
+  if(setting==Mobile::SettingSpeed)
+    return label+"   "+std::to_string(value/100)+"."+std::to_string(value%100/10)+"x";
 
   std::string ret = label+"   "+std::to_string(value);
   const bool percent = setting==Mobile::SettingButtons || setting==Mobile::SettingResolution ||
@@ -269,6 +273,8 @@ AndroidInput::Preferences AndroidInput::preferences() {
     ret.vibration = Gothic::settingsGetI(Section,SettingNames[Mobile::SettingVibration]);
   if(Gothic::settingsGetI(Section,"version")>=3)
     ret.gui = std::clamp(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingGui]),50,200);
+  if(Gothic::settingsGetI(Section,"version")>=4)
+    ret.speed = std::clamp(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingSpeed]),100,300);
   return ret;
   }
 
@@ -284,16 +290,20 @@ void AndroidInput::Controller::bind() {
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingSensitivity],def.sensitivity);
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingVibration],  def.vibration);
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingGui],        def.gui);
-    Gothic::settingsSetI(Section,"version",3);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingSpeed],      def.speed);
+    Gothic::settingsSetI(Section,"version",4);
     Gothic::flushSettings();
     } else
-  if(Gothic::settingsGetI(Section,"version")<3) {
-    // settings saved before the vibration and the scale of the interface were added
+  if(Gothic::settingsGetI(Section,"version")<4) {
+    // settings saved before the vibration, the scale of the interface and the fast forward were added
     const Preferences def;
-    if(Gothic::settingsGetI(Section,"version")<2)
+    const int version = Gothic::settingsGetI(Section,"version");
+    if(version<2)
       Gothic::settingsSetI(Section,SettingNames[Mobile::SettingVibration],def.vibration);
-    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingGui],def.gui);
-    Gothic::settingsSetI(Section,"version",3);
+    if(version<3)
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingGui],def.gui);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingSpeed],def.speed);
+    Gothic::settingsSetI(Section,"version",4);
     Gothic::flushSettings();
     }
 
@@ -528,6 +538,8 @@ int AndroidInput::Controller::iconFor(const Mobile::Button& b) const {
       return IconTarget;
     case Mobile::Special::Spell:
       return IconSpells;
+    case Mobile::Special::Speed:
+      return IconFastForward;
     default:
       if(inventory && b.special>=Mobile::Special::FirstCategory)
         return IconCategoryAll+b.special-Mobile::Special::FirstCategory;
@@ -596,7 +608,7 @@ void AndroidInput::Controller::paintHotbarSlot(Painter& p, Font&, size_t index) 
 
 void AndroidInput::Controller::paintButton(Painter& p, Font& font, size_t index) {
   const auto& b      = controls.buttons()[index];
-  const bool  active = controls.pressed(index);
+  const bool  active = controls.pressed(index) || (b.special==Mobile::Special::Speed && hud.fastForward);
   const bool  game      = controls.mode()==Mobile::Mode::Game;
   const bool  inventory = controls.mode()==Mobile::Mode::Inventory;
   const float s         = controls.unit();
