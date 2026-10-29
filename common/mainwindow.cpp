@@ -1148,6 +1148,7 @@ uint64_t MainWindow::tick() {
     // a field of text of the menu of the mods gets the keyboard of the screen when it gets the focus
     static bool typing = false;
     const bool  wants  = modMenu.wantsText() || dialogs.wantsText() || rootMenu.wantsText();
+    androidControls.modMenu(modMenu.isActive());
     if(dialogs.takeKeyboardRequest()) {
       typing = true;
       androidControls.keyboard(true);

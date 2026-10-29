@@ -53,6 +53,7 @@ void game::setup() {
     installNpc(ctx);
     installPlayer(ctx);
     installNpcs(ctx);
+    installItems(ctx);
     installWorld(ctx);
     installQuests(ctx);
     installScreen(ctx);

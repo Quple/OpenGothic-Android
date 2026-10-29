@@ -802,7 +802,7 @@ public final class LauncherActivity extends Activity {
     private void askRepair(final int game, List<String> broken) {
         StringBuilder names = new StringBuilder();
         for (int i = 0; i < broken.size() && i < 4; ++i)
-            names.append("\n  ").append(broken.get(i));
+            names.append("\n  ").append(GameFiles.describe(rootOf(game), broken.get(i)));
         if (broken.size() > 4)
             names.append("\n  ...");
         new AlertDialog.Builder(this)

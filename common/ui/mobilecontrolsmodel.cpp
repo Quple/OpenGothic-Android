@@ -216,8 +216,17 @@ void Controls::buildSettings(const Anchor& a) {
     "FPS limit", "Joystick deadzone", "Camera sensitivity", "Vibration", "GUI scale",
     "Fast forward"
     };
+  // The rows shrink when there are too many of them for the height of the screen (every new setting adds a row)
+  const float pitch = std::min(40.f*scale,(a.b-a.t-36.f*scale)/float(std::max(SettingCount-1,1)));
+  const float rowH  = std::min(36.f*scale,pitch-2.f*scale)/scale;
   for(int i=0; i<SettingCount; ++i)
-    add(width*0.22f,a.t+float(i)*40*scale,560,36,labels[i],Key::Enter).special = Special::FirstSetting+i;
+    add(width*0.22f,a.t+float(i)*pitch,560,rowH,labels[i],Key::Enter).special = Special::FirstSetting+i;
+
+  // The menu of the mods, bottom left: it is never covered by the rows, they start at 22% of the width
+  add(a.l,a.b-36.f*scale,150,36,"Mods",Key::Enter).special = Special::Mods;
+
+  // The way out: the same button that has opened the settings, it is drawn as the arrow back
+  round(fromRight(62),fromTop(36),50,"SETTINGS",Key::Enter).special = Special::Settings;
   }
 
 namespace {
@@ -328,6 +337,11 @@ void Controls::buildGame(const Anchor&) {
   }
 
 void Controls::buildMenu(const Anchor&) {
+  if(modsOpen) {
+    // the window of the mods has its own close button at the top right: the settings do not cover it
+    round(fromRight(70), fromBottom(70),  66,"BACK",    Key::Escape);
+    return;
+    }
   round(fromRight(62), fromTop(36),     50,"SETTINGS",Key::Enter).special = Special::Settings;
   round(fromRight(70), fromBottom(70),  66,"BACK",    Key::Escape);
   round(fromRight(150),fromBottom(70),  66,"KEYBOARD",Key::Enter).special = Special::Keyboard;
@@ -507,6 +521,16 @@ void Controls::cancelFinger(Finger& f) {
   f.blocked = true;
   }
 
+void Controls::modMenu(bool on) {
+  if(modsOpen==on)
+    return;
+  cancel();
+  modsOpen = on;
+  if(on)
+    settingsOpen = false;
+  rebuild();
+  }
+
 void Controls::showKeyboard(bool on) {
   if(keyboard==on)
     return;
@@ -531,6 +555,14 @@ void Controls::activate(Button button) {
   if(button.special==Special::Settings) {
     cancel();
     settingsOpen = !settingsOpen;
+    rebuild();
+    events.push_back({Event::Special,Key::Enter,0,0,uint32_t(button.special)});
+    return;
+    }
+  if(button.special==Special::Mods) {
+    // the menu of the mods has the screen: the settings are closed first, they would stay on top of it
+    cancel();
+    settingsOpen = false;
     rebuild();
     events.push_back({Event::Special,Key::Enter,0,0,uint32_t(button.special)});
     return;

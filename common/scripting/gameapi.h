@@ -19,6 +19,7 @@ void setup();
 void installNpc   (JSContext* ctx);   // the prototype of the characters, see game_npc.cpp
 void installPlayer(JSContext* ctx);   // player
 void installNpcs  (JSContext* ctx);   // npcs
+void installItems (JSContext* ctx);   // items, the things that lie on the ground, see game_items.cpp
 void installWorld (JSContext* ctx);   // world
 void installQuests(JSContext* ctx);   // quests
 void installScreen(JSContext* ctx);   // screen

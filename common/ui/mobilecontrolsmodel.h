@@ -155,6 +155,8 @@ class Controls {
     /// The keyboard of the screen, for a field of text that has the focus
     void  showKeyboard(bool on);
     bool  settingsVisible() const { return settingsOpen; }
+    /// The menu of the mods is open: it has the screen, the settings and the buttons of the menu are not under it
+    void  modMenu(bool on);
     bool  movementAvailable() const { return availableMovement; }
     bool  held(Key key) const { return refs[size_t(key)]>0; }
     float unit() const { return scale; }
@@ -227,6 +229,7 @@ class Controls {
     bool     keyboard = false;
     bool     shift    = false;   // the next letter of the keyboard is a capital one
     bool     settingsOpen = false;
+    bool     modsOpen     = false;   // the menu of the mods covers the screen
     bool     twoLists = false; // the inventory shows the other list too
     bool     padVisible = false;
     float    guiScale   = 1;
