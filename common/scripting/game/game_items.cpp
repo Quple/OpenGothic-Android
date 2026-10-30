@@ -1,4 +1,5 @@
 #include "scripting/gameapi.h"
+#include "scripting/modutil.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,7 +31,7 @@ void put(JSContext* ctx, JSValueConst obj, const char* name, bool v) {
   }
 
 void put(JSContext* ctx, JSValueConst obj, const char* name, const std::string& v) {
-  JS_SetPropertyStr(ctx,obj,name,JS_NewString(ctx,v.c_str()));
+  JS_SetPropertyStr(ctx,obj,name,JS_NewString(ctx,gameToUtf8(v).c_str()));
   }
 
 

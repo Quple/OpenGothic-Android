@@ -61,6 +61,7 @@ struct Preferences {
   int speed       = 200; // fast forward, percent of the normal speed
   int hudNumbers  = 0;   // 1: the numbers of life and mana (5/10) over the bars
   int hudXp       = 0;   // 1: the experience (500/1000) between the bars
+  int strafe      = 1;   // 1: the buttons of the side steps on the HUD
   };
 
 Preferences preferences();
@@ -124,6 +125,8 @@ class Controller {
     int32_t onInput(AInputEvent* event);
 #endif
     void    applyPreferences();
+    void    loadHudPlaces();
+    void    saveHudPlaces();
     void    dispatch(Tempest::Window& window, Mobile::Mode mode, const Mobile::Event& input);
     void    onSpecial(int id);
 

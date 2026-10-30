@@ -58,6 +58,7 @@ void game::setup() {
     installQuests(ctx);
     installScreen(ctx);
     installInput(ctx);
+    installTouch(ctx);
     installUi(ctx);
     installDebug(ctx);
     };

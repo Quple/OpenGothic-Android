@@ -24,6 +24,7 @@ void installWorld (JSContext* ctx);   // world
 void installQuests(JSContext* ctx);   // quests
 void installScreen(JSContext* ctx);   // screen
 void installInput (JSContext* ctx);   // input
+void installTouch (JSContext* ctx);   // touch, the controls of the touch interface, see game_touch.cpp
 void installUi    (JSContext* ctx);   // ui, the tabs of the menu of the mods, see game_ui.cpp
 void installDebug (JSContext* ctx);   // debug, for the developers: the log, the scripts, the triggers, see game_debug.cpp
 

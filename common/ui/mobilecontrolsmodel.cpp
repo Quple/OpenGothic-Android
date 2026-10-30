@@ -89,6 +89,27 @@ void Controls::gui(float scale) {
     }
   }
 
+void Controls::features(bool speed, bool strafe) {
+  if(featureSpeed==speed && featureStrafe==strafe)
+    return;
+  cancel();
+  featureSpeed  = speed;
+  featureStrafe = strafe;
+  rebuild();
+  }
+
+void Controls::hudPlaces(const std::map<std::string,HudPlace>& next) {
+  places = next;
+  cancel();
+  rebuild();
+  }
+
+bool Controls::takeHudChanged() {
+  const bool ret = hudChanged;
+  hudChanged = false;
+  return ret;
+  }
+
 void Controls::dialogPad(bool visible) {
   if(padVisible==visible)
     return;
@@ -154,6 +175,7 @@ void Controls::configure(float w, float h, Mode next) {
   keyboard     = false;
   shift        = false;
   settingsOpen = false;
+  editing      = false;
   scale        = std::min(width/1000.f,height/440.f);
   rebuild();
   }
@@ -181,6 +203,8 @@ void Controls::rebuild() {
   const float l = 16.f*scale;
   const Anchor a = {l, width-l, 12.f*scale, height-12.f*scale};
 
+  if(editing)
+    buildHudEditor(); else
   if(settingsOpen)
     buildSettings(a); else
   if(keyboard)
@@ -214,13 +238,26 @@ void Controls::buildSettings(const Anchor& a) {
   static const char* labels[SettingCount] = {
     "Button size", "3D resolution", "Shadow quality", "SSAO effects",
     "FPS limit", "Joystick deadzone", "Camera sensitivity", "Vibration", "GUI scale",
-    "Fast forward", "HP/Mana numbers", "XP counter"
+    "Fast forward", "HP/Mana numbers", "XP counter", "Side step buttons"
     };
+  // The speed is not a part of the vanilla game: its row is there only when a mod has asked for it
+  std::vector<int> rows;
+  for(int i=0; i<SettingCount; ++i) {
+    if(i==SettingSpeed && !featureSpeed)
+      continue;
+    rows.push_back(i);
+    }
+  // the last row opens the editor of the HUD
+  const int   count = int(rows.size())+1;
   // The rows shrink when there are too many of them for the height of the screen (every new setting adds a row)
-  const float pitch = std::min(40.f*scale,(a.b-a.t-36.f*scale)/float(std::max(SettingCount-1,1)));
+  const float pitch = std::min(40.f*scale,(a.b-a.t-36.f*scale)/float(std::max(count-1,1)));
   const float rowH  = std::min(36.f*scale,pitch-2.f*scale)/scale;
-  for(int i=0; i<SettingCount; ++i)
-    add(width*0.22f,a.t+float(i)*pitch,560,rowH,labels[i],Key::Enter).special = Special::FirstSetting+i;
+  float       y     = a.t;
+  for(int i:rows) {
+    add(width*0.22f,y,560,rowH,labels[i],Key::Enter).special = Special::FirstSetting+i;
+    y += pitch;
+    }
+  add(width*0.22f,y,560,rowH,"Edit HUD layout",Key::Enter).special = Special::EditHud;
 
   // The menu of the mods, bottom left: it is never covered by the rows, they start at 22% of the width
   add(a.l,a.b-36.f*scale,150,36,"Mods",Key::Enter).special = Special::Mods;
@@ -295,45 +332,78 @@ void Controls::buildGame(const Anchor&) {
   auto top    = [&](float v) { return fromTop(v); };
   auto bottom = [&](float v) { return fromBottom(v); };
 
-  // Diameter d is given for the default button size
-  auto icon = [&](float x, float y, float d, const char* label, Key key, bool hold=false, int special=0) {
+  // Diameter d is given for the default button size. A button that the player has moved stands where it was put (the
+  // place is a part of the screen, so it is the same in another resolution), a hidden one is not there at all, but
+  // in the editor, where it is dimmed. The menu cannot be hidden: it leads to the editor.
+  auto icon = [&](const char* id, float x, float y, float d, const char* label, Key key, bool hold=false, int special=0) {
+    HudPlace place;
+    const auto it = places.find(id);
+    if(it!=places.end())
+      place = it->second;
+    const bool hidden = place.hidden && std::string(id)!="menu";
+    if(hidden && !editing)
+      return;
+    if(place.placed) {
+      x = place.x*width;
+      y = place.y*height;
+      }
     auto& b = round(x,y,d,label,key);
     b.hold    = hold;
     b.special = special;
+    b.id      = id;
+    b.dimmed  = hidden;
     };
 
-  icon(left(61),   top(36), 50, "MENU",      Key::Escape);
-  icon(left(122),  top(36), 50, "CHARACTER", Key::Status);
-  icon(left(183),  top(36), 50, "SPEED",     Key::Enter, false, Special::Speed);
-  icon(right(124), top(36), 50, "LOG",       Key::Log);
-  icon(right(62),  top(36), 50, "MAP",       Key::Map);
+  icon("menu",      left(61),   top(36), 50, "MENU",      Key::Escape);
+  icon("character", left(122),  top(36), 50, "CHARACTER", Key::Status);
+  // fast forward is not in the vanilla game, a mod switches it on (touch.fastForward)
+  if(featureSpeed)
+    icon("speed",   left(183),  top(36), 50, "SPEED",     Key::Enter, false, Special::Speed);
+  icon("log",       right(124), top(36), 50, "LOG",       Key::Log);
+  icon("map",       right(62),  top(36), 50, "MAP",       Key::Map);
 
   const float stickSize = 180*k*s;
   stick = {left(153.5f)-stickSize/2,bottom(166.5f)-stickSize/2,stickSize,stickSize};
-  icon(left(61),  bottom(36.5f), 50, "SNEAK", Key::Sneak);
-  icon(left(123), bottom(36.5f), 50, "WALK",  Key::Walk);
-  // side steps, right next to the floating stick
-  icon(left(284), bottom(166.5f), 56, "< STEP", Key::StrafeLeft,  true);
-  icon(left(350), bottom(166.5f), 56, "STEP >", Key::StrafeRight, true);
+  icon("sneak",     left(61),  bottom(36.5f), 50, "SNEAK", Key::Sneak);
+  icon("walk",      left(123), bottom(36.5f), 50, "WALK",  Key::Walk);
+  // side steps, right next to the floating stick: an option of the settings
+  if(featureStrafe) {
+    icon("stepleft",  left(284), bottom(166.5f), 56, "< STEP", Key::StrafeLeft,  true);
+    icon("stepright", left(350), bottom(166.5f), 56, "STEP >", Key::StrafeRight, true);
+    }
 
-  icon(right(198),   bottom(221.5f), 88, "ACTION", Key::Action, true);
-  icon(right(285),   bottom(166.5f), 68, "< HIT",  Key::AttackLeft, true);
-  icon(right(111),   bottom(166.5f), 68, "HIT >",  Key::AttackRight, true);
-  icon(right(198),   bottom(111),    88, "BLOCK",  Key::Block, true);
-  icon(right(72),    bottom(266.5f), 66, "JUMP",   Key::Jump, true);
-  icon(right(62),    bottom(36.5f),  50, "INVENTORY", Key::Inventory);
-  icon(right(372),   bottom(230),    56, "TARGET", Key::Enter, false, Special::Target);
-  icon(right(372),   bottom(150),    56, "SPELLS", Key::Enter, false, Special::Spell);
-  icon(right(300),   bottom(276),    52, "WEAPON", Key::Weapon);
+  icon("action",    right(198),   bottom(221.5f), 88, "ACTION", Key::Action, true);
+  icon("hitleft",   right(285),   bottom(166.5f), 68, "< HIT",  Key::AttackLeft, true);
+  icon("hitright",  right(111),   bottom(166.5f), 68, "HIT >",  Key::AttackRight, true);
+  icon("block",     right(198),   bottom(111),    88, "BLOCK",  Key::Block, true);
+  icon("jump",      right(72),    bottom(266.5f), 66, "JUMP",   Key::Jump, true);
+  icon("inventory", right(62),    bottom(36.5f),  50, "INVENTORY", Key::Inventory);
+  icon("target",    right(372),   bottom(230),    56, "TARGET", Key::Enter, false, Special::Target);
+  icon("spells",    right(372),   bottom(150),    56, "SPELLS", Key::Enter, false, Special::Spell);
+  icon("weapon",    right(300),   bottom(276),    52, "WEAPON", Key::Weapon);
 
-  // The hotbar is centered below the status bars and does not depend on the button size
+  // The hotbar is centered below the status bars. Its slots are of the size of the buttons.
+  const float slot = HotbarSlot*k;
   for(int i=0; i<10; ++i) {
     const std::string label = std::to_string((i+1)%10);
     // slots touch each other, the half unit gap only protects from rounding
-    add(width/2-HotbarSlot*5*s+float(i)*HotbarSlot*s+0.25f*s,height-(HotbarBottom+HotbarSlot)*s,
-        HotbarSlot-0.5f,HotbarSlot-0.5f,label.c_str(),Key(int(Key::One)+i));
+    add(width/2-slot*5*s+float(i)*slot*s+0.25f*s,height-(HotbarBottom+slot)*s,
+        slot-0.5f,slot-0.5f,label.c_str(),Key(int(Key::One)+i));
     }
   applyAvailability();
+  }
+
+/// The game screen in which the buttons are dragged. DONE goes back to the settings.
+void Controls::buildHudEditor() {
+  buildGame({});
+  const float s = scale;
+  auto add2 = [&](float x, float y, const char* label, int special) {
+    auto& b = add(x,y,150,44,label,Key::Enter);
+    b.special = special;
+    };
+  // in the middle of the screen: the corners are taken by the buttons
+  add2(width/2-160*s,height*0.5f-22*s,"DONE",Special::HudDone);
+  add2(width/2+10*s, height*0.5f-22*s,"RESET",Special::HudReset);
   }
 
 void Controls::buildMenu(const Anchor&) {
@@ -402,6 +472,11 @@ bool Controls::hasOwner(bool Finger::* role) const {
 void Controls::down(int id, float x, float y, uint64_t now) {
   if(fingers.find(id)!=fingers.end() || fingers.size()>=MaxFingers)
     return;
+
+  if(editing) {
+    downEditor(id,x,y);
+    return;
+    }
 
   Finger f;
   f.startX = f.x = x;
@@ -483,6 +558,10 @@ void Controls::move(int id, float x, float y) {
     return;
 
   auto& f = it->second;
+  if(f.drag) {
+    moveEditor(f,x,y);
+    return;
+    }
   if(f.swipe && (current==Mode::Menu || current==Mode::Inventory || current==Mode::Dialog) && !keyboard)
     events.push_back({Event::MenuTouch,Key::Enter,x,y,1});
   if(f.swipe && std::hypot(x-f.startX,y-f.startY)>TapSlop*scale)
@@ -559,6 +638,30 @@ void Controls::activate(Button button) {
     events.push_back({Event::Special,Key::Enter,0,0,uint32_t(button.special)});
     return;
     }
+  if(button.special==Special::EditHud) {
+    // the settings give the screen to the HUD: the buttons are dragged where they should be
+    cancel();
+    settingsOpen = false;
+    editing      = true;
+    rebuild();
+    events.push_back({Event::Special,Key::Enter,0,0,uint32_t(button.special)});
+    return;
+    }
+  if(button.special==Special::HudDone) {
+    cancel();
+    editing      = false;
+    settingsOpen = true;
+    rebuild();
+    events.push_back({Event::Special,Key::Enter,0,0,uint32_t(button.special)});
+    return;
+    }
+  if(button.special==Special::HudReset) {
+    cancel();
+    places.clear();
+    hudChanged = true;
+    rebuild();
+    return;
+    }
   if(button.special==Special::Mods) {
     // the menu of the mods has the screen: the settings are closed first, they would stay on top of it
     cancel();
@@ -598,6 +701,10 @@ void Controls::up(int id, float x, float y) {
   fingers.erase(it);
   if(f.blocked)
     return;
+  if(f.drag) {
+    upEditor(f);
+    return;
+    }
 
   const float slop = TapSlop*scale;
   if(f.button>=0) {
@@ -694,7 +801,7 @@ bool Controls::pressed(size_t index) const {
   }
 
 void Controls::applyAvailability() {
-  if((current!=Mode::Game && current!=Mode::Inventory) || settingsOpen || keyboard)
+  if((current!=Mode::Game && current!=Mode::Inventory) || settingsOpen || keyboard || editing)
     return;
 
   for(auto& b:layout) {
@@ -731,4 +838,60 @@ void Controls::availability(uint64_t keys, bool target, bool spells, bool moveme
     if(hidden || (f.joystick && !movement))
       cancelFinger(f);
     }
+  }
+
+/// A finger in the editor: a button of the HUD is taken by its place, the others (DONE, RESET) are tapped as usual
+void Controls::downEditor(int id, float x, float y) {
+  Finger f;
+  f.startX = f.x = x;
+  f.startY = f.y = y;
+  for(size_t i=0; i<layout.size(); ++i) {
+    if(!layout[i].visible || !layout[i].rect.contains(x,y))
+      continue;
+    f.button = int(i);
+    if(!layout[i].id.empty()) {
+      f.drag  = true;
+      f.grabX = x-(layout[i].rect.x+layout[i].rect.w/2);
+      f.grabY = y-(layout[i].rect.y+layout[i].rect.h/2);
+      }
+    break;
+    }
+  fingers.emplace(id,f);
+  }
+
+void Controls::moveEditor(Finger& f, float x, float y) {
+  f.x = x;
+  f.y = y;
+  if(f.button<0 || size_t(f.button)>=layout.size())
+    return;
+  if(!f.moved && std::hypot(x-f.startX,y-f.startY)<=TapSlop*scale)
+    return;
+  f.moved = true;
+
+  // the button follows the finger and stays on the screen
+  auto&       b  = layout[size_t(f.button)];
+  const float cx = std::clamp(x-f.grabX,b.rect.w/2,width -b.rect.w/2);
+  const float cy = std::clamp(y-f.grabY,b.rect.h/2,height-b.rect.h/2);
+  b.rect.x = cx-b.rect.w/2;
+  b.rect.y = cy-b.rect.h/2;
+  }
+
+void Controls::upEditor(const Finger& f) {
+  if(f.button<0 || size_t(f.button)>=layout.size())
+    return;
+  const auto& b = layout[size_t(f.button)];
+  auto&       p = places[b.id];
+  if(f.moved) {
+    p.placed = true;
+    p.x      = (b.rect.x+b.rect.w/2)/width;
+    p.y      = (b.rect.y+b.rect.h/2)/height;
+    } else
+  if(b.id!="menu") {
+    // a tap: hidden <-> shown
+    p.hidden = !p.hidden;
+    } else {
+    return;
+    }
+  hudChanged = true;
+  rebuild();
   }

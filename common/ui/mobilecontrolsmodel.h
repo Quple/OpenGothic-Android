@@ -54,8 +54,11 @@ namespace Special {
     Mods,
     Shift,
     Speed,
-    FirstSetting  = 8,
-    FirstCategory = 24
+    EditHud,       // the settings: the layout of the HUD is edited on the game screen
+    HudDone,       // the editor of the HUD: back to the settings
+    HudReset,      // the editor of the HUD: every button goes back to its place
+    FirstSetting  = 11,
+    FirstCategory = 32
     };
   }
 
@@ -72,6 +75,7 @@ enum Setting : int {
   SettingSpeed,
   SettingHudNumbers,
   SettingHudXp,
+  SettingStrafe,
   SettingCount
   };
 
@@ -80,9 +84,35 @@ constexpr int CategoryCount = 9;
 /// Size of the buttons set by default, in percent/100. The layout is designed for it.
 constexpr float DefaultButtonScale = 1.2f;
 
-/// Hotbar below the status bars, in layout units
+/// Hotbar below the status bars, in layout units. The slots are of the size of the buttons: the size is given for
+/// the default size of the buttons, see hotbarSlot.
 constexpr float HotbarSlot   = 51.f;
 constexpr float HotbarBottom = 11.f;
+
+/// The size of the buttons compared to the default one (the buttons, the hotbar and the bars over it follow it)
+inline float sizeFactorOf(float buttons) {
+  const float b = buttons<0.6f ? 0.6f : buttons>1.4f ? 1.4f : buttons;
+  return b/DefaultButtonScale;
+  }
+
+/// A slot of the hotbar in layout units for the size of the buttons (in percent/100)
+inline float hotbarSlot(float buttons) {
+  return HotbarSlot*sizeFactorOf(buttons);
+  }
+
+/// Names of the buttons of the HUD that can be moved and switched off (see Controls::hudPlace)
+constexpr const char* HudIds[] = {
+  "menu", "character", "speed", "log", "map", "sneak", "walk", "stepleft", "stepright",
+  "action", "hitleft", "hitright", "block", "jump", "inventory", "target", "spells", "weapon"
+  };
+constexpr int HudIdCount = int(sizeof(HudIds)/sizeof(HudIds[0]));
+
+/// Where the player has put a button of the HUD. x and y are the center of the button, 0..1 of the screen.
+struct HudPlace {
+  bool  placed = false;   // x and y are used, else the button stands in its default place
+  float x = 0, y = 0;
+  bool  hidden = false;
+  };
 
 struct Rect {
   float x = 0, y = 0, w = 0, h = 0;
@@ -118,6 +148,8 @@ struct Button {
   uint32_t    character = 0;
   bool        visible   = true;
   bool        enabled   = true;
+  std::string id;                   // a button of the HUD that can be moved, see HudIds
+  bool        dimmed    = false;    // a hidden button in the editor of the HUD
   };
 
 struct Event {
@@ -139,6 +171,19 @@ class Controls {
     void  dialogPad(bool visible);
     /// Scale of the interface, the inventory follows it
     void  gui(float scale);
+    /// What the HUD has: the button of the speed is shown only when a mod asks for it, the side steps are an option
+    void  features(bool speed, bool strafe);
+    bool  speedAllowed() const { return featureSpeed; }
+
+    /// The places of the buttons of the HUD that the player has set (the settings are kept by the owner)
+    void  hudPlaces(const std::map<std::string,HudPlace>& places);
+    const std::map<std::string,HudPlace>& hudPlaces() const { return places; }
+    /// true once after the player has moved, hidden or shown a button, or has put everything back
+    bool  takeHudChanged();
+    /// The editor of the HUD is open: the buttons of the game are drawn and are dragged, a tap hides or shows one
+    bool  editingHud() const { return editing; }
+    /// The buttons are those of the game: playing or editing the HUD
+    bool  gameLayout() const { return current==Mode::Game || editing; }
 
     void  down(int id, float x, float y, uint64_t now);
     void  move(int id, float x, float y);
@@ -179,6 +224,9 @@ class Controls {
       bool     camera   = false;
       bool     swipe    = false;
       bool     cancelled = false;
+      bool     drag      = false;   // a button of the HUD in the editor
+      bool     moved     = false;
+      float    grabX = 0, grabY = 0;  // where the finger holds the button, from its center
       float    startX = 0, startY = 0;
       float    x = 0, y = 0;
       uint64_t repeatAt = 0;
@@ -192,6 +240,10 @@ class Controls {
     void  buildSettings(const Anchor& a);
     void  buildKeyboard(const Anchor& a);
     void  buildGame(const Anchor& a);
+    void  buildHudEditor();
+    void  downEditor(int id, float x, float y);
+    void  moveEditor(Finger& f, float x, float y);
+    void  upEditor(const Finger& f);
     void  buildMenu(const Anchor& a);
     void  buildInventory();
     void  buildDialog(const Anchor& a);
@@ -234,6 +286,11 @@ class Controls {
     bool     modsOpen     = false;   // the menu of the mods covers the screen
     bool     twoLists = false; // the inventory shows the other list too
     bool     padVisible = false;
+    bool     featureSpeed  = false;   // a mod has asked for the fast forward
+    bool     featureStrafe = true;    // the buttons of the side steps
+    bool     editing    = false;      // the editor of the HUD
+    bool     hudChanged = false;
+    std::map<std::string,HudPlace> places;
     float    guiScale   = 1;
 
     uint64_t availableKeys     = ~uint64_t(0);

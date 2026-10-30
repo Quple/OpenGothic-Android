@@ -907,10 +907,12 @@ void MainWindow::drawTouchBars(Painter& p, Npc& pl) {
     return;
 
   // above the hotbar of the controls, same units as the model
+  // the hotbar follows the size of the buttons (settings), so do the bars over it
   const float s     = std::min(float(w())/1000.f,float(h())/440.f);
-  const int   half  = int(Mobile::HotbarSlot*5*s);
-  const int   width = int(Mobile::HotbarSlot*3.2f*s);   // the frame keeps its proportions, so it is not too tall
-  const int   y     = h()-int((Mobile::HotbarBottom+Mobile::HotbarSlot+9)*s);
+  const float slot  = Mobile::hotbarSlot(float(pref.buttons)/100.f);
+  const int   half  = int(slot*5*s);
+  const int   width = int(slot*3.2f*s);   // the frame keeps its proportions, so it is not too tall
+  const int   y     = h()-int((Mobile::HotbarBottom+slot+9)*s);
 
   // the bars stand over the ends of the hotbar
   drawBar(p,barHp,w()/2-half,y,width,hp,AlignLeft | AlignBottom);
@@ -1871,6 +1873,9 @@ void MainWindow::setupMobileControls() {
   }
 
 uint64_t MainWindow::fastForwardDt(uint64_t dt) {
+  // the fast forward exists only while a mod asks for it (touch.fastForward), else the game is vanilla
+  if(!Scripting::ModHost::inst().fastForwardWanted())
+    fastForward = false;
   if(!fastForward)
     return dt;
   auto* world  = Gothic::inst().world();
@@ -1897,8 +1902,9 @@ void MainWindow::onMobileAction(int id) {
     return;
     }
 
-    if(id==Mobile::Special::Speed) {
-    fastForward = !fastForward;
+  if(id==Mobile::Special::Speed) {
+    if(Scripting::ModHost::inst().fastForwardWanted())
+      fastForward = !fastForward;
     return;
     }
   if(mobileContext()!=Mobile::Mode::Game)

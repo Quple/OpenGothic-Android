@@ -108,6 +108,7 @@ class Mod final {
     uint64_t                                   storageSaved = 0;
     uint32_t                                   nextId       = 1;
     std::shared_ptr<void>                      netState;    // connections of the mod, see api/api_net.cpp
+    bool                                       fastForward  = false;   // touch.fastForward(true): the mod shows the control of the speed
   };
 
 class ModHost;
@@ -168,6 +169,9 @@ class ModHost final {
     void startEnabled();
     void stopAll();
     size_t runningCount() const;
+    /// A running mod has asked for the fast forward (touch.fastForward(true)): only then the touch interface shows
+    /// the button on the HUD and the setting of the speed. Without such a mod the game is vanilla.
+    bool   fastForwardWanted() const;
 
     // --- frame
     void tick(uint64_t nowMs);
