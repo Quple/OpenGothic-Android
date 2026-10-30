@@ -83,7 +83,7 @@ final class SaveExport {
         }
     }
 
-    private static boolean isSave(String name) {
+    static boolean isSave(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         if (!lower.endsWith(".sav"))
             return false;
