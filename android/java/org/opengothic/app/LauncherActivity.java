@@ -50,6 +50,7 @@ import java.util.zip.ZipInputStream;
 public final class LauncherActivity extends Activity {
     private static final int REQUEST_IMPORT = 1;
     private static final int REQUEST_LOGIN = 3;
+    private static final int REQUEST_EXPORT_SAVES = 4;
     private static final int MAX_ENTRIES = 200000;
     private static final long MAX_SIZE = 20L * 1024 * 1024 * 1024;
 
@@ -375,6 +376,33 @@ public final class LauncherActivity extends Activity {
             refresh();
             return;
         }
+        if (request == REQUEST_EXPORT_SAVES) {
+            if (result != RESULT_OK || data == null || data.getData() == null)
+                return;
+            final Uri destination = data.getData();
+            new Thread(() -> {
+                String failure = null;
+                int count = 0;
+                try {
+                    count = SaveExport.write(this, destination);
+                    if (count == 0)
+                        failure = Texts.t("No save files were found.", "Nie znaleziono plików zapisów.");
+                } catch (IOException e) {
+                    failure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                }
+                final int exported = count;
+                final String error = failure;
+                runOnUiThread(() -> new AlertDialog.Builder(this)
+                        .setTitle(Texts.t("Save export", "Eksport zapisów"))
+                        .setMessage(error == null
+                                ? Texts.t("Exported " + exported + " save files.", "Wyeksportowano " + exported + " plików zapisów.")
+                                : error)
+                        .setPositiveButton("OK", null)
+                        .show());
+            }, "save-export").start();
+            return;
+        }
+
         if (request != REQUEST_IMPORT || result != RESULT_OK || data == null || data.getData() == null || importTarget < 0)
             return;
 
@@ -430,6 +458,13 @@ public final class LauncherActivity extends Activity {
         LinearLayout.LayoutParams mp0 = new LinearLayout.LayoutParams(-2, -2);
         mp0.setMargins(dp(10), 0, 0, 0);
         header.addView(mods, mp0);
+
+        TextView exportSaves = chip(Texts.t("Export saves", "Eksport zapisów"));
+        exportSaves.setOnClickListener(v -> exportSaves());
+        LinearLayout.LayoutParams savesParams = new LinearLayout.LayoutParams(-2, -2);
+        savesParams.setMargins(dp(10), 0, 0, 0);
+        header.addView(exportSaves, savesParams);
+
         accountButton = chip("");
         accountButton.setOnClickListener(v -> accountMenu());
         LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, -2);
@@ -859,6 +894,24 @@ public final class LauncherActivity extends Activity {
         Downloads.state = null;
         startForegroundService(SteamBridge.downloadIntent(this, GAMES[game].appId, GAMES[game].folder, GAMES[game].title, language));
         refresh();
+    }
+
+    /** Lets Android choose a public destination; the app never needs broad storage permissions. */
+    private void exportSaves() {
+        new AlertDialog.Builder(this)
+                .setTitle(Texts.t("Export saves", "Eksport zapisów"))
+                .setMessage(Texts.t(
+                        "Choose where to save a ZIP containing all OpenGothic save files. Save your game and return to the launcher before exporting.",
+                        "Wybierz miejsce zapisania ZIP ze wszystkimi zapisami OpenGothic. Przed eksportem zapisz grę i wróć do launchera."))
+                .setPositiveButton(Texts.t("Choose location", "Wybierz miejsce"), (d, w) -> {
+                    Intent create = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    create.addCategory(Intent.CATEGORY_OPENABLE);
+                    create.setType("application/zip");
+                    create.putExtra(Intent.EXTRA_TITLE, "OpenGothic-Saves.zip");
+                    startActivityForResult(create, REQUEST_EXPORT_SAVES);
+                })
+                .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
+                .show();
     }
 
     private void cardMenu(final int game, View anchor) {
