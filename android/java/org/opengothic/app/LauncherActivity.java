@@ -124,6 +124,7 @@ public final class LauncherActivity extends Activity {
     private volatile String importText = "";
     private int importTarget = -1;
     private int saveImportMode = SaveImport.OVERWRITE;
+    private String saveGameId = "gothic2_notr";
     private boolean ownedAsked;
     private boolean loginShown;
 
@@ -387,7 +388,7 @@ public final class LauncherActivity extends Activity {
                 String failure = null;
                 int count = 0;
                 try {
-                    count = SaveImport.read(this, source, mode);
+                    count = SaveImport.read(this, source, mode, saveGameId);
                     if (count == 0)
                         failure = Texts.t("No save files were found in this archive.", "W archiwum nie znaleziono zapisów gry.");
                 } catch (IOException e) {
@@ -413,7 +414,7 @@ public final class LauncherActivity extends Activity {
                 String failure = null;
                 int count = 0;
                 try {
-                    count = SaveExport.write(this, destination);
+                    count = SaveExport.write(this, destination, saveGameId);
                     if (count == 0)
                         failure = Texts.t("No save files were found.", "Nie znaleziono plików zapisów.");
                 } catch (IOException e) {
@@ -923,7 +924,19 @@ public final class LauncherActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33)
             requestPermissions(new String[] {"android.permission.POST_NOTIFICATIONS"}, 1);
         Downloads.state = null;
-        startForegroundService(SteamBridge.downloadIntent(this, GAMES[game].appId, GAMES[game].folder, GAMES[game].title, language));
+            Intent downloadIntent = SteamBridge.downloadIntent(
+            this,
+            GAMES[game].appId,
+            GAMES[game].folder,
+            GAMES[game].title,
+            language
+    );
+
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        startForegroundService(downloadIntent);
+    } else {
+        startService(downloadIntent);
+    }
         refresh();
     }
 
@@ -944,38 +957,51 @@ public final class LauncherActivity extends Activity {
                 .show();
     }
 
-    /** Lets Android choose a public destination; the app never needs broad storage permissions. */
+    /** Export one game's save namespace into a ZIP with an embedded game identifier. */
     private void exportSaves() {
+        final String[] games = {
+                "Gothic 1", "Gothic 2", "Gothic 2 Noc Kruka", "Gothic 2 Kroniki Myrtany"
+        };
+        final String[] ids = {"gothic1", "gothic2", "gothic2_notr", "myrtana"};
         new AlertDialog.Builder(this)
-                .setTitle(Texts.t("Export saves", "Eksport zapisów"))
-                .setMessage(Texts.t(
-                        "Choose where to save a ZIP containing all OpenGothic save files. Save your game and return to the launcher before exporting.",
-                        "Wybierz miejsce zapisania ZIP ze wszystkimi zapisami OpenGothic. Przed eksportem zapisz grę i wróć do launchera."))
-                .setPositiveButton(Texts.t("Choose location", "Wybierz miejsce"), (d, w) -> {
+                .setTitle(Texts.t("Choose game to export", "Wybierz grę do eksportu"))
+                .setItems(games, (dialog, which) -> {
+                    saveGameId = ids[which];
                     Intent create = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                     create.addCategory(Intent.CATEGORY_OPENABLE);
                     create.setType("application/zip");
-                    create.putExtra(Intent.EXTRA_TITLE, "OpenGothic-Saves.zip");
+                    create.putExtra(Intent.EXTRA_TITLE, "OpenGothic-" + ids[which] + "-Saves.zip");
                     startActivityForResult(create, REQUEST_EXPORT_SAVES);
                 })
                 .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
                 .show();
     }
 
-    /** Imports a previously exported ZIP of saves, either replacing matching slots or assigning fresh slots. */
+    /** Select a game namespace, then retain the original overwrite/separate-slot choice. */
     private void importSaves() {
-        final String[] choices = {
-                Texts.t("Overwrite saves with matching names", "Nadpisz zapisy o tych samych nazwach"),
-                Texts.t("Add all saves as separate slots", "Dodaj wszystkie zapisy jako osobne sloty")
+        final String[] games = {
+                "Gothic 1", "Gothic 2", "Gothic 2 Noc Kruka", "Gothic 2 Kroniki Myrtany"
         };
+        final String[] ids = {"gothic1", "gothic2", "gothic2_notr", "myrtana"};
         new AlertDialog.Builder(this)
-                .setTitle(Texts.t("Import saves", "Import zapisów"))
-                .setItems(choices, (dialog, which) -> {
-                    saveImportMode = which == 0 ? SaveImport.OVERWRITE : SaveImport.ADD_SEPARATELY;
-                    Intent open = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    open.addCategory(Intent.CATEGORY_OPENABLE);
-                    open.setType("application/zip");
-                    startActivityForResult(open, REQUEST_IMPORT_SAVES);
+                .setTitle(Texts.t("Choose game in archive", "Wybierz grę z archiwum"))
+                .setItems(games, (dialog, game) -> {
+                    saveGameId = ids[game];
+                    final String[] modes = {
+                            Texts.t("Overwrite saves with matching names", "Nadpisz zapisy o tych samych nazwach"),
+                            Texts.t("Add all saves as separate slots", "Dodaj wszystkie zapisy jako osobne sloty")
+                    };
+                    new AlertDialog.Builder(this)
+                            .setTitle(Texts.t("Import saves", "Import zapisów"))
+                            .setItems(modes, (d, which) -> {
+                                saveImportMode = which == 0 ? SaveImport.OVERWRITE : SaveImport.ADD_SEPARATELY;
+                                Intent open = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                                open.addCategory(Intent.CATEGORY_OPENABLE);
+                                open.setType("application/zip");
+                                startActivityForResult(open, REQUEST_IMPORT_SAVES);
+                            })
+                            .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
+                            .show();
                 })
                 .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
                 .show();

@@ -27,7 +27,7 @@ final class SaveImport {
 
     private SaveImport() { }
 
-    static int read(Context context, Uri source, int mode) throws IOException {
+    static int read(Context context, Uri source, int mode, String gameId) throws IOException {
         File internal = context.getFilesDir().getCanonicalFile();
         File external = context.getExternalFilesDir(null);
         if (external != null) external = external.getCanonicalFile();
@@ -57,7 +57,7 @@ final class SaveImport {
                         relative = name.substring("saves/external/".length());
                     } else { zip.closeEntry(); continue; }
 
-                    if (!SaveExport.isSave(new File(relative).getName()) || !safeRelative(relative)) {
+                    if (!SaveExport.isSave(new File(relative).getName()) || !SaveExport.belongsToGame(new File(relative).getName(), gameId) || !safeRelative(relative)) {
                         zip.closeEntry(); continue;
                     }
                     File original = new File(root, relative).getCanonicalFile();
@@ -69,13 +69,16 @@ final class SaveImport {
                     if (mode == ADD_SEPARATELY) {
                         Set<Integer> slots = usedSlots.get(parentKey);
                         if (slots == null) {
-                            slots = scanSlots(original.getParentFile());
+                            slots = scanSlots(original.getParentFile(), gameId);
                             usedSlots.put(parentKey, slots);
                         }
                         int next = 0;
                         while (slots.contains(next)) next++;
                         slots.add(next);
-                        destination = new File(original.getParentFile(), "save_slot_" + next + ".sav");
+                        String originalName = original.getName();
+                        int marker = originalName.toLowerCase(Locale.ROOT).lastIndexOf("save_slot_");
+                        String prefix = marker >= 0 ? originalName.substring(0, marker) : "";
+                        destination = new File(original.getParentFile(), prefix + "save_slot_" + next + ".sav");
                     }
                     String destKey = destination.getCanonicalPath();
                     if (!destinations.add(destKey)) throw new IOException("Archiwum zawiera powtórzone zapisy.");
@@ -122,14 +125,16 @@ final class SaveImport {
         return count;
     }
 
-    private static Set<Integer> scanSlots(File dir) {
+    private static Set<Integer> scanSlots(File dir, String gameId) {
         Set<Integer> slots = new HashSet<>();
         File[] files = dir != null ? dir.listFiles() : null;
         if (files != null) for (File file : files) {
             String name = file.getName().toLowerCase(Locale.ROOT);
-            if (name.startsWith("save_slot_") && name.endsWith(".sav")) {
-                try { slots.add(Integer.parseInt(name.substring(10, name.length() - 4))); }
-                catch (NumberFormatException ignored) { }
+            if (SaveExport.belongsToGame(name, gameId)) {
+                try {
+                    int marker = name.lastIndexOf("save_slot_");
+                    slots.add(Integer.parseInt(name.substring(marker + 10, name.length() - 4)));
+                } catch (RuntimeException ignored) { }
             }
         }
         return slots;
