@@ -110,8 +110,8 @@ class Mod final {
     uint64_t                                   storageSaved = 0;
     uint32_t                                   nextId       = 1;
     std::shared_ptr<void>                      netState;    // connections of the mod, see api/api_net.cpp
-    bool                                       fastForward  = false;   // touch.fastForward(true): the mod shows the control of the speed
-    CombatOptions                              combat;                 // combat.configure(...): numbers of damage and defense in a fight
+    bool                                       fastForward  = false;   // touch.fastForward(true)
+    CombatOptions                              combat;                 // combat.configure(...)
   };
 
 class ModHost;

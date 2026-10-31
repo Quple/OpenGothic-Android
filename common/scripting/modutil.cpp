@@ -1,5 +1,6 @@
 #include "modutil.h"
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <fstream>
@@ -33,7 +34,7 @@ bool validUtf8(std::string_view s) {
     if(c>=0xF0)      n = 3;
     else if(c>=0xE0) n = 2;
     else if(c>=0xC2) n = 1;
-    if(i+n>=s.size()+(n==0 ? 1 : 0))
+    if(i+n>=s.size())
       return false;
     for(size_t k=1;k<=n;++k)
       if((static_cast<unsigned char>(s[i+k])&0xC0)!=0x80)
@@ -78,9 +79,7 @@ char plainLetter(char32_t u) {
 }
 
 std::string gameToUtf8(std::string_view text) {
-  bool ascii = true;
-  for(char c:text)
-    if(static_cast<unsigned char>(c)>=0x80) { ascii = false; break; }
+  const bool ascii = std::all_of(text.begin(),text.end(),[](char c) { return static_cast<unsigned char>(c)<0x80; });
   if(ascii || validUtf8(text))
     return std::string(text);
 
@@ -105,11 +104,27 @@ std::string utf8ToGame(std::string_view text) {
     const unsigned char c = static_cast<unsigned char>(text[i]);
     char32_t u  = c;
     size_t   n  = 0;
-    if(c>=0xF0)      { u = c&0x07; n = 3; }
-    else if(c>=0xE0) { u = c&0x0F; n = 2; }
-    else if(c>=0xC0) { u = c&0x1F; n = 1; }
-    if(c>=0x80 && n==0) { out += '?'; ++i; continue; } // stray byte
-    if(i+n>=text.size()+1) { out += '?'; break; }
+    if(c>=0xF0) {
+      u = c&0x07;
+      n = 3;
+      } else
+    if(c>=0xE0) {
+      u = c&0x0F;
+      n = 2;
+      } else
+    if(c>=0xC0) {
+      u = c&0x1F;
+      n = 1;
+      }
+    if(c>=0x80 && n==0) {   // a stray byte
+      out += '?';
+      ++i;
+      continue;
+      }
+    if(i+n>=text.size()) {
+      out += '?';
+      break;
+      }
     for(size_t k=1;k<=n;++k)
       u = (u<<6) | (static_cast<unsigned char>(text[i+k])&0x3F);
     i += n+1;
@@ -120,7 +135,10 @@ std::string utf8ToGame(std::string_view text) {
       }
     char b = 0;
     for(int k=0;k<128;++k)
-      if(Cp1250[k]==u) { b = char(0x80+k); break; }
+      if(Cp1250[k]==u) {
+        b = char(0x80+k);
+        break;
+        }
     out += b!=0 ? b : plainLetter(u);
     }
   return out;

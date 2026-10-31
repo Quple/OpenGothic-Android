@@ -1,8 +1,5 @@
 #include "scripting/gameapi.h"
 
-#include <cstdlib>
-#include <string>
-
 #include "scripting/modjs.h"
 #include "scripting/modutil.h"
 #include "game/worldmarkers.h"
@@ -33,24 +30,9 @@ JSValue marker(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   int      ms    = 1500;
   int      size  = 1;
   if(argc>=4 && JS_IsObject(argv[3])) {
-    JSValue c = JS_GetPropertyStr(ctx,argv[3],"color");
-    if(JS_IsString(c)) {
-      const std::string s = js::str(ctx,c);
-      const char* b = s.c_str();
-      if(*b=='#')
-        ++b;
-      char* end = nullptr;
-      const unsigned long v = std::strtoul(b,&end,16);
-      if(end!=b)
-        color = uint32_t(v&0xFFFFFF);
-      }
-    JS_FreeValue(ctx,c);
-    JSValue d = JS_GetPropertyStr(ctx,argv[3],"duration");
-    if(JS_IsNumber(d)) { double v=0; JS_ToFloat64(ctx,&v,d); ms = int(v); }
-    JS_FreeValue(ctx,d);
-    JSValue sz = JS_GetPropertyStr(ctx,argv[3],"size");
-    if(JS_IsNumber(sz)) { double v=0; JS_ToFloat64(ctx,&v,sz); size = int(v); }
-    JS_FreeValue(ctx,sz);
+    js::getColor(ctx,argv[3],"color",   color);
+    js::getInt  (ctx,argv[3],"duration",ms);
+    js::getInt  (ctx,argv[3],"size",    size);
     }
   WorldMarkers::inst().add(Tempest::Vec3(float(x),float(y),float(z)),color,ms,size);
   return JS_UNDEFINED;
