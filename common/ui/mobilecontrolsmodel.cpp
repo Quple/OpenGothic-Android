@@ -405,7 +405,8 @@ void Controls::buildGame(const Anchor&) {
   // Diameter d is given for the default button size. A button that the player has moved stands where it was put (the
   // place is a part of the screen, so it is the same in another resolution), a hidden one is not there at all, but
   // in the editor, where it is dimmed. The menu cannot be hidden: it leads to the editor.
-  auto icon = [&](const char* id, float x, float y, float d, const char* label, Key key, bool hold=false, int special=0) {
+  auto icon = [&](const char* id, float x, float y, float d, const char* label, Key key,
+                  bool hold=false, int special=0) {
     HudPlace place;
     const auto it = places.find(id);
     if(it!=places.end())
@@ -429,7 +430,7 @@ void Controls::buildGame(const Anchor&) {
   // quick save: next to the speed button; not when the player is dead
   if(!dead)
     icon("quicksave", left(183), top(36), 50, "SAVE",    Key::Enter, false, Special::QuickSave);
-  // fast forward is not in the vanilla game, a mod switches it on (touch.fastForward); it is hidden when the player is dead
+  // fast forward is not in the vanilla game, a mod switches it on (touch.fastForward); not when the player is dead
   if(featureSpeed && !dead)
     icon("speed",   left(244),  top(36), 50, "SPEED",     Key::Enter, false, Special::Speed);
   icon("log",       right(124), top(36), 50, "LOG",       Key::Log);

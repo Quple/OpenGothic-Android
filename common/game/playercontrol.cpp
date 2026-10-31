@@ -1,7 +1,9 @@
 #include "playercontrol.h"
+
 #include <algorithm>
 #include <cmath>
 #include <vector>
+
 #include "world/objects/npc.h"
 #include "world/objects/item.h"
 #include "world/objects/interactive.h"
@@ -11,10 +13,11 @@
 #include "gothic.h"
 
 namespace {
+
 // 25 m: the units of the world are centimeters
 constexpr float LockRange = 2500.f;
-}
 
+}
 
 PlayerControl::PlayerControl(DialogMenu& dlg, InventoryMenu &inv)
   :dlg(dlg),inv(inv) {
@@ -433,7 +436,7 @@ void PlayerControl::moveFocus(FocusAction act) {
     return;
   currentFocus.npc = next;
   if(lockedNpc!=nullptr)
-  lockedNpc = next;
+    lockedNpc = next;
   }
 
 void PlayerControl::toggleWalkMode() {
@@ -1261,16 +1264,13 @@ void PlayerControl::cycleTarget() {
   if(lockedNpc!=nullptr) {
     // the next one to the right; after the last one (or when the held target is out of the view) the lock is
     // released, so the button can turn the lock off. The next press takes the nearest to the center again.
-    bool found = false;
     for(size_t i=0; i<list.size(); ++i) {
       if(list[i].npc==lockedNpc) {
-        found = true;
         if(i+1<list.size())
           next = list[i+1].npc;
         break;
         }
       }
-    (void)found;
     if(next==nullptr) {
       unlockTarget(*pl);
       return;

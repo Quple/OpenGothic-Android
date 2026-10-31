@@ -771,7 +771,8 @@ void MainWindow::paintFocus(Painter& p, const Focus& focus, const Matrix4x4& vp)
     if(co.active && co.showEnemyHp && barBack!=nullptr) {
       const int   barW = int(200.f*scale*float(std::min(w(),800))/800.f);
       const int   barH = int(float(barBack->h())*float(barW)/float(std::max(barBack->w(),1)));
-      const std::string text = std::to_string(focus.npc->attribute(ATR_HITPOINTS))+"/"+std::to_string(focus.npc->attribute(ATR_HITPOINTSMAX));
+      const std::string text = std::to_string(focus.npc->attribute(ATR_HITPOINTS))+"/"+
+                               std::to_string(focus.npc->attribute(ATR_HITPOINTSMAX));
       const auto  ts   = fnt.textSize(text);
       const int   tx   = w()/2-ts.w/2;
       const int   ty   = 10+barH+ts.h;
@@ -895,7 +896,8 @@ void MainWindow::drawTouchBars(Painter& p, Npc& pl) {
   const auto  pref      = AndroidInput::preferences();
   const bool  numbers   = pref.hudNumbers!=0;
   const bool  xp        = pref.hudXp!=0;
-  const auto  hpText    = std::to_string(pl.attribute(ATR_HITPOINTS))+"/"+std::to_string(pl.attribute(ATR_HITPOINTSMAX));
+  const auto  hpText    = std::to_string(pl.attribute(ATR_HITPOINTS))+"/"+
+                          std::to_string(pl.attribute(ATR_HITPOINTSMAX));
   const auto  mpText    = std::to_string(pl.attribute(ATR_MANA))+"/"+std::to_string(pl.attribute(ATR_MANAMAX));
   const auto  xpText    = std::to_string(pl.experience())+"/"+std::to_string(pl.experienceNext());
   auto&       hudFont   = Resources::font(Gothic::interfaceScale(this));
@@ -1288,6 +1290,8 @@ uint64_t MainWindow::tick() {
 #ifdef OPENGOTHIC_TOUCH_UI
   total = fastForwardDt(dt);
 #endif
+  if(dialogs.isActive())
+    ;//clearInput();
   const uint64_t steps = std::max<uint64_t>(1,(total+49)/50);
   for(uint64_t i=0; i<steps; ++i) {
     const uint64_t step = total/steps + (i<total%steps ? 1 : 0);
@@ -1943,9 +1947,11 @@ void MainWindow::onMobileAction(int id) {
     auto* pl = Gothic::inst().player();
     if(pl!=nullptr && pl->isDead()) {
       const auto saves = SaveStore::list();
-      if(!saves.empty())
-        Gothic::inst().load(saves.front().file); else
+      if(saves.empty()) {
         Gothic::inst().onPrint("No save to load");
+        } else {
+        Gothic::inst().load(saves.front().file);
+        }
       }
     return;
     }
@@ -2003,10 +2009,8 @@ void MainWindow::updateMobileAvailability() {
   const auto mode  = mobileContext();
 
   // a dead player: no button of the speed, a button that loads the newest save instead
-  {
-  auto pl = Gothic::inst().player();
-  androidControls.playerDead(mode==Mobile::Mode::Game && pl!=nullptr && pl->isDead());
-  }
+  const auto* dead = Gothic::inst().player();
+  androidControls.playerDead(mode==Mobile::Mode::Game && dead!=nullptr && dead->isDead());
 
   if(mode==Mobile::Mode::Game) {
     bool target = false, spells = false, movement = false;

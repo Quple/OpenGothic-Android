@@ -30,7 +30,8 @@ namespace {
 
 constexpr int      GlyphAlpha = 48; // pixels below this are considered a halo, not a part of the glyph
 constexpr char     Section[]  = "MOBILE";
-constexpr char     HudSection[] = "MOBILE_HUD";   // places of the buttons of the HUD: <id>_x, <id>_y (permille+1, 0: not set), <id>_h
+// places of the buttons of the HUD: <id>_x, <id>_y (permille+1, 0: not set), <id>_h (hidden), <id>_s (size step+1)
+constexpr char     HudSection[] = "MOBILE_HUD";
 
 // Files of android/assets/touch-icons, in the order of AndroidInput::Icon
 const char* const IconFiles[AndroidInput::IconCount] = {
@@ -48,7 +49,8 @@ const char* const IconFiles[AndroidInput::IconCount] = {
   };
 
 const char* const SettingNames[Mobile::SettingCount] = {
-  "buttons", "resolution", "shadows", "effects", "fps", "deadzone", "sensitivity", "vibration", "gui", "speed", "hudnumbers", "hudxp", "strafe"
+  "buttons", "resolution", "shadows", "effects", "fps", "deadzone", "sensitivity", "vibration", "gui",
+  "speed", "hudnumbers", "hudxp", "strafe"
   };
 
 // Gives access to the dispatch functions of SystemApi
