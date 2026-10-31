@@ -8,8 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Are the archives of the game whole. A Gothic archive (VDF) has "PSVDSC_V2.00" after a comment of 256 bytes; an interrupted download or a damaged
- * ZIP leaves files of the right size with no content. The engine then finds no world and has nothing to play.
+ * Are the archives of the game whole. A Gothic archive (VDF) has "PSVDSC_V2.00" after a comment of 256 bytes; an
+ * interrupted download or a damaged ZIP leaves files of the right size with no content. The engine then finds no
+ * world and has nothing to play.
  */
 final class GameFiles {
     private GameFiles() {
@@ -37,8 +38,8 @@ final class GameFiles {
     }
 
     /**
-     * A line for the player about an archive that is not a VDF: the name, the size and the first bytes. An empty file or
-     * zeros are a damaged copy, another start is a file that the check does not know.
+     * A line for the player about an archive that is not a VDF: the name, the size and the first bytes. An empty file
+     * or zeros are a damaged copy, another start is a file that the check does not know.
      */
     static String describe(File root, String name) {
         File f = new File(new File(root, "Data"), name);
@@ -49,7 +50,8 @@ final class GameFiles {
             if (n > 0) {
                 text.append(", ");
                 for (int i = 0; i < n; ++i)
-                    text.append(String.format(java.util.Locale.ROOT, "%02x", head[i] & 0xff)).append(i + 1 < n ? " " : "");
+                    text.append(String.format(java.util.Locale.ROOT, "%02x", head[i] & 0xff))
+                            .append(i + 1 < n ? " " : "");
             }
         } catch (IOException e) {
             text.append(", ").append(e.getClass().getSimpleName());

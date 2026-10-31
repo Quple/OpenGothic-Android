@@ -28,7 +28,8 @@ final class SaveExport {
 
         try (OutputStream raw = context.getContentResolver().openOutputStream(destination, "w")) {
             if (raw == null)
-                throw new IOException("Android could not open the selected destination.");
+                throw new IOException(Texts.t("Android could not open the selected destination.",
+                        "Android nie mógł otworzyć wybranego miejsca zapisu."));
 
             try (ZipOutputStream zip = new ZipOutputStream(raw)) {
                 zip.putNextEntry(new ZipEntry("opengothic/game.txt"));
@@ -48,8 +49,8 @@ final class SaveExport {
         return count[0];
     }
 
-    private static void addTree(File root, File dir, String prefix, int depth,
-                                ZipOutputStream zip, Set<String> entries, int[] count, String gameId) throws IOException {
+    private static void addTree(File root, File dir, String prefix, int depth, ZipOutputStream zip,
+                                Set<String> entries, int[] count, String gameId) throws IOException {
         if (depth > MAX_DEPTH || dir == null || !dir.isDirectory())
             return;
 
@@ -85,7 +86,6 @@ final class SaveExport {
             count[0]++;
         }
     }
-
 
     static boolean belongsToGame(String name, String gameId) {
         String lower = name.toLowerCase(Locale.ROOT);

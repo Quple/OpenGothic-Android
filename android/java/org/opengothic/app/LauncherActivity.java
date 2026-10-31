@@ -52,6 +52,10 @@ public final class LauncherActivity extends Activity {
     private static final int REQUEST_LOGIN = 3;
     private static final int REQUEST_EXPORT_SAVES = 4;
     private static final int REQUEST_IMPORT_SAVES = 5;
+    private static final String[] SAVE_GAMES = {
+            "Gothic 1", "Gothic 2", "Gothic 2 Noc Kruka", "Gothic 2 Kroniki Myrtany"
+    };
+    private static final String[] SAVE_GAME_IDS = {"gothic1", "gothic2", "gothic2_notr", "myrtana"};
     private static final int MAX_ENTRIES = 200000;
     private static final long MAX_SIZE = 20L * 1024 * 1024 * 1024;
 
@@ -379,60 +383,12 @@ public final class LauncherActivity extends Activity {
             refresh();
             return;
         }
-        if (request == REQUEST_IMPORT_SAVES) {
+        if (request == REQUEST_IMPORT_SAVES || request == REQUEST_EXPORT_SAVES) {
             if (result != RESULT_OK || data == null || data.getData() == null)
                 return;
-            final Uri source = data.getData();
-            final int mode = saveImportMode;
-            new Thread(() -> {
-                String failure = null;
-                int count = 0;
-                try {
-                    count = SaveImport.read(this, source, mode, saveGameId);
-                    if (count == 0)
-                        failure = Texts.t("No save files were found in this archive.", "W archiwum nie znaleziono zapisów gry.");
-                } catch (IOException e) {
-                    failure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                }
-                final int imported = count;
-                final String error = failure;
-                runOnUiThread(() -> new AlertDialog.Builder(this)
-                        .setTitle(Texts.t("Save import", "Import zapisów"))
-                        .setMessage(error == null
-                                ? Texts.t("Imported " + imported + " save files.", "Zaimportowano " + imported + " plików zapisów.")
-                                : error)
-                        .setPositiveButton("OK", null)
-                        .show());
-            }, "save-import").start();
+            runSaveTransfer(request == REQUEST_EXPORT_SAVES, data.getData());
             return;
         }
-        if (request == REQUEST_EXPORT_SAVES) {
-            if (result != RESULT_OK || data == null || data.getData() == null)
-                return;
-            final Uri destination = data.getData();
-            new Thread(() -> {
-                String failure = null;
-                int count = 0;
-                try {
-                    count = SaveExport.write(this, destination, saveGameId);
-                    if (count == 0)
-                        failure = Texts.t("No save files were found.", "Nie znaleziono plików zapisów.");
-                } catch (IOException e) {
-                    failure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                }
-                final int exported = count;
-                final String error = failure;
-                runOnUiThread(() -> new AlertDialog.Builder(this)
-                        .setTitle(Texts.t("Save export", "Eksport zapisów"))
-                        .setMessage(error == null
-                                ? Texts.t("Exported " + exported + " save files.", "Wyeksportowano " + exported + " plików zapisów.")
-                                : error)
-                        .setPositiveButton("OK", null)
-                        .show());
-            }, "save-export").start();
-            return;
-        }
-
         if (request != REQUEST_IMPORT || result != RESULT_OK || data == null || data.getData() == null || importTarget < 0)
             return;
 
@@ -924,20 +880,46 @@ public final class LauncherActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33)
             requestPermissions(new String[] {"android.permission.POST_NOTIFICATIONS"}, 1);
         Downloads.state = null;
-            Intent downloadIntent = SteamBridge.downloadIntent(
-            this,
-            GAMES[game].appId,
-            GAMES[game].folder,
-            GAMES[game].title,
-            language
-    );
-
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-        startForegroundService(downloadIntent);
-    } else {
-        startService(downloadIntent);
-    }
+        Intent download = SteamBridge.downloadIntent(this, GAMES[game].appId, GAMES[game].folder, GAMES[game].title,
+                language);
+        // startForegroundService exists since Android 8, the minimum of the app is lower
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            startForegroundService(download);
+        else
+            startService(download);
         refresh();
+    }
+
+    /** Writes the saves to a ZIP or reads them from one on a thread, the result is shown in a dialog. */
+    private void runSaveTransfer(final boolean exporting, final Uri uri) {
+        final int mode = saveImportMode;
+        final String gameId = saveGameId;
+        new Thread(() -> {
+            String failure = null;
+            int count = 0;
+            try {
+                count = exporting ? SaveExport.write(this, uri, gameId) : SaveImport.read(this, uri, mode, gameId);
+                if (count == 0)
+                    failure = exporting
+                            ? Texts.t("No save files were found.", "Nie znaleziono plików zapisów.")
+                            : Texts.t("No save files were found in this archive.",
+                                    "W archiwum nie znaleziono zapisów gry.");
+            } catch (IOException e) {
+                failure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            }
+            final int done = count;
+            final String error = failure;
+            runOnUiThread(() -> new AlertDialog.Builder(this)
+                    .setTitle(exporting
+                            ? Texts.t("Save export", "Eksport zapisów")
+                            : Texts.t("Save import", "Import zapisów"))
+                    .setMessage(error != null ? error : exporting
+                            ? Texts.t("Exported " + done + " save files.", "Wyeksportowano " + done + " plików zapisów.")
+                            : Texts.t("Imported " + done + " save files.",
+                                    "Zaimportowano " + done + " plików zapisów."))
+                    .setPositiveButton("OK", null)
+                    .show());
+        }, exporting ? "save-export" : "save-import").start();
     }
 
     /** A single panel for importing and exporting game saves. */
@@ -959,10 +941,8 @@ public final class LauncherActivity extends Activity {
 
     /** Export one game's save namespace into a ZIP with an embedded game identifier. */
     private void exportSaves() {
-        final String[] games = {
-                "Gothic 1", "Gothic 2", "Gothic 2 Noc Kruka", "Gothic 2 Kroniki Myrtany"
-        };
-        final String[] ids = {"gothic1", "gothic2", "gothic2_notr", "myrtana"};
+        final String[] games = SAVE_GAMES;
+        final String[] ids = SAVE_GAME_IDS;
         new AlertDialog.Builder(this)
                 .setTitle(Texts.t("Choose game to export", "Wybierz grę do eksportu"))
                 .setItems(games, (dialog, which) -> {
@@ -979,10 +959,8 @@ public final class LauncherActivity extends Activity {
 
     /** Select a game namespace, then retain the original overwrite/separate-slot choice. */
     private void importSaves() {
-        final String[] games = {
-                "Gothic 1", "Gothic 2", "Gothic 2 Noc Kruka", "Gothic 2 Kroniki Myrtany"
-        };
-        final String[] ids = {"gothic1", "gothic2", "gothic2_notr", "myrtana"};
+        final String[] games = SAVE_GAMES;
+        final String[] ids = SAVE_GAME_IDS;
         new AlertDialog.Builder(this)
                 .setTitle(Texts.t("Choose game in archive", "Wybierz grę z archiwum"))
                 .setItems(games, (dialog, game) -> {
