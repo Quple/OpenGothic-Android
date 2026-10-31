@@ -158,7 +158,7 @@ The journal. `quests.create(id, title, section)` (section 0 mission, 1 note), `q
 
 1. Copy `mods/example` and change `manifest.json`.
 2. Press `F10`, tab *Mods*, *Reset* after every change of the files. The errors are in the *Console* tab.
-3. To test the mods without the game, see file `tests/mods/README.md`.
+3. To test the mods without the game, see `tests/mods/README.md`.
 
 The files of the system are split by what they do:
 
