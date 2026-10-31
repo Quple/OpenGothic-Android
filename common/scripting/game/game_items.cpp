@@ -6,12 +6,12 @@
 #include <vector>
 
 #include "game/constants.h"
-#include "gothic.h"
+#include "game/inventory.h"
+#include "physics/dynamicworld.h"
 #include "world/objects/item.h"
 #include "world/objects/npc.h"
-#include "physics/dynamicworld.h"
-#include "game/inventory.h"
 #include "world/world.h"
+#include "gothic.h"
 
 using namespace Scripting;
 
@@ -33,7 +33,6 @@ void put(JSContext* ctx, JSValueConst obj, const char* name, bool v) {
 void put(JSContext* ctx, JSValueConst obj, const char* name, const std::string& v) {
   JS_SetPropertyStr(ctx,obj,name,JS_NewString(ctx,gameToUtf8(v).c_str()));
   }
-
 
 /// true if nothing of the level (walls, the floor, closed doors) is between the chest of the player and the point
 bool lineOfSight(World& world, Npc& pl, const Tempest::Vec3& to) {
@@ -113,10 +112,10 @@ JSValue nearby(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   return arr;
   }
 
-/// items.pickup(index, animate=true): the player takes the item, the same way as with the action key (the animation, the theft
-/// that the characters can see). true if the item is taken. It is not taken in a talk, in the pause, when the player
-/// is down or busy, or when the item is farther than 15 m. With `animate` false the player does not
-/// stop and does not play the animation: the item just goes to the inventory (the player can walk or run).
+/// items.pickup(index, animate=true): the player takes the item, the same way as with the action key (the animation,
+/// the theft that the characters can see). true if the item is taken. It is not taken in a talk, in the pause, when the
+/// player is down or busy, or when the item is farther than 15 m. With `animate` false the player does not stop and
+/// does not play the animation: the item just goes to the inventory (the player can walk or run).
 JSValue pickup(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   auto* world = Gothic::inst().world();
   auto* pl    = Gothic::inst().player();
@@ -136,7 +135,6 @@ JSValue pickup(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
     animate = JS_ToBool(ctx,argv[1])>0;
   return JS_NewBool(ctx,pl->takeItem(*it,animate)!=nullptr);
   }
-
 
 /// items.corpses(radius, unconscious=false): the dead characters around the player (and the unconscious ones, if asked)
 /// with the things that the game lets to take from them (the same as searching a body: what the character wears and
@@ -253,10 +251,10 @@ JSValue count(JSContext* ctx, JSValueConst, int, JSValueConst*) {
 void game::installItems(JSContext* ctx) {
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue items  = JS_NewObject(ctx);
-  js::fn(ctx,items,"nearby",nearby,1);
-  js::fn(ctx,items,"pickup",pickup,1);
-  js::fn(ctx,items,"count", count,0);
-  js::fn(ctx,items,"corpses",corpses,2);
+  js::fn(ctx,items,"nearby",    nearby,    1);
+  js::fn(ctx,items,"pickup",    pickup,    2);
+  js::fn(ctx,items,"count",     count,     0);
+  js::fn(ctx,items,"corpses",   corpses,   2);
   js::fn(ctx,items,"lootCorpse",lootCorpse,2);
   JS_SetPropertyStr(ctx,global,"items",items);
   JS_FreeValue(ctx,global);

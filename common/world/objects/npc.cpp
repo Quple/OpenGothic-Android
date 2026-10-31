@@ -4034,7 +4034,7 @@ Item* Npc::takeItem(Item& item, bool animate) {
     return nullptr;
 
   auto state = bodyStateMasked();
-  // without the animation (a mod picks the item up "on the move") the player can walk or run too, it does not have to stop
+  // without the animation (a mod picks the item up "on the move") the player can walk or run, it does not have to stop
   const bool onTheMove = !animate && (state==BS_WALK || state==BS_RUN || state==BS_SPRINT);
   if(state!=BS_STAND && state!=BS_SNEAK && state!=BS_SWIM && state!=BS_DIVE && !onTheMove) {
     return nullptr;
