@@ -23,6 +23,67 @@ constexpr float    StickPressAt    = 0.30f;
 constexpr float    StickReleaseAt  = 0.20f;
 
 constexpr float    MenuGestureSplit = 0.42f;
+
+// The buttons of the HUD in the editor are solid: they are round, so a button is free when the distance between the
+// centers is not less than the sum of the radii (and a small gap).
+constexpr float    HudGap = 3.f;   // layout units, multiplied by Controls::unit()
+
+/// A button of the HUD (not the DONE and RESET, not the hotbar) that blocks the way of the others
+bool isHudIcon(const Button& b) {
+  return !b.id.empty() && b.visible;
+  }
+
+/// true when a round button of the HUD with the center (px,py) and the radius r touches another one
+bool hudCollides(const std::vector<Button>& layout, size_t self, float px, float py, float r, float gap) {
+  for(size_t i=0; i<layout.size(); ++i) {
+    if(i==self || !isHudIcon(layout[i]))
+      continue;
+    const auto& o    = layout[i].rect;
+    const float need = r+o.w/2+gap;
+    if(std::hypot(px-(o.x+o.w/2),py-(o.y+o.h/2))<need-0.01f)
+      return true;
+    }
+  return false;
+  }
+
+/// Moves the center (px,py) of a dragged button out of the other buttons of the HUD, along the line from their
+/// center, so the button slides around an obstacle instead of sticking to it. It stays on the screen.
+/// false: there is no free place that is near (a corner between the buttons), the caller keeps the old place.
+bool hudResolve(const std::vector<Button>& layout, size_t self, float width, float height, float gap,
+                float& px, float& py) {
+  const float r = layout[self].rect.w/2;
+  auto keep = [&]() {
+    px = std::clamp(px,r,width -r);
+    py = std::clamp(py,r,height-r);
+    };
+  keep();
+  for(int pass=0; pass<16; ++pass) {
+    bool moved = false;
+    for(size_t i=0; i<layout.size(); ++i) {
+      if(i==self || !isHudIcon(layout[i]))
+        continue;
+      const auto& o    = layout[i].rect;
+      const float ox   = o.x+o.w/2;
+      const float oy   = o.y+o.h/2;
+      const float need = r+o.w/2+gap;
+      float       dx   = px-ox;
+      float       dy   = py-oy;
+      float       d    = std::hypot(dx,dy);
+      if(d>=need-0.01f)
+        continue;
+      if(d<0.001f) {
+        dx = 1; dy = 0; d = 1;
+        }
+      px = ox+dx/d*need;
+      py = oy+dy/d*need;
+      keep();
+      moved = true;
+      }
+    if(!moved)
+      return !hudCollides(layout,self,px,py,r,gap);
+    }
+  return !hudCollides(layout,self,px,py,r,gap);
+  }
 }
 
 void Controls::acquire(Key key) {
@@ -906,10 +967,13 @@ void Controls::moveEditor(Finger& f, float x, float y) {
     return;
   f.moved = true;
 
-  // the button follows the finger and stays on the screen
+  // the button follows the finger and stays on the screen, but it is solid: it slides around the other buttons of
+  // the HUD and never lies on one of them (when there is no free place, it stays where it was)
   auto&       b  = layout[size_t(f.button)];
-  const float cx = std::clamp(x-f.grabX,b.rect.w/2,width -b.rect.w/2);
-  const float cy = std::clamp(y-f.grabY,b.rect.h/2,height-b.rect.h/2);
+  float       cx = x-f.grabX;
+  float       cy = y-f.grabY;
+  if(!hudResolve(layout,size_t(f.button),width,height,HudGap*scale,cx,cy))
+    return;
   b.rect.x = cx-b.rect.w/2;
   b.rect.y = cy-b.rect.h/2;
   }
@@ -928,8 +992,23 @@ void Controls::upEditor(const Finger& f) {
     // it was hidden or shown by the hold
     return;
     } else {
-    // a tap: the next size of the button (5 steps, after the biggest the smallest)
-    p.size = (p.size+1)%HudSizeSteps;
+    // a tap: the next size of the button (5 steps, after the biggest the smallest). A size at which the button would
+    // lie on another one is skipped; a smaller one always fits.
+    const size_t self   = size_t(f.button);
+    const float  base   = b.rect.w/hudSizeFactor(p.size);   // the diameter of the normal size
+    const float  px     = b.rect.x+b.rect.w/2;
+    const float  py     = b.rect.y+b.rect.h/2;
+    int          next   = p.size;
+    for(int step=1; step<HudSizeSteps; ++step) {
+      const int t = (p.size+step)%HudSizeSteps;
+      if(t<p.size || !hudCollides(layout,self,px,py,base*hudSizeFactor(t)/2,HudGap*scale)) {
+        next = t;
+        break;
+        }
+      }
+    if(next==p.size)
+      return;
+    p.size = next;
     }
   hudChanged = true;
   rebuild();
