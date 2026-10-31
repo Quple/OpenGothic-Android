@@ -27,7 +27,8 @@ Color rgb(uint32_t c, float a) {
   return Color(float((c>>16)&0xFF)/255.f,float((c>>8)&0xFF)/255.f,float(c&0xFF)/255.f,a);
   }
 
-void drawShadowed(Painter& p, const GthFont& fnt, int x, int baseline, const std::string& text, uint32_t color, float alpha) {
+void drawShadowed(Painter& p, const GthFont& fnt, int x, int baseline, const std::string& text, uint32_t color,
+                  float alpha) {
   fnt.tinted(Color(0.f,0.f,0.f,0.85f*alpha)).drawText(p,x+1,baseline+1,text);
   fnt.tinted(Color(0.f,0.f,0.f,0.85f*alpha)).drawText(p,x-1,baseline+1,text);
   fnt.tinted(rgb(color,alpha)).drawText(p,x,baseline,text);
@@ -84,9 +85,9 @@ void CombatFx::paint(Painter& p, const Matrix4x4& vp, int w, int h, float uiScal
   const float    life = float(std::max(300,opt.duration));
   auto&          fnt  = Resources::font(uiScale*sizeFactor(opt.size));
 
-  {
   std::lock_guard<std::mutex> guard(sync);
-  list.erase(std::remove_if(list.begin(),list.end(),[&](const Entry& e) { return float(now-e.start)>life; }),list.end());
+  list.erase(std::remove_if(list.begin(),list.end(),[&](const Entry& e) { return float(now-e.start)>life; }),
+             list.end());
 
   for(const auto& e:list) {
     const float t = float(now-e.start)/life;
@@ -110,5 +111,4 @@ void CombatFx::paint(Painter& p, const Matrix4x4& vp, int w, int h, float uiScal
     const int  y  = int((0.5f*pos.y+0.5f)*float(h));
     drawShadowed(p,fnt,x,y,e.text,e.color,alpha);
     }
-  }
   }

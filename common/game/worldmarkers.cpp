@@ -37,7 +37,8 @@ void WorldMarkers::paint(Painter& p, const Matrix4x4& vp, int w, int h, float ui
     return;
 
   const uint64_t now = Application::tickCount();
-  list.erase(std::remove_if(list.begin(),list.end(),[&](const Entry& e) { return now-e.start>uint64_t(e.duration); }),list.end());
+  list.erase(std::remove_if(list.begin(),list.end(),[&](const Entry& e) { return now-e.start>uint64_t(e.duration); }),
+             list.end());
 
   for(const auto& e:list) {
     const float t = float(now-e.start)/float(e.duration);

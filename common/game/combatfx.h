@@ -13,8 +13,8 @@
 
 class Npc;
 
-/// Damage numbers floating in the air and the defense of the enemy under its name. It is switched on by a mod
-/// (combat.configure), the code of the game only reports hits.
+/// Damage numbers floating in the air. It is switched on by a mod (combat.configure), the code of the game only
+/// reports hits. The health of the enemy under its bar is drawn by MainWindow.
 class CombatFx final {
   public:
     static CombatFx& inst();
