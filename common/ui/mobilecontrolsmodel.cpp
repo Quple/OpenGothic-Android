@@ -13,6 +13,7 @@ constexpr uint64_t RepeatInterval = 120;
 
 // Distances are in layout units, multiplied by Controls::unit()
 constexpr float    TapSlop        = 22.f;
+constexpr uint64_t HoldTime       = 600;   // ms: a button of the HUD held in the editor is hidden or shown
 constexpr float    SwipeDistance  = 42.f;
 
 constexpr float    CameraYawSpan   = 180.f;
@@ -95,6 +96,14 @@ void Controls::features(bool speed, bool strafe) {
   cancel();
   featureSpeed  = speed;
   featureStrafe = strafe;
+  rebuild();
+  }
+
+void Controls::playerDead(bool value) {
+  if(dead==value)
+    return;
+  cancel();
+  dead = value;
   rebuild();
   }
 
@@ -347,7 +356,7 @@ void Controls::buildGame(const Anchor&) {
       x = place.x*width;
       y = place.y*height;
       }
-    auto& b = round(x,y,d,label,key);
+    auto& b = round(x,y,d*hudSizeFactor(place.size),label,key);
     b.hold    = hold;
     b.special = special;
     b.id      = id;
@@ -356,11 +365,20 @@ void Controls::buildGame(const Anchor&) {
 
   icon("menu",      left(61),   top(36), 50, "MENU",      Key::Escape);
   icon("character", left(122),  top(36), 50, "CHARACTER", Key::Status);
-  // fast forward is not in the vanilla game, a mod switches it on (touch.fastForward)
-  if(featureSpeed)
+  // fast forward is not in the vanilla game, a mod switches it on (touch.fastForward); it is hidden when the player is dead
+  if(featureSpeed && !dead)
     icon("speed",   left(183),  top(36), 50, "SPEED",     Key::Enter, false, Special::Speed);
+  // quick save: next to the speed button; not when the player is dead
+  if(!dead)
+    icon("quicksave", left(244), top(36), 50, "SAVE",    Key::Enter, false, Special::QuickSave);
   icon("log",       right(124), top(36), 50, "LOG",       Key::Log);
   icon("map",       right(62),  top(36), 50, "MAP",       Key::Map);
+
+  if(dead && !editing) {
+    // the player has died: one button loads the newest save
+    auto& b = add(width/2-90*s*k,height*0.62f,180*k,56*k,"LOAD LAST SAVE",Key::Enter);
+    b.special = Special::LoadSave;
+    }
 
   const float stickSize = 180*k*s;
   stick = {left(153.5f)-stickSize/2,bottom(166.5f)-stickSize/2,stickSize,stickSize};
@@ -474,7 +492,7 @@ void Controls::down(int id, float x, float y, uint64_t now) {
     return;
 
   if(editing) {
-    downEditor(id,x,y);
+    downEditor(id,x,y,now);
     return;
     }
 
@@ -777,6 +795,23 @@ void Controls::tick(uint64_t now) {
     events.push_back({Event::Look,Key::Enter,turn*StickTurnRate*dt,0});
     }
 
+  if(editing) {
+    for(auto& p:fingers) {
+      auto& f = p.second;
+      if(!f.drag || f.moved || f.held || f.holdAt==0 || now<f.holdAt || f.button<0 || size_t(f.button)>=layout.size())
+        continue;
+      const auto id = layout[size_t(f.button)].id;
+      if(id.empty() || id=="menu")
+        continue;
+      f.held = true;
+      auto& place = places[id];
+      place.hidden = !place.hidden;
+      hudChanged = true;
+      rebuild();
+      break;
+      }
+    }
+
   for(auto& p:fingers) {
     auto& f = p.second;
     if(f.blocked || f.cancelled || f.button<0 || f.repeatAt==0 || now<f.repeatAt)
@@ -812,7 +847,7 @@ void Controls::applyAvailability() {
       usable = availableTarget; else
     if(b.special==Special::Spell)
       usable = availableSpells; else
-    if(b.special==Special::Speed)
+    if(b.special==Special::Speed || b.special==Special::LoadSave || b.special==Special::QuickSave)
       usable = true;
 
     // The hotbar stays visible while the player can move, other controls hide when unusable
@@ -841,7 +876,7 @@ void Controls::availability(uint64_t keys, bool target, bool spells, bool moveme
   }
 
 /// A finger in the editor: a button of the HUD is taken by its place, the others (DONE, RESET) are tapped as usual
-void Controls::downEditor(int id, float x, float y) {
+void Controls::downEditor(int id, float x, float y, uint64_t now) {
   Finger f;
   f.startX = f.x = x;
   f.startY = f.y = y;
@@ -853,6 +888,9 @@ void Controls::downEditor(int id, float x, float y) {
       f.drag  = true;
       f.grabX = x-(layout[i].rect.x+layout[i].rect.w/2);
       f.grabY = y-(layout[i].rect.y+layout[i].rect.h/2);
+      // a long hold hides the button (or shows it again), the menu cannot be hidden
+      if(layout[i].id!="menu")
+        f.holdAt = now+HoldTime;
       }
     break;
     }
@@ -886,11 +924,12 @@ void Controls::upEditor(const Finger& f) {
     p.x      = (b.rect.x+b.rect.w/2)/width;
     p.y      = (b.rect.y+b.rect.h/2)/height;
     } else
-  if(b.id!="menu") {
-    // a tap: hidden <-> shown
-    p.hidden = !p.hidden;
-    } else {
+  if(f.held) {
+    // it was hidden or shown by the hold
     return;
+    } else {
+    // a tap: the next size of the button (5 steps, after the biggest the smallest)
+    p.size = (p.size+1)%HudSizeSteps;
     }
   hudChanged = true;
   rebuild();
