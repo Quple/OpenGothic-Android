@@ -426,12 +426,12 @@ void Controls::buildGame(const Anchor&) {
 
   icon("menu",      left(61),   top(36), 50, "MENU",      Key::Escape);
   icon("character", left(122),  top(36), 50, "CHARACTER", Key::Status);
-  // fast forward is not in the vanilla game, a mod switches it on (touch.fastForward); it is hidden when the player is dead
-  if(featureSpeed && !dead)
-    icon("speed",   left(183),  top(36), 50, "SPEED",     Key::Enter, false, Special::Speed);
   // quick save: next to the speed button; not when the player is dead
   if(!dead)
-    icon("quicksave", left(244), top(36), 50, "SAVE",    Key::Enter, false, Special::QuickSave);
+    icon("quicksave", left(183), top(36), 50, "SAVE",    Key::Enter, false, Special::QuickSave);
+  // fast forward is not in the vanilla game, a mod switches it on (touch.fastForward); it is hidden when the player is dead
+  if(featureSpeed && !dead)
+    icon("speed",   left(244),  top(36), 50, "SPEED",     Key::Enter, false, Special::Speed);
   icon("log",       right(124), top(36), 50, "LOG",       Key::Log);
   icon("map",       right(62),  top(36), 50, "MAP",       Key::Map);
 
