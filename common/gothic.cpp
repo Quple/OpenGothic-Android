@@ -1,9 +1,12 @@
 #include "gothic.h"
+
+#include "game/savestore.h"
 #include "game/dialogtest.h"
 
 #include <Tempest/Log>
 #include <Tempest/TextCodec>
 
+#include <algorithm>
 #include <cstring>
 #include <cctype>
 #include <cassert>
@@ -122,6 +125,7 @@ Gothic::Gothic() {
   defaults->set("SOUND", "musicVolume",   0.5f);
   defaults->set("SOUND", "soundEnabled",  1);
   defaults->set("SOUND", "soundVolume",   0.5f);
+  defaults->set("SOUND", "dialogGain",    1.f);   // the voices of the dialogs, on top of the volume of the sounds
 
   //defaults->set("ENGINE", "zEnvMappingEnabled", 0);
   //defaults->set("ENGINE", "zCloudShadowScale",  0);
@@ -445,6 +449,21 @@ bool Gothic::isPause() const {
   return pauseSum;
   }
 
+static std::atomic_bool noGrassFlag{false};
+
+bool Gothic::isNoGrass() {
+  return noGrassFlag.load();
+  }
+
+void Gothic::setNoGrass(bool v) {
+  if(noGrassFlag.exchange(v)==v)
+    return;
+  if(instance==nullptr)
+    return;
+  if(auto* w = instance->world())
+    w->applyGrassSetting();
+  }
+
 bool Gothic::isMarvinEnabled() const {
   return isMarvin;
   }
@@ -630,11 +649,17 @@ void Gothic::updateAnimation(uint64_t dt) {
   }
 
 void Gothic::quickSave() {
-  save(saveFileName(0),"Quick save");
+  // 5 slots in turn: a broken file does not leave the player without a quick save
+  save(SaveStore::nextQuickFile(),"Quick save");
   }
 
 void Gothic::quickLoad() {
-  load(saveFileName(0));
+  const std::string file = SaveStore::newestQuickFile();
+  if(file.empty()) {
+    onPrint("No quick save");
+    return;
+    }
+  load(file);
   }
 
 void Gothic::save(std::string_view slot, std::string_view name) {
@@ -923,7 +948,13 @@ float Gothic::settingsSoundVolume() {
   const bool  soundEnabled = settingsGetI("SOUND","soundEnabled")!=0;
   const float soundVolume  = settingsGetF("SOUND","soundVolume");
 
-  return soundEnabled ? soundVolume : 0.f;
+  return soundEnabled ? volumeCurve(soundVolume) : 0.f;
+  }
+
+float Gothic::volumeCurve(float v) {
+  // the slider is linear, the ear is not: 1% of the slider must be very quiet, not only a bit quieter than 10%
+  v = std::clamp(v,0.f,1.f);
+  return v*v;
   }
 
 void Gothic::flushSettings() {

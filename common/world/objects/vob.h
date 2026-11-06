@@ -43,6 +43,8 @@ class Vob {
     /// zCVob.showVisual and the dynamic collision, a script of a mod changes them (CHANGEVOBCOLLISION of CoM)
     virtual void  setVobVisual(bool show, bool collideDynamic);
     virtual float extendedSearchRadius() const;
+    /// Gothic::isNoGrass has changed: the grass meshes of the vob and its children are hidden or shown
+    virtual void  applyGrassSetting();
 
   protected:
     World&                            world;

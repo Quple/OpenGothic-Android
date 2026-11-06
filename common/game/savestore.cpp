@@ -128,11 +128,59 @@ std::vector<SaveStore::Entry> SaveStore::list() {
   return ret;
   }
 
+int SaveStore::quickIndex(size_t slot) {
+  if(slot==0)
+    return 0;
+  if(slot>kQuickBase && slot<kQuickBase+kQuickSlots)
+    return int(slot-kQuickBase);
+  return -1;
+  }
+
 std::string SaveStore::newFile() {
   size_t next = 1;
-  for(auto& e:list())
+  for(auto& e:list()) {
+    if(e.isQuick())
+      continue;
     next = std::max(next,e.slot+1);
+    }
   return Gothic::inst().saveFileName(next);
+  }
+
+std::string SaveStore::nextQuickFile() {
+  const auto all = list();
+  const Entry* byIndex[kQuickSlots] = {};
+  for(auto& e:all) {
+    const int i = quickIndex(e.slot);
+    if(i>=0)
+      byIndex[i] = &e;
+    }
+
+  // a slot that has no (readable) save goes first
+  for(size_t i=0; i<kQuickSlots; ++i)
+    if(byIndex[i]==nullptr)
+      return Gothic::inst().saveFileName(i==0 ? 0 : kQuickBase+i);
+
+  // all of them are used: the oldest one. On the same second the next one after the newest.
+  size_t newest = 0;
+  for(size_t i=1; i<kQuickSlots; ++i)
+    if(byIndex[i]->stamp>=byIndex[newest]->stamp)
+      newest = i;
+  size_t pick = (newest+1)%kQuickSlots;
+  for(size_t i=0; i<kQuickSlots; ++i)
+    if(byIndex[i]->stamp<byIndex[pick]->stamp)
+      pick = i;
+  return Gothic::inst().saveFileName(pick==0 ? 0 : kQuickBase+pick);
+  }
+
+std::string SaveStore::newestQuickFile() {
+  const Entry* best = nullptr;
+  const auto   all  = list();   // the newest first
+  for(auto& e:all)
+    if(e.isQuick()) {
+      best = &e;
+      break;
+      }
+  return best==nullptr ? std::string() : best->file;
   }
 
 bool SaveStore::remove(const Entry& e) {

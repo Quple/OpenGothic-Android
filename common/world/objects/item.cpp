@@ -335,7 +335,9 @@ int32_t Item::cost() const {
   }
 
 int32_t Item::sellCost() const {
-  return int32_t(std::ceil(world.script().tradeValueMultiplier()*float(cost())));
+  const float v = world.script().tradeValueMultiplier()*float(cost());
+  // Gothic 1: a half of the value, rounded down (5 -> 2); Gothic 2 keeps its rounding
+  return int32_t(world.version().game==1 ? std::floor(v) : std::ceil(v));
   }
 
 bool Item::checkCond(const Npc &other) const {

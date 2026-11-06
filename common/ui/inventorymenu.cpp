@@ -5,6 +5,7 @@
 #include <Tempest/SoundEffect>
 
 #include "utils/string_frm.h"
+#include <algorithm>
 #include "world/objects/npc.h"
 #include "world/objects/interactive.h"
 #include "world/objects/item.h"
@@ -1131,12 +1132,41 @@ void InventoryMenu::drawInfoTouch(Painter& p) {
   p.setBrush(Brush(Color(0.01f,0.015f,0.02f,0.62f)));
   p.drawRect(x,y,dw,dh);
 
-  auto& fnt = Resources::font(touchTextScale());
+  // The panel is narrow on the screens that are almost square (a folded phone, a tablet): the texts shrink until
+  // the longest of them, a title or a property with its value, is inside of the panel
+  auto  desc     = item.description();
+  float textSc   = touchTextScale();
+  {
+  const int avail = std::max(1,dw-2*in);
+  auto widest = [&](float sc) {
+    auto& f = Resources::font(sc);
+    auto& t = Resources::font(sc*1.05f);
+    int   m = t.textSize(desc).w;
+    for(size_t i=0; i<Item::MAX_UI_ROWS; ++i) {
+      auto txt = item.uiText(i);
+      if(txt.empty())
+        continue;
+      int32_t val = item.uiValue(i);
+      if(i+1==Item::MAX_UI_ROWS && state==State::Trade && player!=nullptr && pg.is(&player->inventory()))
+        val = item.sellCost();
+      int wr = f.textSize(txt).w;
+      if(val!=0) {
+        string_frm vint(val);
+        wr += in+f.textSize(vint).w;
+        }
+      m = std::max(m,wr);
+      }
+    return m;
+    };
+  for(int k=0; k<12 && widest(textSc)>avail; ++k)
+    textSc *= 0.92f;
+  }
+
+  auto& fnt = Resources::font(textSc);
   const int pix = fnt.pixelSize();
 
   // title in the center
-  auto  desc  = item.description();
-  auto& title = Resources::font(touchTextScale()*1.05f);
+  auto& title = Resources::font(textSc*1.05f);
   title.drawText(p,x+(dw-title.textSize(desc).w)/2,y+int(H*0.05f)+title.pixelSize()/2,desc);
 
   // The separator of the actions. Properties are packed above it.

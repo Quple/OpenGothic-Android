@@ -24,7 +24,7 @@ enum class Key : uint8_t {
   Action, Jump, Weapon, Inventory, Enter, Escape,
   Log, Map,
   One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Zero,
-  Walk, StrafeLeft, StrafeRight, Status, Backspace, Block, AttackLeft, AttackRight, Sneak,
+  Walk, StrafeLeft, StrafeRight, Status, Backspace, Block, AttackLeft, AttackRight, Sneak, BackStep,
   Count
   };
 
@@ -78,6 +78,8 @@ enum Setting : int {
   SettingHudNumbers,
   SettingHudXp,
   SettingStrafe,
+  SettingBackStep,
+  SettingNoGrass,
   SettingCount
   };
 
@@ -104,7 +106,7 @@ inline float hotbarSlot(float buttons) {
 
 /// Names of the buttons of the HUD that can be moved and switched off (see Controls::hudPlace)
 constexpr const char* HudIds[] = {
-  "menu", "character", "speed", "log", "map", "sneak", "walk", "stepleft", "stepright",
+  "menu", "character", "speed", "log", "map", "sneak", "walk", "stepleft", "stepright", "stepback",
   "action", "hitleft", "hitright", "block", "jump", "inventory", "target", "spells", "weapon", "quicksave"
   };
 constexpr int HudIdCount = int(sizeof(HudIds)/sizeof(HudIds[0]));
@@ -182,7 +184,7 @@ class Controls {
     /// Scale of the interface, the inventory follows it
     void  gui(float scale);
     /// What the HUD has: the button of the speed is shown only when a mod asks for it, the side steps are an option
-    void  features(bool speed, bool strafe);
+    void  features(bool speed, bool strafe, bool backStep=false);
     bool  speedAllowed() const { return featureSpeed; }
     /// The player is dead: the button of the speed is hidden, the button that loads the newest save is shown
     void  playerDead(bool dead);
@@ -311,6 +313,7 @@ class Controls {
     bool     padVisible = false;
     bool     featureSpeed  = false;   // a mod has asked for the fast forward
     bool     featureStrafe = true;    // the buttons of the side steps
+    bool     featureBackStep = true;  // the button of the jump back (armed player)
     bool     dead          = false;   // the player is dead
     bool     editing    = false;      // the editor of the HUD
     bool     hudChanged = false;

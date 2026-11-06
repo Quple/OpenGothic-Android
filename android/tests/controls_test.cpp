@@ -561,6 +561,33 @@ void strafeButtons() {
   CHECK(!button(c,Key::StrafeLeft).visible && !button(c,Key::StrafeRight).visible);
   }
 
+void backStepButton() {
+  Controls c;
+  c.configure(2400,1080,Mode::Game);
+  c.resetPointers();
+  c.drain();
+
+  // the weapon is not drawn: there is no button
+  c.availability(keyMask(Key::Escape),false,false,true);
+  CHECK(!button(c,Key::BackStep).visible);
+
+  // the weapon is drawn: the button is there and is held while the finger is down
+  c.availability(keyMask(Key::Escape)|keyMask(Key::BackStep),true,false,true);
+  CHECK(button(c,Key::BackStep).visible);
+  press(c,Key::BackStep,1);
+  CHECK(c.held(Key::BackStep));
+  auto e = c.drain();
+  CHECK(e.size()==1 && e[0].kind==Event::Down && e[0].key==Key::BackStep);
+  lift(c,Key::BackStep,1);
+  CHECK(!c.held(Key::BackStep));
+
+  // the option is switched off: the button is not built at all
+  c.features(false,true,false);
+  c.availability(keyMask(Key::Escape)|keyMask(Key::BackStep),true,false,true);
+  for(const auto& b:c.buttons())
+    CHECK(b.key!=Key::BackStep);
+  }
+
 void resetStress() {
   // No held controls survive a reset, whatever the mode transitions in between.
   Controls c;
@@ -837,6 +864,7 @@ int main() {
   menuGestures();
   availabilityKeepsMovement();
   strafeButtons();
+  backStepButton();
   speedButton();
   inventoryActions();
   settingsAreIsolated();

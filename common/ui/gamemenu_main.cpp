@@ -69,20 +69,50 @@ GameMenu::MainRows GameMenu::mainRows() const {
   // under the logo and the title of the game
   float titleBottom = 0.365f*H-float(m.rowH)/2;
   {
-    int k = 0;
+    // The pictures of the title (the logo and its shadow) lie one on another in the menu of the game. They keep
+    // the places that the script gives them relative to each other: a placing by a guess drifted them apart
+    // on the screens of other proportions.
+    struct Src { const Item* it; float x, y, w, h; };
+    std::vector<Src> src;
     for(const auto& it:hItems) {
       if(!it.handle || !it.visible || !it.img || it.handle->type!=zenkit::MenuItemType::TEXT ||
          isSelectable(it.handle) || isHidden(it.handle) || it.img->w()<256 || it.img->h()<=0)
         continue;
-      if(float(it.img->w())/float(it.img->h())<2.5f || k>=2)
+      if(float(it.img->w())/float(it.img->h())<2.5f || src.size()>=2)
         continue;
-      const int iw = int(W*0.30f);
-      const int ih = iw*it.img->h()/it.img->w();
-      const int cy = int(H*0.173f)+int(float(ih)*0.85f*float(k));
-      m.images.push_back(Rect(m.cx-iw/2,cy-ih/2,iw,ih));
-      m.imgTex.push_back(it.img);
+      const float dimx = it.handle->dim_x!=-1 ? float(it.handle->dim_x) : 8192.f;
+      const float dimy = it.handle->dim_y!=-1 ? float(it.handle->dim_y) : 750.f;
+      // the script screen is 4:3
+      src.push_back({&it,float(it.handle->pos_x)*4.f,float(it.handle->pos_y)*3.f,dimx*4.f,dimy*3.f});
+      }
+
+    float ux0 = 0, ux1 = 0;
+    for(size_t k=0; k<src.size(); ++k) {
+      ux0 = k==0 ? src[k].x            : std::min(ux0,src[k].x);
+      ux1 = k==0 ? src[k].x+src[k].w   : std::max(ux1,src[k].x+src[k].w);
+      }
+    const float uw     = ux1-ux0;
+    const bool  placed = uw>0.f;
+    const float sc     = placed ? W*0.30f/uw : 0.f;
+
+    for(size_t k=0; k<src.size(); ++k) {
+      const auto& sr = src[k];
+      int iw, cx, cy;
+      if(placed) {
+        iw = int(sr.w*sc);
+        cx = m.cx+int((sr.x+sr.w/2-(ux0+ux1)/2)*sc);
+        const float c0y = src[0].y+src[0].h/2;
+        cy = int(H*0.173f)+int((sr.y+sr.h/2-c0y)*sc);
+        } else {
+        iw = int(W*0.30f);
+        cx = m.cx;
+        const int ihk = iw*sr.it->img->h()/sr.it->img->w();
+        cy = int(H*0.173f)+int(float(ihk)*0.85f*float(k));
+        }
+      const int ih = iw*sr.it->img->h()/sr.it->img->w();
+      m.images.push_back(Rect(cx-iw/2,cy-ih/2,iw,ih));
+      m.imgTex.push_back(sr.it->img);
       titleBottom = std::max(titleBottom,float(cy)+H*0.095f-float(m.rowH)/2);
-      ++k;
       }
   }
   m.y0 = int(titleBottom);

@@ -51,7 +51,7 @@ const char* const IconFiles[AndroidInput::IconCount] = {
 
 const char* const SettingNames[Mobile::SettingCount] = {
   "buttons", "resolution", "shadows", "effects", "fps", "deadzone", "sensitivity", "vibration", "gui",
-  "speed", "hudnumbers", "hudxp", "strafe"
+  "speed", "hudnumbers", "hudxp", "strafe", "backstep", "nograss"
   };
 
 // Gives access to the dispatch functions of SystemApi
@@ -93,6 +93,7 @@ Event::KeyType keyType(Key key) {
     case Key::AttackLeft: return Event::K_Z;
     case Key::AttackRight:return Event::K_X;
     case Key::Sneak:      return Event::K_C;
+    case Key::BackStep:   return Event::K_Down;
     case Key::Count:      break;
     }
   return Event::K_NoKey;
@@ -184,6 +185,8 @@ int nextValue(int setting, int value) {
     case Mobile::SettingHudNumbers:
     case Mobile::SettingHudXp:
     case Mobile::SettingStrafe:
+    case Mobile::SettingBackStep:
+    case Mobile::SettingNoGrass:
       return value ? 0 : 1;
     }
   return value;
@@ -201,6 +204,10 @@ std::string settingText(int setting, const std::string& label) {
     return value ? "XP counter: ON" : "XP counter: OFF";
   if(setting==Mobile::SettingStrafe)
     return value ? "Side step buttons: ON" : "Side step buttons: OFF";
+  if(setting==Mobile::SettingBackStep)
+    return value ? "Jump back button: ON" : "Jump back button: OFF";
+  if(setting==Mobile::SettingNoGrass)
+    return value ? "No grass: ON" : "No grass: OFF";
   if(setting==Mobile::SettingSpeed)
     return label+"   "+std::to_string(value/100)+"."+std::to_string(value%100/10)+"x";
 
@@ -296,6 +303,10 @@ AndroidInput::Preferences AndroidInput::preferences() {
     }
   if(Gothic::settingsGetI(Section,"version")>=6)
     ret.strafe = Gothic::settingsGetI(Section,SettingNames[Mobile::SettingStrafe])!=0 ? 1 : 0;
+  if(Gothic::settingsGetI(Section,"version")>=7) {
+    ret.backStep = Gothic::settingsGetI(Section,SettingNames[Mobile::SettingBackStep])!=0 ? 1 : 0;
+    ret.noGrass  = Gothic::settingsGetI(Section,SettingNames[Mobile::SettingNoGrass])!=0 ? 1 : 0;
+    }
   return ret;
   }
 
@@ -315,10 +326,12 @@ void AndroidInput::Controller::bind() {
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingHudNumbers], def.hudNumbers);
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingHudXp],      def.hudXp);
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingStrafe],     def.strafe);
-    Gothic::settingsSetI(Section,"version",6);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingBackStep],   def.backStep);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingNoGrass],    def.noGrass);
+    Gothic::settingsSetI(Section,"version",7);
     Gothic::flushSettings();
     } else
-  if(Gothic::settingsGetI(Section,"version")<6) {
+  if(Gothic::settingsGetI(Section,"version")<7) {
     // settings saved before the vibration, the scale of the interface, the fast forward and the side steps were added
     const Preferences def;
     const int version = Gothic::settingsGetI(Section,"version");
@@ -333,8 +346,13 @@ void AndroidInput::Controller::bind() {
       Gothic::settingsSetI(Section,SettingNames[Mobile::SettingHudXp],def.hudXp);
       }
     // the side step buttons were always there: they stay until the player switches them off
-    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingStrafe],def.strafe);
-    Gothic::settingsSetI(Section,"version",6);
+    if(version<6)
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingStrafe],def.strafe);
+    if(version<7) {
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingBackStep],def.backStep);
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingNoGrass], def.noGrass);
+      }
+    Gothic::settingsSetI(Section,"version",7);
     Gothic::flushSettings();
     }
   loadHudPlaces();
@@ -523,7 +541,8 @@ void AndroidInput::Controller::applyPreferences() {
   controls.preferences(float(pref.buttons)/100.f,float(pref.deadzone)/100.f,float(pref.sensitivity)/100.f);
   padSensitivity = float(pref.sensitivity)/100.f;
   // the game is vanilla: the fast forward is on the HUD and in the settings only when a mod has asked for it
-  controls.features(Scripting::ModHost::inst().fastForwardWanted(),pref.strafe!=0);
+  controls.features(Scripting::ModHost::inst().fastForwardWanted(),pref.strafe!=0,pref.backStep!=0);
+  Gothic::setNoGrass(pref.noGrass!=0);
   }
 
 void AndroidInput::Controller::loadHudPlaces() {
@@ -769,6 +788,7 @@ int AndroidInput::Controller::iconFor(const Mobile::Button& b) const {
     case Key::StrafeRight:return IconRight;
     case Key::Block:      return IconBlock;
     case Key::Sneak:      return IconSneak;
+    case Key::BackStep:   return IconDown;
     case Key::Inventory:  return IconInventory;
     case Key::Weapon:     return game ? IconWeapon : IconTransfer;
     case Key::Up:         return game ? NoIcon : IconUp;

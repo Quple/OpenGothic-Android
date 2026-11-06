@@ -917,6 +917,10 @@ void World::unregisterVob(std::string_view name, Vob* vob) {
       }
   }
 
+void World::applyGrassSetting() {
+  wobj.applyGrassSetting();
+  }
+
 size_t World::setVobVisual(std::string_view name, bool show, bool collide) {
   size_t count = 0;
   auto   range = vobNames.equal_range(upperName(name));

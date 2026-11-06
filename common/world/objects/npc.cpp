@@ -688,6 +688,14 @@ bool Npc::startClimb(JumpStatus jump) {
   return mvAlgo.startClimb(jump);
   }
 
+/// A human falls unconscious when he is beaten, unless he is an enemy of the attacker. Gothic 1: the temporary attitude
+/// (a fight has just begun, a quarrel) does not make a killing of a knocked out man, only the permanent one does.
+bool Npc::knockOutForbidden(const Npc& other) const {
+  if(owner.version().game==1)
+    return owner.script().personPermAttitude(*this,other)==ATT_HOSTILE;
+  return owner.script().personAttitude(*this,other)==ATT_HOSTILE;
+  }
+
 bool Npc::checkHealth(bool onChange, bool allowUnconscious) {
   if(isDead()) {
     return false;
@@ -699,7 +707,7 @@ bool Npc::checkHealth(bool onChange, bool allowUnconscious) {
   const int minHp = isMonster() ? 0 : 1;
   if(hnpc->attribute[ATR_HITPOINTS]<=minHp) {
     if(currentOther==nullptr || !allowUnconscious || !isHuman() ||
-       owner.script().personAttitude(*this,*currentOther)==ATT_HOSTILE){
+       knockOutForbidden(*currentOther)){
       if(hnpc->attribute[ATR_HITPOINTS]<=0)
         onNoHealth(true,HS_Dead);
       return false;

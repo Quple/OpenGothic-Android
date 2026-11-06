@@ -63,6 +63,8 @@ struct Preferences {
   int hudNumbers  = 0;   // 1: the numbers of life and mana (5/10) over the bars
   int hudXp       = 0;   // 1: the experience (500/1000) between the bars
   int strafe      = 1;   // 1: the buttons of the side steps on the HUD
+  int backStep    = 1;   // 1: the button of the jump back on the HUD (when the weapon is drawn)
+  int noGrass     = 0;   // 1: the grass is not drawn
   };
 
 Preferences preferences();

@@ -17,6 +17,7 @@
 #include "graphics/visualfx.h"
 #include "utils/fileutil.h"
 #include "commandline.h"
+#include <algorithm>
 #include "gothic.h"
 #include "game/dialogtest.h"
 
@@ -663,7 +664,8 @@ void GameScript::initCommon() {
       goldTxt = item->name;
       }
     //
-    tradeValMult    = 1.f;
+    // Gothic 1: a trader pays a half of the value (rounded down, see Item::sellCost), buying is for the full value
+    tradeValMult    = 0.5f;
     viewTimePerChar = 550.f;
     ItKE_lockpick   = vm.find_symbol_by_name("itkelockpick");
     }
@@ -1763,6 +1765,15 @@ Attitude GameScript::personAttitude(const Npc &p0, const Npc &p1) const {
     return att;
   att = guildAttitude(p0,p1);
   return att;
+  }
+
+Attitude GameScript::personPermAttitude(const Npc& p0, const Npc& p1) const {
+  if(p0.isPlayer() || p1.isPlayer()) {
+    const Npc& npc = p0.isPlayer() ? p1 : p0;
+    if(npc.attitude()!=ATT_NULL)
+      return npc.attitude();
+    }
+  return guildAttitude(p0,p1);
   }
 
 bool GameScript::isFriendlyFire(const Npc& src, const Npc& dst) const {

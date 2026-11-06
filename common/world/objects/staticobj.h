@@ -8,6 +8,7 @@ class StaticObj : public Vob {
     StaticObj(Vob* parent, World& world, const zenkit::VirtualObject& vob, Flags flags);
 
     void  setVobVisual(bool show, bool collideDynamic) override;
+    void  applyGrassSetting() override;
 
   private:
     void  moveEvent() override;

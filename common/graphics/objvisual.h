@@ -24,6 +24,8 @@ class ObjVisual {
     /// A script of a mod shows or hides the visual and switches the collision of the vob (zCVob.showVisual, cdDyn).
     /// collide: 1 on, 0 off, -1 unchanged
     void setShown(bool show, int collide, World& world, const Tempest::Matrix4x4& obj);
+    /// Gothic::isNoGrass has changed: a mesh of the grass is hidden, or comes back
+    void applyGrassSetting(World& world, const Tempest::Matrix4x4& obj);
 
     void setSlotItem(MeshObjects::Mesh&& itm, std::string_view slot);
 
@@ -74,6 +76,8 @@ class ObjVisual {
     bool                mdlShown     = true;
     zenkit::AnimationType animMode   = zenkit::AnimationType::NONE;
     float               animStrength = 0;
+    bool                grass        = false;   // a mesh of the grass: the option "no grass" hides it
+    bool                meshWanted   = true;    // the vob shows its mesh (zCVob.showVisual), when the grass is not hidden
 
     void cleanup();
     void setType(Type t);

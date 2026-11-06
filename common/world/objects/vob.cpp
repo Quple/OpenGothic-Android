@@ -64,6 +64,11 @@ Vob::~Vob() {
 void Vob::setVobVisual(bool, bool) {
   }
 
+void Vob::applyGrassSetting() {
+  for(auto& i:child)
+    i->applyGrassSetting();
+  }
+
 Vec3 Vob::position() const {
   return Vec3(pos.at(3,0),pos.at(3,1),pos.at(3,2));
   }

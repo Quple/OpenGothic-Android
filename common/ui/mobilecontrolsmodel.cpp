@@ -168,12 +168,13 @@ void Controls::gui(float scale) {
     }
   }
 
-void Controls::features(bool speed, bool strafe) {
-  if(featureSpeed==speed && featureStrafe==strafe)
+void Controls::features(bool speed, bool strafe, bool backStep) {
+  if(featureSpeed==speed && featureStrafe==strafe && featureBackStep==backStep)
     return;
   cancel();
-  featureSpeed  = speed;
-  featureStrafe = strafe;
+  featureSpeed    = speed;
+  featureStrafe   = strafe;
+  featureBackStep = backStep;
   rebuild();
   }
 
@@ -215,6 +216,9 @@ InventoryLayout Mobile::inventoryLayout(float W, float H, bool twoLists, float g
   // q is the size of the interface compared to the largest one that fits the screen
   const float q = std::min(1.f,0.766f*gui);
   l.side = std::min(0.128f*H*q,0.095f*W);
+  // an almost square screen (a folded phone): two lists and the tabs would leave the description no place
+  if(twoLists)
+    l.side = std::min(l.side,0.0877f*W);
   const float side   = l.side;
   const float top    = 0.125f*H;
   const float tabW   = 0.9f*side;
@@ -325,7 +329,7 @@ void Controls::buildSettings(const Anchor& a) {
   static const char* labels[SettingCount] = {
     "Button size", "3D resolution", "Shadow quality", "SSAO effects",
     "FPS limit", "Joystick deadzone", "Camera sensitivity", "Vibration", "GUI scale",
-    "Fast forward", "HP/Mana numbers", "XP counter", "Side step buttons"
+    "Fast forward", "HP/Mana numbers", "XP counter", "Side step buttons", "Jump back button", "No grass"
     };
   // The speed is not a part of the vanilla game: its row is there only when a mod has asked for it
   std::vector<int> rows;
@@ -468,6 +472,9 @@ void Controls::buildGame(const Anchor&) {
     icon("stepleft",  left(284), bottom(166.5f), 56, "< STEP", Key::StrafeLeft,  true);
     icon("stepright", left(350), bottom(166.5f), 56, "STEP >", Key::StrafeRight, true);
     }
+  // the jump back (a step back with the weapon in the hand), under the side steps; shown only when the player is armed
+  if(featureBackStep)
+    icon("stepback",  left(317), bottom(98),    56, "BACK",   Key::BackStep, true);
 
   icon("action",    right(198),   bottom(221.5f), 88, "ACTION", Key::Action, true);
   icon("hitleft",   right(285),   bottom(166.5f), 68, "< HIT",  Key::AttackLeft, true);

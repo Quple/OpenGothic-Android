@@ -134,6 +134,7 @@ class WorldObjects final {
     void           addInteractive(Interactive*         obj);
     void           addStatic     (StaticObj*           obj);
     void           addRoot       (const std::shared_ptr<zenkit::VirtualObject>& vob, bool startup);
+    void           applyGrassSetting();
     Vob*           addScriptObject(std::string_view visual, const Tempest::Matrix4x4& transform);
     void           invalidateVobIndex();
 

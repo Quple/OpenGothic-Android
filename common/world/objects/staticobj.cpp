@@ -19,6 +19,11 @@ void StaticObj::setVobVisual(bool show, bool collideDynamic) {
   visual.setShown(show,collideDynamic ? 1 : 0,world,transform());
   }
 
+void StaticObj::applyGrassSetting() {
+  Vob::applyGrassSetting();
+  visual.applyGrassSetting(world,transform());
+  }
+
 void StaticObj::moveEvent() {
   Vob::moveEvent();
   visual.setObjMatrix(transform());

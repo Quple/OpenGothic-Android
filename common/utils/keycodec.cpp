@@ -121,7 +121,8 @@ static KeyCodec::Action touchAction(Mobile::Key key) {
 
   switch(key) {
     case K::Up:          return A::Forward;
-    case K::Down:        return A::Back;
+    case K::Down:
+    case K::BackStep:    return A::Back;
     case K::Left:        return A::RotateL;
     case K::Right:       return A::RotateR;
     case K::StrafeLeft:  return A::Left;

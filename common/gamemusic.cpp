@@ -580,7 +580,7 @@ void GameMusic::playCurrent() {
       recordedImpl = implementation;
       recordedFile = theme.file;
       recordedFadeOut = track->fadeOut;
-      recordedSound.setVolume(Gothic::settingsGetF("SOUND","musicVolume"));
+      recordedSound.setVolume(Gothic::volumeCurve(Gothic::settingsGetF("SOUND","musicVolume")));
       impl->setEnabled(false);
       sound.pause();
       if(enabled)
@@ -613,7 +613,7 @@ void GameMusic::stopMusic() {
 
 void GameMusic::setupSettings() {
   const int   musicEnabled  = Gothic::settingsGetI("SOUND",    "musicEnabled");
-  const float musicVolume   = Gothic::settingsGetF("SOUND",    "musicVolume");
+  const float musicVolume   = Gothic::volumeCurve(Gothic::settingsGetF("SOUND",    "musicVolume"));
   const int   providerIndex = Gothic::settingsGetI("INTERNAL", "soundProviderIndex");
 
   if(providerIndex != provider || musicEnabled!=isEnabled()) {

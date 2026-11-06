@@ -357,6 +357,7 @@ class Npc final {
     bool      isDead() const;
     bool      isLie() const;
     bool      isUnconscious() const;
+    bool      knockOutForbidden(const Npc& other) const;
     bool      isDown() const;
     bool      isAttack() const;
     bool      isTalk() const;

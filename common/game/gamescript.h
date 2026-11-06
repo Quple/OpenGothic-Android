@@ -258,6 +258,8 @@ class GameScript final {
 
     void     printNothingToGet();
     float    tradeValueMultiplier() const { return tradeValMult; }
+    /// Npc_GetPermAttitude: without the temporary attitude that the fights set (a quarrel does not make an enemy for good)
+    Attitude personPermAttitude(const Npc& p0, const Npc& p1) const;
     void     useInteractive(const std::shared_ptr<zenkit::INpc>& hnpc, std::string_view func);
     Attitude guildAttitude(const Npc& p0,const Npc& p1) const;
     Attitude personAttitude(const Npc& p0,const Npc& p1) const;

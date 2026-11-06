@@ -825,6 +825,11 @@ void WorldObjects::addInteractive(Interactive* obj) {
   interactiveObj.add(obj);
   }
 
+void WorldObjects::applyGrassSetting() {
+  for(auto& i:rootVobs)
+    i->applyGrassSetting();
+  }
+
 void WorldObjects::addStatic(StaticObj* obj) {
   objStatic.push_back(obj);
   }

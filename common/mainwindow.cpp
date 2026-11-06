@@ -1,4 +1,6 @@
 #include "mainwindow.h"
+
+#include <filesystem>
 #include "ui/cursorshape.h"
 
 #include <Tempest/Except>
@@ -1533,11 +1535,21 @@ void MainWindow::saveGame(std::string_view slot, std::string_view name) {
     if(!game)
       return std::move(game);
 
+    // written aside and renamed: a failed save does not destroy the previous one
+    const std::string tmp = slot+".tmp";
     {
-    Tempest::WFile  f(slot);
+    Tempest::WFile  f(tmp);
     Serialize      s(f);
     game->save(s,name,pm);
     }
+    std::error_code ec;
+    std::filesystem::rename(std::filesystem::path(tmp),std::filesystem::path(slot),ec);
+    if(ec) {
+      std::filesystem::remove(std::filesystem::path(slot),ec);
+      std::filesystem::rename(std::filesystem::path(tmp),std::filesystem::path(slot),ec);
+      if(ec)
+        throw std::runtime_error("cannot finish the save file");
+      }
 
     // no print yet, because threading
     // gothic.print("Game saved");
@@ -2047,7 +2059,7 @@ void MainWindow::updateMobileAvailability() {
         if(melee)
           allowed |= keyMask(Key::AttackLeft) | keyMask(Key::AttackRight) | keyMask(Key::Block);
         if(armed)
-          allowed |= keyMask(Key::StrafeLeft) | keyMask(Key::StrafeRight);
+          allowed |= keyMask(Key::StrafeLeft) | keyMask(Key::StrafeRight) | keyMask(Key::BackStep);
 
         target = armed;
 

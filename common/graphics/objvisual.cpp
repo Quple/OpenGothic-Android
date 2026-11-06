@@ -2,11 +2,15 @@
 
 #include <Tempest/Log>
 
+#include <cctype>
+#include <string_view>
+
 #include "world/world.h"
 #include "game/serialize.h"
 #include "graphics/mesh/pose.h"
 #include "graphics/mesh/skeleton.h"
 #include "utils/fileext.h"
+#include "gothic.h"
 
 ObjVisual::ObjVisual() {
   }
@@ -36,6 +40,8 @@ ObjVisual::ObjVisual(ObjVisual&& other) {
   mdlShown      = other.mdlShown;
   animMode      = other.animMode;
   animStrength  = other.animStrength;
+  grass         = other.grass;
+  meshWanted    = other.meshWanted;
   }
 
 ObjVisual& ObjVisual::operator =(ObjVisual&& other) {
@@ -65,6 +71,8 @@ ObjVisual& ObjVisual::operator =(ObjVisual&& other) {
   mdlShown      = other.mdlShown;
   animMode      = other.animMode;
   animStrength  = other.animStrength;
+  grass         = other.grass;
+  meshWanted    = other.meshWanted;
   return *this;
   }
 
@@ -137,8 +145,33 @@ void ObjVisual::setVisual(const zenkit::IItem& hitem, World& world, bool staticD
     }
   }
 
+namespace {
+bool containsNoCase(std::string_view text, std::string_view what) {
+  if(text.size()<what.size())
+    return false;
+  for(size_t i=0; i+what.size()<=text.size(); ++i) {
+    size_t j=0;
+    for(; j<what.size(); ++j)
+      if(std::toupper(static_cast<unsigned char>(text[i+j]))!=what[j])
+        break;
+    if(j==what.size())
+      return true;
+    }
+  return false;
+  }
+
+/// the meshes of the grass: the name says it (NW_NATURE_GRASS_01.3DS), or the vob is animated by the wind as the grass is
+bool isGrassMesh(std::string_view name, const zenkit::VirtualObject& vob) {
+  if(containsNoCase(name,"GRASS"))
+    return true;
+  return vob.anim_mode==zenkit::AnimationType::WIND_ALT && vob.anim_strength>0;
+  }
+}
+
 void ObjVisual::setVisual(const zenkit::VirtualObject& vob, World& world, bool staticDraw) {
   cleanup();
+  grass      = false;
+  meshWanted = true;
 
   const bool       enableCollision = vob.cd_dynamic;    // collide with player
   this->staticDraw   = staticDraw;
@@ -161,7 +194,9 @@ void ObjVisual::setVisual(const zenkit::VirtualObject& vob, World& world, bool s
         return;
       setType(M_Mesh);
       mesh.proto = view;
-      if(vob.show_visual) {
+      grass      = isGrassMesh(visName,vob);
+      meshWanted = vob.show_visual;
+      if(vob.show_visual && !(grass && Gothic::isNoGrass())) {
         mesh.view = world.addStaticView(view,staticDraw);
         mesh.view.setWind(vob.anim_mode,vob.anim_strength);
         }
@@ -248,11 +283,28 @@ void ObjVisual::setObjMatrix(const Tempest::Matrix4x4& obj) {
     }
   }
 
+void ObjVisual::applyGrassSetting(World& world, const Tempest::Matrix4x4& obj) {
+  if(type!=M_Mesh || !grass || mesh.proto==nullptr)
+    return;
+  if(Gothic::isNoGrass()) {
+    mesh.view = MeshObjects::Mesh();
+    return;
+    }
+  if(meshWanted && mesh.view.isEmpty()) {
+    mesh.view = world.addStaticView(mesh.proto,staticDraw);
+    mesh.view.setWind(animMode,animStrength);
+    mesh.view.setObjMatrix(obj);
+    }
+  }
+
 void ObjVisual::setShown(bool show, int collide, World& world, const Tempest::Matrix4x4& obj) {
   switch(type) {
     case M_Mesh: {
       if(mesh.proto==nullptr)
         break;
+      meshWanted = show;
+      if(grass && Gothic::isNoGrass())
+        show = false;
       if(!show) {
         mesh.view = MeshObjects::Mesh();
         } else

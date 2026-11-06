@@ -208,6 +208,8 @@ class World final {
     void                 registerVob  (std::string_view name, Vob* vob);
     void                 unregisterVob(std::string_view name, Vob* vob);
     size_t               setVobVisual (std::string_view name, bool show, bool collide);
+    /// the grass is shown or hidden again after Gothic::setNoGrass
+    void                 applyGrassSetting();
     bool                 vobPosition  (std::string_view name, Tempest::Vec3& pos) const;
 
   private:

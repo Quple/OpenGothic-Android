@@ -115,6 +115,10 @@ class Gothic final {
     void         popPause();
     bool         isPause() const;
 
+    /// the grass is not drawn (the option of the touch settings); changes the world that is loaded now
+    static bool  isNoGrass();
+    static void  setNoGrass(bool v);
+
     bool         isMarvinEnabled() const;
     void         setMarvinEnabled(bool m);
 
@@ -222,6 +226,8 @@ class Gothic final {
     static float                          settingsGetF(std::string_view sec, std::string_view name);
     static void                           settingsSetF(std::string_view sec, std::string_view name, float val);
     static float                          settingsSoundVolume();
+    /// the value of a volume slider (0..1) -> the gain: the sliders of the sounds and of the music are not linear
+    static float                          volumeCurve(float v);
     static void                           flushSettings();
 
   private:

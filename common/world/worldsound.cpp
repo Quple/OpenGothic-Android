@@ -17,6 +17,7 @@
 #include "gothic.h"
 #include "resources.h"
 
+#include <algorithm>
 #include <cctype>
 
 const float WorldSound::maxDist   = 7000; // 70 meters
@@ -217,7 +218,8 @@ Sound WorldSound::addDlgSound(std::string_view s, const Tempest::Vec3& pos, floa
     return Sound();
 
   //WA for https://github.com/Try/OpenGothic/issues/922
-  static float fixupMultiplyer = 2.f;
+  // (a gain over 1 clips the voices on the phones: it is an option now, SOUND/dialogGain)
+  const float fixupMultiplyer = std::clamp(Gothic::settingsGetF("SOUND","dialogGain"),0.1f,2.f);
 
   std::lock_guard<std::mutex> guard(sync);
   initSlot(*ret.val);
