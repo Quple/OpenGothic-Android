@@ -620,7 +620,22 @@ void DialogMenu::paintTouchChoice(PaintEvent& e) {
     return;
 
   const auto geo = touchGeometry();
-  touchScroll = std::clamp(touchScroll,0.f,float(geo.maxScroll));
+  if(touchSeenCount!=choice.size()) {
+    // another list of answers starts from the top
+    touchSeenCount = choice.size();
+    touchSeenSel   = size_t(-1);
+    touchScroll    = 0;
+    }
+  // The selected answer is kept in the view when it is moved by the cross or the pad, not by a finger
+  if(dlgSel!=touchSeenSel && !touchDrag && dlgSel<geo.cards.size()) {
+    const auto& c = geo.cards[dlgSel];
+    if(float(c.y)<touchScroll)
+      touchScroll = float(c.y); else
+    if(float(c.y+c.h)>touchScroll+float(geo.view.h))
+      touchScroll = float(c.y+c.h-geo.view.h);
+    }
+  touchSeenSel = dlgSel;
+  touchScroll  = std::clamp(touchScroll,0.f,float(geo.maxScroll));
 
   Painter p(e);
   p.setScissor(geo.view.x,geo.view.y,geo.view.w,geo.view.h);

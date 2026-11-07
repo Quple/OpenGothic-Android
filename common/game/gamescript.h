@@ -187,6 +187,7 @@ class GameScript final {
 
     auto*            goldId() const { return itMi_Gold; }
     ScriptFn         playerPercAssessMagic();
+    ScriptFn         assessTalkFallback();
     std::string_view currencyName() const { return goldTxt; }
     int              npcDamDiveTime();
     int32_t          criticalDamageMultiplyer() const;

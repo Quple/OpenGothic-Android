@@ -144,7 +144,7 @@ InventoryMenu::InventoryMenu(const KeyCodec& key)
 
   setFocusPolicy(NoFocus);
   setCursorShape(HiddenCursor);
-  takeTimer.timeout.bind(this,&InventoryMenu::onTakeStuff);
+  takeTimer.timeout.bind(this,&InventoryMenu::onTakeTimer);
   }
 
 InventoryMenu::~InventoryMenu() {
@@ -383,7 +383,7 @@ void InventoryMenu::keyDownEvent(KeyEvent &e) {
 
   if(keycodec.tr(e)==KeyCodec::Jump) {
     lootMode = LootMode::Stack;
-    takeTimer.start(200);
+    startTakeTimer();
     onTakeStuff();
     }
   else if (keycodec.tr(e)==KeyCodec::ActionGeneric || e.key==KeyEvent::K_Return) {
@@ -400,17 +400,17 @@ void InventoryMenu::keyDownEvent(KeyEvent &e) {
     }
   else if(e.key==KeyEvent::K_Space) {
     lootMode = LootMode::Normal;
-    takeTimer.start(200);
+    startTakeTimer();
     onTakeStuff();
     }
   else if(e.key==KeyEvent::K_Z) {
     lootMode = LootMode::Ten;
-    takeTimer.start(200);
+    startTakeTimer();
     onTakeStuff();
     }
   else if(e.key==KeyEvent::K_X) {
     lootMode = LootMode::Hundred;
-    takeTimer.start(200);
+    startTakeTimer();
     onTakeStuff();
     }
 
@@ -585,9 +585,24 @@ void InventoryMenu::onItemAction(uint8_t slotHint) {
     }
   else if(state==State::Chest || state==State::Trade || state==State::Ransack) {
     lootMode = LootMode::Normal;
-    takeTimer.start(200);
+    startTakeTimer();
     onTakeStuff();
     }
+  }
+
+void InventoryMenu::startTakeTimer() {
+  // A held key repeats the transfer. The first repeat comes later than a slow tap lasts (a finger on a touch screen
+  // keeps the button down for 200 ms easily), otherwise one tap sells or buys two items.
+  takeSkip = 2;
+  takeTimer.start(200);
+  }
+
+void InventoryMenu::onTakeTimer() {
+  if(takeSkip>0) {
+    --takeSkip;
+    return;
+    }
+  onTakeStuff();
   }
 
 void InventoryMenu::onTakeStuff() {
@@ -1131,13 +1146,47 @@ void InventoryMenu::drawInfoTouch(Painter& p) {
   p.setBrush(Brush(Color(0.01f,0.015f,0.02f,0.62f)));
   p.drawRect(x,y,dw,dh);
 
-  auto& fnt = Resources::font(touchTextScale());
+  const int avail = std::max(1,dw-2*in);
+
+  // The box is a fraction of the screen, the text depends on the height: on a narrow or small screen the text has to
+  // shrink until the widest line (a label and its value) fits, otherwise the lines run into each other.
+  auto rowValue = [&](size_t i) {
+    int32_t val = item.uiValue(i);
+    if(i+1==Item::MAX_UI_ROWS && state==State::Trade && player!=nullptr && pg.is(&player->inventory()))
+      val = item.sellCost();
+    return val;
+    };
+  float textScale = touchTextScale();
+  {
+    auto& f0 = Resources::font(textScale);
+    int   need = 0;
+    for(size_t i=0; i<Item::MAX_UI_ROWS; ++i) {
+      auto txt = item.uiText(i);
+      if(txt.empty())
+        continue;
+      const int32_t val = rowValue(i);
+      int line = f0.textSize(txt).w;
+      if(val!=0)
+        line += f0.textSize(string_frm(val)).w + in;
+      need = std::max(need,line);
+      }
+    if(need>avail)
+      textScale *= float(avail)/float(need);
+    textScale = std::max(textScale,0.3f);
+  }
+  auto& fnt = Resources::font(textScale);
   const int pix = fnt.pixelSize();
 
-  // title in the center
-  auto  desc  = item.description();
-  auto& title = Resources::font(touchTextScale()*1.05f);
-  title.drawText(p,x+(dw-title.textSize(desc).w)/2,y+int(H*0.05f)+title.pixelSize()/2,desc);
+  // title in the center, smaller when it is wider than the box
+  auto  desc       = item.description();
+  float titleScale = textScale*1.05f;
+  {
+    const int tw = Resources::font(titleScale).textSize(desc).w;
+    if(tw>avail)
+      titleScale = std::max(0.3f,titleScale*float(avail)/float(tw));
+  }
+  auto& title = Resources::font(titleScale);
+  title.drawText(p,x+std::max(in/2,(dw-title.textSize(desc).w)/2),y+int(H*0.05f)+title.pixelSize()/2,desc);
 
   // The separator of the actions. Properties are packed above it.
   const int sepY = int(lay.use.y-H*0.022f);
@@ -1154,11 +1203,9 @@ void InventoryMenu::drawInfoTouch(Painter& p) {
   const int propsTop = ry-rowH;
   for(size_t i=0; i<Item::MAX_UI_ROWS; ++i) {
     auto    txt = item.uiText(i);
-    int32_t val = item.uiValue(i);
     if(txt.empty())
       continue;
-    if(i+1==Item::MAX_UI_ROWS && state==State::Trade && player!=nullptr && pg.is(&player->inventory()))
-      val = item.sellCost();
+    const int32_t val = rowValue(i);
 
     fnt.drawText(p,x+in,ry,txt);
     if(val!=0) {

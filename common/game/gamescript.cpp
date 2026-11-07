@@ -663,7 +663,8 @@ void GameScript::initCommon() {
       goldTxt = item->name;
       }
     //
-    tradeValMult    = 1.f;
+    // Gothic 1 has no TRADE_VALUE_MULTIPLIER in scripts: the trader pays half of the value of an item (rounded up)
+    tradeValMult    = 0.5f;
     viewTimePerChar = 550.f;
     ItKE_lockpick   = vm.find_symbol_by_name("itkelockpick");
     }
@@ -1966,6 +1967,13 @@ AiOuputPipe *GameScript::openDlgOuput(Npc &player, Npc &npc) {
   if(player.isPlayer())
     return owner.openDlgOuput(player,npc);
   return owner.openDlgOuput(npc,player);
+  }
+
+ScriptFn GameScript::assessTalkFallback() {
+  auto id = vm.find_symbol_by_name("B_ASSESSTALK");
+  if(id==nullptr || id->type()!=zenkit::DaedalusDataType::FUNCTION)
+    return ScriptFn();
+  return ScriptFn(id->index());
   }
 
 ScriptFn GameScript::playerPercAssessMagic() {

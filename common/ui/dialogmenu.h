@@ -81,6 +81,8 @@ class DialogMenu : public Tempest::Widget {
     float touchStartY      = 0;
     float touchStartScroll = 0;
     bool  touchDrag        = false;
+    size_t touchSeenSel    = size_t(-1);   // the answer the list has been scrolled to (the cross and the pad move it)
+    size_t touchSeenCount  = 0;
 #endif
     void setupSettings();
     bool isChoiceMenuActive() const;

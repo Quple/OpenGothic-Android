@@ -46,7 +46,7 @@ const char* const IconFiles[AndroidInput::IconCount] = {
   "all.png", "weapons.png", "armor.png", "jewelry.png", "magic.png",
   "food.png", "potion.png", "documents.png", "misc.png",
   "use_new.png", "drop.png", "transfer_new.png", "up_new.png", "down_new.png", "inv_slot.png", "inv_slot_selected.png",
-  "skip.png", "talk.png", "target_lock.png", "fast_forward.png", "save.png"
+  "skip.png", "talk.png", "target_lock.png", "fast_forward.png", "save.png", "human.png"
   };
 
 const char* const SettingNames[Mobile::SettingCount] = {
@@ -735,6 +735,9 @@ int AndroidInput::Controller::iconFor(const Mobile::Button& b) const {
 
   if(game && b.key==Key::Action)
     return hud.actionIcon;
+  // the button that turns the character back from a transformation (see Controls::buildGame)
+  if(game && b.key==Key::Enter && b.label=="HUMAN")
+    return IconHuman;
 
   if(inventory) {
     switch(b.key) {

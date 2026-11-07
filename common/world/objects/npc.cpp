@@ -698,8 +698,12 @@ bool Npc::checkHealth(bool onChange, bool allowUnconscious) {
 
   const int minHp = isMonster() ? 0 : 1;
   if(hnpc->attribute[ATR_HITPOINTS]<=minHp) {
+    // Gothic 1: a human who is beaten in a melee fight falls unconscious, whatever his attitude is (every fight against
+    // the player would be a fight to the death otherwise, and quests like the replacement of Ghorim need a beaten man).
+    // Only the finishing blow, arrows and spells kill him.
+    const bool g1Knockout = owner.version().game==1 && currentOther!=nullptr && currentOther->isHuman();
     if(currentOther==nullptr || !allowUnconscious || !isHuman() ||
-       owner.script().personAttitude(*this,*currentOther)==ATT_HOSTILE){
+       (!g1Knockout && owner.script().personAttitude(*this,*currentOther)==ATT_HOSTILE)){
       if(hnpc->attribute[ATR_HITPOINTS]<=0)
         onNoHealth(true,HS_Dead);
       return false;
@@ -1783,7 +1787,9 @@ bool Npc::implGoTo(uint64_t dt, float destDist) {
   // a scene of a mod waits for the characters that it sends to the way points (AI_WaitTillEnd): one that is blocked by a collision
   // that the scripts should have switched off would hold the scene for ever
   const Npc* player = owner.player();
-  if(go2.wp!=nullptr && !isInAir() && !isSwim() && !isDive() && !isDown() && interactive()==nullptr && owner.script().hasDma() &&
+  // (Gothic 1: the same helps a guide that has got stuck on the way, Baal Parvez at the campfire)
+  if(go2.wp!=nullptr && !isInAir() && !isSwim() && !isDive() && !isDown() && interactive()==nullptr &&
+     (owner.script().hasDma() || owner.version().game==1) &&
      player!=nullptr && (player->position()-position()).length()<4000.f &&   // near the player: a routine or the commands of a script
      (go2.flag==GT_Way || go2.flag==GT_NextFp || go2.flag==GT_Point)) {
     if((position()-goStuckPos).length()>60.f) {
@@ -5140,6 +5146,15 @@ bool Npc::perceptionProcess(Npc &pl, Npc* victim, float quadDist, PercType perc)
     if(defaultFn.isValid())
       owner.script().invokeState(this,&pl,victim,defaultFn);
     return true;
+    }
+  if(perc==PERC_ASSESSTALK && !isPlayer() && !isMonster() && owner.version().game==1) {
+    // Gothic 1: a character busy with a task of its own (Ghorim kneading) may have no perception of the talk enabled by
+    // its state, and the action button did nothing. The script that answers the talk is B_AssessTalk.
+    auto defaultFn = owner.script().assessTalkFallback();
+    if(defaultFn.isValid()) {
+      owner.script().invokeState(this,&pl,victim,defaultFn);
+      return true;
+      }
     }
   return false;
   }

@@ -69,19 +69,34 @@ GameMenu::MainRows GameMenu::mainRows() const {
   // under the logo and the title of the game
   float titleBottom = 0.365f*H-float(m.rowH)/2;
   {
-    int k = 0;
+    int  k = 0;
+    Rect scriptFirst, drawnFirst;   // the rect of the first image in the script and where it is drawn
     for(const auto& it:hItems) {
       if(!it.handle || !it.visible || !it.img || it.handle->type!=zenkit::MenuItemType::TEXT ||
          isSelectable(it.handle) || isHidden(it.handle) || it.img->w()<256 || it.img->h()<=0)
         continue;
       if(float(it.img->w())/float(it.img->h())<2.5f || k>=2)
         continue;
-      const int iw = int(W*0.30f);
-      const int ih = iw*it.img->h()/it.img->w();
-      const int cy = int(H*0.173f)+int(float(ih)*0.85f*float(k));
-      m.images.push_back(Rect(m.cx-iw/2,cy-ih/2,iw,ih));
+      const Rect ir = itemRect(it);
+      Rect       r;
+      if(k==0) {
+        const int iw = int(W*0.30f);
+        const int ih = iw*it.img->h()/it.img->w();
+        const int cy = int(H*0.173f);
+        r          = Rect(m.cx-iw/2,cy-ih/2,iw,ih);
+        scriptFirst = ir;
+        drawnFirst  = r;
+        } else {
+        // The other image (the shadow of the logo) keeps its place against the first one, as the script of the menu
+        // puts it: before, it was stacked under the logo and not behind it
+        const float sx = scriptFirst.w>0 ? float(drawnFirst.w)/float(scriptFirst.w) : 1.f;
+        const float sy = scriptFirst.h>0 ? float(drawnFirst.h)/float(scriptFirst.h) : 1.f;
+        r = Rect(drawnFirst.x+int(float(ir.x-scriptFirst.x)*sx),drawnFirst.y+int(float(ir.y-scriptFirst.y)*sy),
+                 std::max(1,int(float(ir.w)*sx)),std::max(1,int(float(ir.h)*sy)));
+        }
+      m.images.push_back(r);
       m.imgTex.push_back(it.img);
-      titleBottom = std::max(titleBottom,float(cy)+H*0.095f-float(m.rowH)/2);
+      titleBottom = std::max(titleBottom,float(r.y+r.h)+H*0.012f-float(m.rowH)/2);
       ++k;
       }
   }

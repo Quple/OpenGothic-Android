@@ -139,6 +139,7 @@ class InventoryMenu : public Tempest::Widget {
     bool                      covered    =false;
     Tempest::Timer            takeTimer;
     size_t                    takeCount  =0;
+    uint8_t                   takeSkip   =0;     // ticks of the timer to wait before a held key starts to repeat
     LootMode                  lootMode   =LootMode::Normal;
     InventoryRenderer         renderer;
 
@@ -190,6 +191,8 @@ class InventoryMenu : public Tempest::Widget {
 
     void          onItemAction(uint8_t slotHint);
     void          onTakeStuff();
+    void          startTakeTimer();
+    void          onTakeTimer();
     void          adjustScroll();
     void          syncScriptCategory(bool reset);
     void          updateItemInfo(const Item& item);
