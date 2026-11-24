@@ -147,6 +147,7 @@ class ParticleFx final {
 
     static auto          loadTexture(std::string_view src) -> const Tempest::Texture2d*;
     static KeyList       loadArr(std::string_view src);
+    static bool          isEmitType(std::string_view src);
     static EmitterType   loadEmitType(std::string_view src);
     static Frame         loadFrameType(std::string_view src);
     static Distribution  loadDistribType(std::string_view src);

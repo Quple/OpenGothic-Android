@@ -1,5 +1,7 @@
 #include "particlefx.h"
 
+#include <cctype>
+
 #include "utils/parser.h"
 #include "gothic.h"
 #include "resources.h"
@@ -55,7 +57,9 @@ ParticleFx::ParticleFx(const zenkit::IParticleEffect& src, std::string_view name
   shpDim              = Parser::loadVec3(src.shp_dim_s);
   shpMesh_S           = src.shp_mesh_s;
   shpMesh             = Resources::loadEmiterMesh(src.shp_mesh_s);
-  shpMeshRender       = src.shp_mesh_render_b!=0;
+  // The shape of MFX_ICELANCE_INIT is "20" (a number in place of a type), though it has the mesh of the lance and shpMeshRender: the original does not
+  // draw the lance in the hand of the hero with it, only the stars. The mesh of the shape is drawn when the type of the shape is a real one.
+  shpMeshRender       = src.shp_mesh_render_b!=0 && (src.shp_type_s.empty() || isEmitType(src.shp_type_s));
   shpScaleKeys        = loadArr(src.shp_scale_keys_s);
   shpScaleIsLooping   = src.shp_scale_is_looping!=0;
   shpScaleIsSmooth    = src.shp_scale_is_smooth!=0;
@@ -229,6 +233,13 @@ ParticleFx::KeyList ParticleFx::loadArr(std::string_view vsrc) {
     v.push_back(f);
     str = next;
     }
+  }
+
+bool ParticleFx::isEmitType(std::string_view src) {
+  std::string s(src);
+  for(auto& c:s)
+    c = char(std::toupper(static_cast<unsigned char>(c)));
+  return s=="POINT" || s=="LINE" || s=="BOX" || s=="CIRCLE" || s=="SPHERE" || s=="MESH";
   }
 
 ParticleFx::EmitterType ParticleFx::loadEmitType(std::string_view src) {
