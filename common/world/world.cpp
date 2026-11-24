@@ -426,6 +426,8 @@ void World::tick(uint64_t dt) {
       rain.reset(new RainFx(*this));
     rain->tick(dt);
     wview->setOvercast(rain->overcast());
+    wview->setWetness(rain->wetness(), rain->rainFall(), rain->wetMode());
+    wview->setCover(rain->cover());
     }
   }
 

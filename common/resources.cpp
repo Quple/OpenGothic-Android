@@ -327,6 +327,29 @@ const Texture2d &Resources::fallbackBlack() {
   return inst->fbZero;
   }
 
+const Texture2d& Resources::rainDropTexture() {
+  std::lock_guard<std::recursive_mutex> g(inst->sync);
+  if(inst->fbRainDrop.isEmpty()) {
+    const int sz = 32;
+    Pixmap pm(uint32_t(sz),uint32_t(sz),TextureFormat::RGBA8);
+    uint8_t* pix = reinterpret_cast<uint8_t*>(pm.data());
+    for(int y=0; y<sz; ++y)
+      for(int x=0; x<sz; ++x) {
+        const float dx = (float(x)+0.5f)/float(sz)*2.f-1.f;
+        const float dy = (float(y)+0.5f)/float(sz)*2.f-1.f;
+        const float r  = std::sqrt(dx*dx+dy*dy);
+        const float a  = std::pow(std::clamp(1.f-r,0.f,1.f),1.3f);
+        uint8_t*    p  = pix + size_t(y*sz+x)*4;
+        p[0] = 255;
+        p[1] = 255;
+        p[2] = 255;
+        p[3] = uint8_t(a*255.f);
+        }
+    inst->fbRainDrop = inst->dev.texture(pm);
+    }
+  return inst->fbRainDrop;
+  }
+
 const Tempest::StorageImage& Resources::fallbackImage() {
   return inst->fbImg;
   }

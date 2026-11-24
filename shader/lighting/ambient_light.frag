@@ -66,7 +66,7 @@ vec3 luminance(vec3 norm) {
 
   vec3 ret  = vec3(0);
   ret += ambient;
-  ret += sky*0.8;
+  ret += sky*0.8*(1.0 - 0.55*scene.overcast); // the rain: the clouds keep the blue light of the sky
   ret += (norm.y*0.25+0.75) * NightAmbient * Fd_Lambert;
   return ret;
 #endif

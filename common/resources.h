@@ -96,6 +96,8 @@ class Resources final {
 
     static const Tempest::Texture2d& fallbackTexture();
     static const Tempest::Texture2d& fallbackBlack();
+    /// A soft white blob (alpha falls from the center): the drops that bounce off the ground in the rain, stretched along the velocity
+    static const Tempest::Texture2d& rainDropTexture();
     static auto                      fallbackImage() -> const Tempest::StorageImage&;
     static Tempest::Texture2d        loadTextureUncached(std::string_view name, bool forceMips = false);
     static const Tempest::Texture2d* loadTexture(std::string_view name, bool forceMips = false);
@@ -202,7 +204,7 @@ class Resources final {
 
     Tempest::VertexBuffer<Vertex> sphere(int passCount, float R);
 
-    Tempest::Texture2d fallback, fbZero;
+    Tempest::Texture2d fallback, fbZero, fbRainDrop;
     Tempest::StorageImage fbImg;
 
     using BindK  = std::tuple<const Skeleton*,const ProtoMesh*>;

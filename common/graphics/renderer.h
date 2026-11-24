@@ -100,6 +100,7 @@ class Renderer final {
     void drawTonemapping  (Tempest::Attachment& result, Tempest::Encoder<Tempest::CommandBuffer>& cmd, const WorldView& wview);
     void drawCMAA2        (Tempest::Attachment& result, Tempest::Encoder<Tempest::CommandBuffer>& cmd, const WorldView& wview);
     void drawReflections  (Tempest::Encoder<Tempest::CommandBuffer>& cmd, const WorldView& wview);
+    void drawWetGround    (Tempest::Encoder<Tempest::CommandBuffer>& cmd, const WorldView& wview, uint8_t fId);
     void drawUnderwater   (Tempest::Encoder<Tempest::CommandBuffer>& cmd, const WorldView& wview);
     void drawFog          (Tempest::Encoder<Tempest::CommandBuffer>& cmd, const WorldView& wview);
     void drawSunMoon      (Tempest::Encoder<Tempest::CommandBuffer>& cmd, const WorldView& wview);
@@ -167,6 +168,10 @@ class Renderer final {
     Tempest::Attachment       sceneLinear;
     Tempest::ZBuffer          zbuffer, shadowMap[Resources::ShadowLayers];
     Tempest::ZBuffer          zbufferUi;
+
+    /// What is over the ground around the camera (RainCover, a copy for every frame in flight): the wet ground is not drawn under the roofs
+    Tempest::StorageBuffer    wetCoverPf[Resources::MaxFramesInFlight];
+    uint32_t                  wetCoverVer[Resources::MaxFramesInFlight] = {};
 
     Tempest::Attachment       sceneOpaque;
     Tempest::Attachment       sceneDepth;

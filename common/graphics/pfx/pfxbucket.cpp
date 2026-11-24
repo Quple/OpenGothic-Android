@@ -7,6 +7,7 @@
 #include "pfxobjects.h"
 #include "particlefx.h"
 #include "world/objects/npc.h"
+#include "world/raincover.h"
 
 using namespace Tempest;
 
@@ -402,6 +403,14 @@ void PfxBucket::tick(Block& sys, ImplEmitter& emitter, size_t particle, uint64_t
   ps.life  = uint16_t(ps.life-dt);
   ps.pos  += ps.dir*dtF;
   ps.dir  += decl.flyGravity*dtF;
+
+  // the rain does not fall under a roof: the drop ends on the highest surface over its place (60 cm: the half of the streak)
+  if(decl.cover!=nullptr && !decl.useEmittersFOR && ps.pos.y < decl.cover->topAt(ps.pos.x,ps.pos.z)+60.f) {
+    ps.life = 0;
+    sys.count--;
+    finalize(particle+sys.offset);
+    return;
+    }
 
   if(maxTrlTime!=0)
     tickTrail(ps,emitter,dt);

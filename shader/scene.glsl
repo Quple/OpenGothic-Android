@@ -38,6 +38,7 @@ struct SceneDesc {
   ivec2 screenRes;
   vec4  cloudsDir;
   float probeGridBias;
+  float overcast;     // the clouds of the rain 0..1
   };
 
 struct LightSource {

@@ -1,7 +1,7 @@
 #ifndef CLOUDS_GLSL
 #define CLOUDS_GLSL
 
-vec4 clouds(vec3 at, float nightPhase, vec3 highlight,
+vec4 clouds(vec3 at, float nightPhase, vec3 highlight, float overcast, out float density,
             vec2 dxy0, vec2 dxy1,
             in sampler2D dayL1,   in sampler2D dayL0,
             in sampler2D nightL1, in sampler2D nightL0) {
@@ -20,8 +20,13 @@ vec4 clouds(vec3 at, float nightPhase, vec3 highlight,
   vec4  cloudNL0 = texture(nightL0, texc*0.6 + vec2(0.5)); // stars
 #endif
 
-  cloudDL0.a   = cloudDL0.a*0.2;
-  cloudDL1.a   = cloudDL1.a*0.2;
+  // how thick the clouds of the game are here (the textures of both layers): the dark core and the thin edge of the storm
+  density      = (cloudDL0.a+cloudDL1.a)*0.5;
+
+  // the rain: the layers get thicker, the gaps between the clouds are covered (the sky is closed by the cloud in the end, in applyClouds)
+  const float cloudGain = 0.2 + 1.8*overcast;
+  cloudDL0.a   = clamp(cloudDL0.a*cloudGain, 0.0, 1.0);
+  cloudDL1.a   = clamp(cloudDL1.a*cloudGain, 0.0, 1.0);
   cloudNL0.a   = cloudNL0.a*1.0; // stars
   cloudNL1.a   = cloudNL1.a*0.1;
 
@@ -44,7 +49,7 @@ vec4 clouds(vec3 at, float nightPhase, vec3 highlight,
   return color;
   }
 
-vec3 applyClouds(vec3 skyColor, in sampler2D skyLUT, vec3 plPos, vec3 sunDir, vec3 view, float nightPhase,
+vec3 applyClouds(vec3 skyColor, in sampler2D skyLUT, vec3 plPos, vec3 sunDir, vec3 view, float nightPhase, float overcast,
                  vec2 dxy0, vec2 dxy1,
                  in sampler2D dayL1,   in sampler2D dayL0,
                  in sampler2D nightL1, in sampler2D nightL0) {
@@ -58,11 +63,28 @@ vec3 applyClouds(vec3 skyColor, in sampler2D skyLUT, vec3 plPos, vec3 sunDir, ve
   lum += textureSkyLUT(skyLUT, plPos, vec3( view.x, view.y*0.0,-view.z), sunDir);
   //return lum;
 
-  vec4 cloud = clouds((plPos + view*L)*0.01, nightPhase, lum,
+  float density = 0.0;
+  vec4 cloud = clouds((plPos + view*L)*0.01, nightPhase, lum, overcast, density,
                       dxy0, dxy1,
                       dayL1,dayL0, nightL1,nightL0);
-  return skyColor + cloud.rgb * cloud.a;
-  // return mix(skyColor, cloud.rgb, cloud.a);
-  }
 
+  // without the rain: the sum of the original
+  vec3 ret = skyColor + cloud.rgb * cloud.a * (1.0-overcast);
+
+  // THE STORM. The clouds of the game (their layers and the places where they are thick) close the whole sky: it is a dark gray cover, a part
+  // of the brightness of the sky behind it (the sun is a bright place of it), the thick places are almost black and the thin ones are lighter.
+  // The light rain has the thin cover of it, the heavy one has all of it.
+  if(overcast>0.0) {
+    const float sl     = min(dot(skyColor, vec3(0.2126,0.7152,0.0722)), 1.2);
+    const float thick  = smoothstep(0.02, 0.75, density);
+    const float shade  = mix(1.35, 0.30, thick);
+    const float dark   = mix(0.50, 0.11, smoothstep(0.2, 1.0, overcast));
+    const vec3  storm  = vec3(sl) * dark * shade * vec3(0.93,1.0,1.10);
+
+    // the cover: the clouds of the game where they are, the rest of the sky closes when the rain is strong
+    const float cover  = mix(clamp(cloud.a*1.6, 0.0, 1.0), 1.0, smoothstep(0.25, 0.8, overcast));
+    ret = mix(ret, storm, cover*smoothstep(0.0, 0.5, overcast));
+    }
+  return ret;
+  }
 #endif

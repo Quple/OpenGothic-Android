@@ -243,6 +243,8 @@ add_shader(tonemapping_up.frag       lighting/tonemapping.frag -DUPSCALE)
 add_shader(water_reflection.mesh     water/water_reflection.mesh)
 add_shader(water_reflection.frag     water/water_reflection.frag)
 add_shader(water_reflection_ssr.frag water/water_reflection.frag -DSSR)
+add_shader(wet_reflection.frag       water/water_reflection.frag -DWET)
+add_shader(wet_reflection_ssr.frag   water/water_reflection.frag -DWET -DSSR)
 
 add_shader(underwater_t.frag         water/underwater.frag "")
 add_shader(underwater_s.frag         water/underwater.frag -DSCATTERING)

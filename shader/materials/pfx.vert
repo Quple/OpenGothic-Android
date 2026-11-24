@@ -8,6 +8,7 @@
 const int PfxOrientationNone       = 0;
 const int PfxOrientationVelocity   = 1;
 const int PfxOrientationVelocity3d = 2;
+const int PfxOrientationVelocity3dFixed = 3;
 
 struct Particle {
   vec3  pos;
@@ -126,6 +127,16 @@ vec4 processVertex(out Varyings shOut, in Vertex v, uint instanceId, uint vboOff
         v.dir/=ldir;
       top  = -v.dir;
       left = -cross(top,depth);
+      }
+    else if(visOrientation==PfxOrientationVelocity3dFixed) {
+      // the streak along the velocity with the width that stays: when it flies at the camera it is seen from the end, and a quad that
+      // shrinks to nothing (Velocity3d) is not drawn at all: the rain overhead was missing. Seen from the end it turns to a quad of the screen.
+      const float ldir = length(v.dir);
+      const vec3  dir  = (ldir>0.0) ? (v.dir/ldir) : vec3(0,-1,0);
+      const vec3  ax   = -dir;
+      const float k    = smoothstep(0.0, 0.3, length(cross(ax,depth)));
+      top  = normalize(mix(scene.pfxTop, ax, k));
+      left = -normalize(cross(top,depth));
       }
     else if(visOrientation==PfxOrientationVelocity) {
       vec3  dir  = (m * vec4(v.dir,0)).xyz;

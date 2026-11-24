@@ -171,6 +171,8 @@ void Shaders::compileShaders() noexcept {
   underwaterS        = inWaterShader("underwater_s", true);
   waterReflection    = reflectionShader("water_reflection.frag.sprv", opts.doMeshShading);
   waterReflectionSSR = reflectionShader("water_reflection_ssr.frag.sprv", opts.doMeshShading);
+  wetReflection      = reflectionShader("wet_reflection.frag.sprv",       false, true);
+  wetReflectionSSR   = reflectionShader("wet_reflection_ssr.frag.sprv",   false, true);
 
   {
   RenderState state;
@@ -818,14 +820,15 @@ RenderPipeline Shaders::inWaterShader(std::string_view name, bool isScattering) 
   return device.pipeline(Triangles,state,vs,fs);
   }
 
-RenderPipeline Shaders::reflectionShader(std::string_view name, bool hasMeshlets) {
+RenderPipeline Shaders::reflectionShader(std::string_view name, bool hasMeshlets, bool darken) {
   auto& device = Resources::device();
 
   RenderState state;
   state.setZTestMode    (RenderState::ZTestMode::LEqual);
   state.setZWriteEnabled(false);
   state.setBlendSource  (RenderState::BlendMode::One);
-  state.setBlendDest    (RenderState::BlendMode::One);
+  // the wet ground: the reflection is added, the scene is darker by the alpha
+  state.setBlendDest    (darken ? RenderState::BlendMode::OneMinusSrcAlpha : RenderState::BlendMode::One);
 
   auto sh = shaderByName("triangle.vert.sprv");
   auto vs = device.shader(sh.data,sh.len);

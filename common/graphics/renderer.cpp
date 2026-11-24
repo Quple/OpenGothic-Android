@@ -756,6 +756,7 @@ void Renderer::draw(Tempest::Attachment& result, Encoder<CommandBuffer>& cmd, ui
 
   cmd.setFramebuffer({{sceneLinear, Tempest::Preserve, Tempest::Preserve}});
   drawReflections(cmd, wview);
+  drawWetGround(cmd, wview, fId);
   drawGizmo(cmd, wview);
   if(camera.isInWater()) {
     cmd.setDebugMarker("Underwater");
@@ -966,6 +967,8 @@ void Renderer::drawSunMoon(Tempest::Encoder<Tempest::CommandBuffer>& cmd, const 
     } else {
     push.GSunIntensity *= wview.sky().isNight();
     }
+  // the clouds of the rain cover the sun and the moon
+  push.GSunIntensity *= 1.f - 0.97f*std::clamp(wview.sky().overcastLevel(),0.f,1.f);
   // push.GSunIntensity *= exposure;
 
   cmd.setBinding(0, scene.uboGlobal[SceneGlobals::V_Main]);
@@ -1799,6 +1802,60 @@ void Renderer::drawReflections(Encoder<CommandBuffer>& cmd, const WorldView& wvi
     } else {
     cmd.draw(nullptr, 0, 3);
     }
+  }
+
+/// The ground that is wet after the rain reflects the sky and (screen space) the scene, it is darker and has rings of the drops on
+/// the puddles. Only while the ground is wet: without the rain the pass is not drawn at all.
+void Renderer::drawWetGround(Encoder<CommandBuffer>& cmd, const WorldView& wview, uint8_t fId) {
+  const auto& skyState = wview.sky();
+  const float wet      = skyState.wetness();
+  const int   mode     = skyState.wetnessMode(); // the setting of the player: 0 off, 1 darker only, 2 with the reflections
+  if(wet<0.02f || mode<=0)
+    return;
+
+  struct Push {
+    float wet    = 0;
+    float rain   = 0;
+    float skyMul = 1;
+    } push;
+  push.wet       = std::min(wet,1.f);
+  push.rain      = std::clamp(skyState.rainFall(),0.f,1.f);
+  push.skyMul    = 1.f - 0.5f*std::clamp(skyState.overcastLevel(),0.f,1.f);
+
+  auto& pso = mode>=2 ? shaders.wetReflectionSSR : shaders.wetReflection;
+
+  static uint64_t logged = 0;
+  const uint64_t  now    = wview.sceneGlobals().tickCount;
+  if(now<logged || now-logged>5000) {
+    logged = now;
+    Log::d("[rain] wet ground pass: wet ",push.wet,", rain ",push.rain,", sky ",push.skyMul,", ",mode>=2 ? "with the reflections (SSR)" : "darker only");
+    }
+
+  // what is over the ground (the roofs): a copy of the grid of RainFx for this frame, only when it has changed
+  const RainCover* cover = skyState.cover();
+  if(cover==nullptr)
+    return;
+  auto& cbuf = wetCoverPf[fId];
+  const size_t cbytes = sizeof(RainCover::Slot)*cover->slot.size();
+  if(cbuf.isEmpty()) {
+    cbuf = Resources::device().ssbo(BufferHeap::Upload, cover->slot.data(), cbytes);
+    wetCoverVer[fId] = cover->version+1;
+    } else
+  if(wetCoverVer[fId]!=cover->version+1) {
+    cbuf.update(cover->slot.data(), 0, cbytes);
+    wetCoverVer[fId] = cover->version+1;
+    }
+  cmd.setDebugMarker("WetGround");  cmd.setBinding(0, wview.sceneGlobals().uboGlobal[SceneGlobals::V_Main]);
+  cmd.setBinding(1, sceneOpaque, Sampler::bilinear(ClampMode::ClampToEdge));
+  cmd.setBinding(2, gbufDiffuse, Sampler::nearest (ClampMode::ClampToEdge));
+  cmd.setBinding(3, gbufNormal,  Sampler::nearest (ClampMode::ClampToEdge));
+  cmd.setBinding(4, zbuffer,     Sampler::nearest (ClampMode::ClampToEdge));
+  cmd.setBinding(5, sceneDepth,  Sampler::nearest (ClampMode::ClampToEdge));
+  cmd.setBinding(6, sky.viewCldLut, sky.sampler);
+  cmd.setBinding(7, cbuf);
+  cmd.setPushData(push);
+  cmd.setPipeline(pso);
+  cmd.draw(nullptr, 0, 3);
   }
 
 void Renderer::drawUnderwater(Encoder<CommandBuffer>& cmd, const WorldView& wview) {

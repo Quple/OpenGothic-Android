@@ -81,6 +81,8 @@ class WorldView {
     const SceneGlobals& sceneGlobals() const { return sGlobal; }
     const Sky&          sky() const { return gSky; }
     void                setOvercast(float v) { gSky.setOvercast(v); }
+    void                setWetness(float wet, float rain, int mode) { gSky.setWetness(wet,rain,mode); }
+    void                setCover(std::shared_ptr<const RainCover> c) { gSky.setCover(std::move(c)); }
     const Landscape&    landscape() const { return land; }
     const LightGroup&   lights() const { return gLights; }
     const DrawClusters& clusters() const;

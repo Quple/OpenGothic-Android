@@ -77,6 +77,7 @@ class Shaders {
 
     Tempest::RenderPipeline  underwaterT, underwaterS;
     Tempest::RenderPipeline  waterReflection, waterReflectionSSR;
+    Tempest::RenderPipeline  wetReflection, wetReflectionSSR; // the wet ground (the rain)
 
     Tempest::RenderPipeline  tonemapping, tonemappingUpscale;
 
@@ -187,7 +188,7 @@ class Shaders {
     Tempest::ComputePipeline cloudsLutShader();
     Tempest::RenderPipeline  fogShader (std::string_view name);
     Tempest::RenderPipeline  inWaterShader   (std::string_view name, bool isScattering);
-    Tempest::RenderPipeline  reflectionShader(std::string_view name, bool hasMeshlets);
+    Tempest::RenderPipeline  reflectionShader(std::string_view name, bool hasMeshlets, bool darken = false);
     Tempest::RenderPipeline  ambientLightShader(std::string_view name);
 
     Options         opts;

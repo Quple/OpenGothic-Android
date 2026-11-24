@@ -670,6 +670,7 @@ void settingsRows() {
   CHECK(hasSpecial(c,Special::FirstSetting+SettingAutoLock));
   CHECK(hasSpecial(c,Special::FirstSetting+SettingPadStyle));
   CHECK(hasSpecial(c,Special::FirstSetting+SettingRain));
+  CHECK(hasSpecial(c,Special::FirstSetting+SettingWetGround));
   CHECK(hasSpecial(c,Special::EditHud));
 
   c.features(true,true);

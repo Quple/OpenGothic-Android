@@ -82,6 +82,7 @@ enum Setting : int {
   SettingReflections,
   SettingPadStyle,
   SettingRain,
+  SettingWetGround,
   SettingCount
   };
 

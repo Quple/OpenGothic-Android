@@ -10,6 +10,7 @@
 #include "graphics/material.h"
 
 class PfxEmitterMesh;
+class RainCover;
 
 class ParticleFx final {
   public:
@@ -49,6 +50,7 @@ class ParticleFx final {
       None,
       Velocity,
       Velocity3d,
+      Velocity3dFixed, // as Velocity3d, but the width does not shrink when the particle flies at the camera or away from it (the rain seen from below)
       };
 
     using KeyList = std::vector<float>;
@@ -121,6 +123,9 @@ class ParticleFx final {
     float         flockStrength = 0;
 
     bool          useEmittersFOR = true;
+
+    /// The rain: a particle that falls to a roof (the highest surface over its place) is gone there (only for the absolute particles)
+    const RainCover* cover = nullptr;
 
     std::string   timeStartEnd_S;
     bool          m_bIsAmbientPFX=false;

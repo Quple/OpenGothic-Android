@@ -51,7 +51,7 @@ const char* const IconFiles[AndroidInput::IconCount] = {
 
 const char* const SettingNames[Mobile::SettingCount] = {
   "buttons", "resolution", "shadows", "effects", "fps", "deadzone", "sensitivity", "vibration", "gui",
-  "speed", "hudnumbers", "hudxp", "strafe", "autolock", "reflections", "padstyle", "rain"
+  "speed", "hudnumbers", "hudxp", "strafe", "autolock", "reflections", "padstyle", "rain", "wetground"
   };
 
 // Gives access to the dispatch functions of SystemApi
@@ -190,6 +190,8 @@ int nextValue(int setting, int value) {
       return value ? 0 : 1;
     case Mobile::SettingRain:
       return value>=3 ? 0 : value+1;
+    case Mobile::SettingWetGround:
+      return value>=2 ? 0 : value+1;
     }
   return value;
   }
@@ -212,6 +214,8 @@ std::string settingText(int setting, const std::string& label) {
     return value ? "Water reflections: ON" : "Water reflections: sky only";
   if(setting==Mobile::SettingRain)
     return value<=0 ? "Rain: OFF" : value==1 ? "Rain: light" : value==2 ? "Rain: normal" : "Rain: heavy";
+  if(setting==Mobile::SettingWetGround)
+    return value<=0 ? "Wet ground: OFF" : value==1 ? "Wet ground: darker only" : "Wet ground: reflections";
   if(setting==Mobile::SettingAutoLock)
     return value ? "Auto lock on weapon draw: ON" : "Auto lock on weapon draw: OFF";
   if(setting==Mobile::SettingSpeed)
@@ -317,6 +321,8 @@ AndroidInput::Preferences AndroidInput::preferences() {
     ret.padStyle = Gothic::settingsGetI(Section,SettingNames[Mobile::SettingPadStyle])!=0 ? 1 : 0;
   if(Gothic::settingsGetI(Section,"version")>=10)
     ret.rain = std::clamp(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingRain]),0,3);
+  if(Gothic::settingsGetI(Section,"version")>=11)
+    ret.wetGround = std::clamp(Gothic::settingsGetI(Section,SettingNames[Mobile::SettingWetGround]),0,2);
   return ret;
   }
 
@@ -340,10 +346,11 @@ void AndroidInput::Controller::bind() {
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingReflections],def.reflections);
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingPadStyle],   def.padStyle);
     Gothic::settingsSetI(Section,SettingNames[Mobile::SettingRain],       def.rain);
-    Gothic::settingsSetI(Section,"version",10);
+    Gothic::settingsSetI(Section,SettingNames[Mobile::SettingWetGround],  def.wetGround);
+    Gothic::settingsSetI(Section,"version",11);
     Gothic::flushSettings();
     } else
-  if(Gothic::settingsGetI(Section,"version")<10) {
+  if(Gothic::settingsGetI(Section,"version")<11) {
     // settings saved before the vibration, the scale of the interface, the fast forward, the side steps and the auto lock were added
     const Preferences def;
     const int version = Gothic::settingsGetI(Section,"version");
@@ -372,7 +379,10 @@ void AndroidInput::Controller::bind() {
     // the rain of the original game is on (the normal one)
     if(version<10)
       Gothic::settingsSetI(Section,SettingNames[Mobile::SettingRain],def.rain);
-    Gothic::settingsSetI(Section,"version",10);
+    // the wet ground after the rain: the reflections are on
+    if(version<11)
+      Gothic::settingsSetI(Section,SettingNames[Mobile::SettingWetGround],def.wetGround);
+    Gothic::settingsSetI(Section,"version",11);
     Gothic::flushSettings();
     }
   loadHudPlaces();

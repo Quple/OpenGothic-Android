@@ -286,6 +286,8 @@ ParticleFx::Orientation ParticleFx::loadOrientation(std::string_view src) {
     return Orientation::Velocity;
   if(src=="VELO3D")
     return Orientation::Velocity3d;
+  if(src=="VELO3D_FIXED")
+    return Orientation::Velocity3dFixed;
   return Orientation::None;
   }
 

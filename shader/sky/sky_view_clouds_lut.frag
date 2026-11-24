@@ -29,7 +29,7 @@ vec3 applyClouds(vec3 skyColor, vec3 refl) {
   float night    = scene.isNight;
   vec3  plPos    = vec3(0,RPlanet,0);
 
-  return applyClouds(skyColor, skyLUT, plPos, scene.sunDir, refl, night,
+  return applyClouds(skyColor, skyLUT, plPos, scene.sunDir, refl, night, scene.overcast,
                      scene.cloudsDir.xy, scene.cloudsDir.zw,
                      textureDayL1,textureDayL0, textureNightL1,textureNightL0);
   }

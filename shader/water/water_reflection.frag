@@ -21,6 +21,84 @@ layout(binding = 5) uniform sampler2D  zbuffer;
 
 layout(binding =  6) uniform sampler2D skyLUT;
 
+#if defined(WET)
+// The ground that is wet after the rain: the reflection of the sky and of the scene (SSR) over the ground that looks up. Drawn over
+// the scene (the reflection is added, the ground gets darker where it is wet), only when it is raining or the ground is still wet.
+layout(push_constant, std430) uniform UboPush {
+  float wet;      // 0..1: how wet the ground is
+  float rain;     // 0..1: the rain that falls now (the rings on the puddles)
+  float skyMul;   // the sky under the clouds of the rain is darker
+  } push;
+
+// What is over the ground around the camera (RainCover of the CPU, the same ring of 64x64 cells of 1.2 m): the highest surface of every cell.
+// The ground under a roof (a hut, a porch, a bridge) is dry, it is seen through the doors and the windows too.
+layout(binding = 7, std430) readonly buffer UboCover {
+  vec4 cell[]; // top, the cell of the world (x, z)
+  } cover;
+
+bool wetCovered(vec3 p) {
+  const ivec2 c = ivec2(floor(p.xz/1.2e2));
+  const vec4  e = cover.cell[(c.x&63)*64 + (c.y&63)];
+  if(int(e.y)!=c.x || int(e.z)!=c.y)
+    return false; // the cell is not known (far away or not made yet): the sky is open
+  return e.x > p.y + 150.0;
+  }
+float wetHash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx)*0.1031);
+  p3 += dot(p3, p3.yzx+33.33);
+  return fract((p3.x+p3.y)*p3.z);
+  }
+
+vec2 wetHash22(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx)*vec3(0.1031,0.1030,0.0973));
+  p3 += dot(p3, p3.yzx+33.33);
+  return fract((p3.xx+p3.yz)*p3.zy);
+  }
+
+float wetNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f*f*(3.0-2.0*f);
+  return mix(mix(wetHash12(i),             wetHash12(i+vec2(1,0)),f.x),
+             mix(wetHash12(i+vec2(0,1)),   wetHash12(i+vec2(1,1)),f.x), f.y);
+  }
+
+// the puddles: the places of the world (cm) where the water stays; the wetter the ground, the more of them
+float wetPuddle(vec2 w, float wet) {
+  float n = wetNoise(w/380.0)*0.6 + wetNoise(w/130.0)*0.3 + wetNoise(w/45.0)*0.1;
+  float t = mix(0.80, 0.52, wet);
+  return smoothstep(t, t+0.07, n);
+  }
+
+// the rings of the drops on the water: a slope that is added to the normal of the puddle
+vec2 wetRipples(vec2 w, float t, float rain) {
+  vec2 sum = vec2(0);
+  for(int k=0; k<2; ++k) {
+    const float cell = (k==0) ? 34.0 : 23.0;
+    const vec2  p    = w/cell + vec2(float(k)*7.31, float(k)*3.17);
+    const vec2  id   = floor(p);
+    const vec2  f    = fract(p);
+    const vec2  h    = wetHash22(id);
+
+    const float x    = t*(0.8+0.4*h.x) + h.y*9.0;
+    const float cyc  = floor(x);
+    const float ph   = x-cyc;
+    const vec2  c    = 0.2 + 0.6*wetHash22(id + vec2(cyc*1.7, cyc*0.9));
+    const float on   = step(wetHash12(id + vec2(cyc*3.1, 11.3)), rain);
+
+    const vec2  d2   = f-c;
+    const float d    = length(d2);
+    const float r    = ph*0.42;
+    const float edge = min(min(f.x,1.0-f.x), min(f.y,1.0-f.y));
+    const float win  = smoothstep(0.0, 0.1, edge);
+    const float dr   = (d-r)*14.0;
+    const float env  = exp(-dr*dr) * (1.0-ph)*(1.0-ph) * win * on;
+    if(d>1e-4)
+      sum += (d2/d) * env * sin((d-r)*45.0);
+    }
+  return sum*0.5;
+  }
+#endif
 float intersectPlane(const vec3 pos, const vec3 dir, const vec4 plane) {
   float dist = dot(vec4(pos,1.0), plane);
   float step = -dot(plane.xyz,dir);
@@ -56,7 +134,11 @@ vec3 sunBloom(vec3 refl) {
   }
 
 vec3 ssr(vec3 orig, vec3 start, vec3 refl, const float depth, vec3 sky) {
+#if defined(WET)
+  const int   SSR_STEPS     = 24;
+#else
   const int   SSR_STEPS     = 64;
+#endif
   const int   SSR_OCCLUSION = 50;
   const float ZBias         = 0.0;
 
@@ -140,6 +222,91 @@ vec3 reflection(vec3 orig, vec3 start, vec3 refl, const float depth, vec3 sky) {
   }
 #endif
 
+#if defined(WET)
+void main() {
+  const ivec2 fc        = ivec2(gl_FragCoord.xy);
+  const vec2  fragCoord = (gl_FragCoord.xy*scene.screenResInv)*2.0-vec2(1.0);
+
+  // The opaque scene (the depth of the water is not in it). The normals of the G-buffer are cleared by the water pass (only the water has
+  // them at this point), so the normal of the ground is made of the derivatives of the position. They are taken before any exit.
+  const float depth  = texelFetch(zbuffer, fc, 0).r;
+  const vec4  start4 = scene.viewProjectInv*vec4(fragCoord.x, fragCoord.y, depth, 1.0);
+  const vec3  start  = start4.xyz/start4.w;
+  const vec3  dx     = dFdx(start);
+  const vec3  dy     = dFdy(start);
+
+  // the cheap exits first: the sky, the water (it has its own reflection), the far ground
+  if(depth>=1.0)
+    discard;
+  const vec4 diff = texelFetch(gbufDiffuse, fc, 0);
+  bool flt, atst, water;
+  decodeBits(diff.a, flt, atst, water);
+  if(water || scene.underWater!=0)
+    discard;
+
+  const float dist = length(start - scene.camPos);
+  const float far  = 1.0 - smoothstep(2500.0, 5000.0, dist); // the normal made of the depth is not exact far away
+  if(far<=0.0)
+    discard;
+  // a jump of the depth (an edge, the leaves) has no normal
+  if(max(length(dx),length(dy)) > 0.02*dist + 1.0)
+    discard;
+
+  vec3 normal = cross(dx,dy);
+  if(!(dot(normal,normal) > 1.0e-6))
+    discard;
+  normal = normalize(normal);
+  if(dot(normal, scene.camPos-start) < 0.0)
+    normal = -normal;
+
+  const float up = smoothstep(0.6, 0.85, normal.y)*far;
+  if(up<=0.0)
+    discard;
+
+  // the matrix of the view of the camera gives the position in the world (the Lwc one is relative to the camera): the puddles stay where they are
+  const vec3  wpos = start;
+  if(wetCovered(wpos))
+    discard;
+  const float pud  = wetPuddle(wpos.xz, push.wet);
+
+  // the wet ground is darker (the puddles more): the scene is multiplied by (1-alpha), the reflection is added
+  const float dark = push.wet*(0.25 + 0.25*pud)*up;
+
+  vec3 r = vec3(0);
+#if defined(SSR)
+  const vec3 view = normalize(start - scene.camPos);
+  // the terrain is made of flat triangles: its normal is pulled to the vertical, or the facets of the terrain are seen in the reflection
+  vec3 n = normalize(mix(vec3(0.0,1.0,0.0), normal, 0.3));
+
+  // the wet stone: a weak reflection when looking down, a strong one at a low angle (Schlick); the puddles are a mirror
+  const float cosT = clamp(dot(-view, n), 0.0, 1.0);
+  const float f    = 0.08 + 0.92*pow(1.0-cosT, 4.0);
+  const float w    = push.wet*(0.20 + 0.80*pud)*up*f*1.25;
+
+  // the screen space reflection is the expensive part: only where it can be seen
+  if(w>0.03) {
+    if(pud>0.0 && push.rain>0.0) {
+      const vec2 rip = wetRipples(wpos.xz, float(scene.tickCount32%1000000u)*0.001, push.rain)*pud;
+      n = normalize(n + vec3(rip.x, 0.0, rip.y)*0.8);
+      }
+
+    vec3 refl = reflect(view, n);
+    refl.y = max(refl.y, 0.02);
+    refl   = normalize(refl);
+
+    vec3 sky = textureSkyLUT(skyLUT, vec3(0,RPlanet,0), refl, scene.sunDir) * scene.GSunIntensity;
+    sky *= scene.exposure*push.skyMul;
+
+    r = reflection(vec3(fragCoord.x, fragCoord.y, depth), start, refl, depth, sky) * w;
+    // NaN and Inf are not allowed: the blend adds the result to the scene (the ground stays darker, only the reflection is dropped)
+    if(!(dot(r,r) < 1.0e12))
+      r = vec3(0);
+    }
+#endif
+
+  outColor = vec4(r, dark);
+  }
+#else
 void main() {
   const vec2  fragCoord = (gl_FragCoord.xy*scene.screenResInv)*2.0-vec2(1.0);
   const vec4  diff      = texelFetch(gbufDiffuse, ivec2(gl_FragCoord.xy), 0);
@@ -190,3 +357,4 @@ void main() {
   //outColor = vec4(sky, 0.0);
   //outColor = vec4(normal, 0.0);
   }
+#endif
