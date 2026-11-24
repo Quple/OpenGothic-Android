@@ -55,11 +55,20 @@ final class SpineInstaller {
     /** The mod needs a library that the engine cannot run. */
     static final class Blocked extends IOException {
         final String library;
+        String file = "";     // the file whose scripts gave the library away, for the report of the mod
+        String marker = "";   // and the symbol in them
 
         Blocked(String library) {
             super("The mod needs " + library);
             this.library = library;
         }
+    }
+
+    static Blocked blocked(String library, String file, String marker) {
+        Blocked b = new Blocked(library);
+        b.file = file != null ? file : "";
+        b.marker = marker != null ? marker : "";
+        return b;
     }
 
     /**
@@ -223,7 +232,7 @@ final class SpineInstaller {
             while (!vdf.finished() && (n = in.read(buf)) >= 0)
                 vdf.feed(buf, n);
             if (vdf.found() != null)
-                throw new Blocked(vdf.found());
+                throw blocked(vdf.found(), target.getName(), vdf.marker());
             // an archive with nothing in it that could be looked into is read again from its start by the download
             ok = !vdf.notVdf();
         } finally {
@@ -244,6 +253,18 @@ final class SpineInstaller {
     // ---- the download
 
     static SpineStore.Mod install(SpineStore store, SpineApi.Project p, String phoneLanguage, Progress progress) throws IOException {
+        return install(store, p, phoneLanguage, progress, null);
+    }
+
+    /** The reason why a file of a mod is not taken, for the report of the mod. */
+    static String skipReason(String file) {
+        String low = file.toLowerCase(Locale.ROOT);
+        return low.endsWith(".exe") || low.endsWith(".dll") || low.endsWith(".manifest") ? "program or plugin of Windows" : "unsafe or hidden path";
+    }
+
+    /** @param skipped gets the files that were left out and why (may be null) */
+    static SpineStore.Mod install(SpineStore store, SpineApi.Project p, String phoneLanguage, Progress progress, List<String> skipped)
+            throws IOException {
         if (store.root.getUsableSpace() < p.size * 2 + RESERVE)
             throw new IOException("Not enough free space");
 
@@ -257,6 +278,8 @@ final class SpineInstaller {
                 if (progress.cancelled())
                     throw new Cancelled();
                 String local = localName(e.file);
+                if (local == null && skipped != null)
+                    skipped.add(e.file + " (" + skipReason(e.file) + ")");
                 if (local == null || plan.finished.contains(e.file))
                     continue;
                 File target = new File(dir, local);
@@ -264,7 +287,7 @@ final class SpineInstaller {
                 boolean resume = probed != null && probed.contains(e.file);
                 fetch(plan.list.server + p.id + "/" + encode(e.file), target, e, progress, bytes, p.size, resume);
                 if (local.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-                    unzip(target, dir);
+                    unzip(target, dir, skipped);
                     //noinspection ResultOfMethodCallIgnored
                     target.delete();
                 }
@@ -430,14 +453,14 @@ final class SpineInstaller {
                     if (vdf != null && !vdf.finished()) {
                         vdf.feed(buf, n);
                         if (vdf.found() != null)
-                            throw new Blocked(vdf.found());
+                            throw blocked(vdf.found(), target.getName(), vdf.marker());
                         if (vdf.notVdf() && scan == null)
                             scan = new SpineScan();
                     }
                     if (scan != null) {
                         scan.feed(buf, n);
                         if (scan.found() != null)
-                            throw new Blocked(scan.found());
+                            throw blocked(scan.found(), target.getName(), scan.marker());
                     }
                 }
             }
@@ -488,13 +511,15 @@ final class SpineInstaller {
     }
 
     /** A zip file of a mod is unpacked into the folder of the mod (Spine does the same). */
-    private static void unzip(File zip, File dir) throws IOException {
+    private static void unzip(File zip, File dir, List<String> skipped) throws IOException {
         String prefix = dir.getCanonicalPath() + File.separator;
         try (ZipInputStream in = new ZipInputStream(new FileInputStream(zip))) {
             ZipEntry e;
             byte[] buf = new byte[131072];
             while ((e = in.getNextEntry()) != null) {
                 String local = e.isDirectory() ? "" : localName(e.getName());
+                if (local == null && skipped != null)
+                    skipped.add(e.getName() + " (" + skipReason(e.getName()) + ")");
                 if (local == null || local.isEmpty())
                     continue;
                 File out = new File(dir, local);
@@ -511,7 +536,7 @@ final class SpineInstaller {
                         if (scan != null) {
                             scan.feed(buf, n);
                             if (scan.found() != null)
-                                throw new Blocked(scan.found());
+                                throw blocked(scan.found(), local, scan.marker());
                         }
                     }
                 }

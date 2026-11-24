@@ -50,6 +50,16 @@
             android:configChanges="orientation|screenSize|keyboardHidden" />
         <service android:name="org.opengothic.app.SpineDownloadService" android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- Mods of Gothic from sefaris.eu: the list, the install from Google Drive, a ZIP file or a folder, play -->
+        <activity android:name="org.opengothic.app.SefarisActivity" android:exported="false"
+            android:screenOrientation="userLandscape" android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <!-- A page of download (ModDB, MediaFire...) in a browser of the app: the file that it starts to download is taken by the app -->
+        <activity android:name="org.opengothic.app.SefarisWebActivity" android:exported="false"
+            android:screenOrientation="userLandscape"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <service android:name="org.opengothic.app.SefarisService" android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <!-- The login to Steam, the first screen when nobody is signed in -->
         <activity android:name="org.opengothic.app.SteamLoginActivity" android:exported="false"
             android:screenOrientation="userLandscape" android:windowSoftInputMode="adjustResize"

@@ -31,6 +31,7 @@ final class SpineScan {
     private final byte[]    tail  = new byte[LONGEST];
     private int             tailLength;
     private String          found;
+    private String          foundMarker;
 
     SpineScan() {
         for (int i = 0; i < MARKERS.length; ++i) {
@@ -48,6 +49,11 @@ final class SpineScan {
     /** The library whose marker was found ({@link #IKARUS} or {@link #LEGO}), or null. */
     String found() {
         return found;
+    }
+
+    /** The name of the symbol that gave the library away (MEM_READINT, HOOKENGINE, ...), or null. */
+    String marker() {
+        return foundMarker;
     }
 
     /** The next piece of the file; the pieces are one stream, a word may be cut between two of them. */
@@ -99,6 +105,7 @@ final class SpineScan {
                     ++k;
                 if (k == word.length) {
                     found = MARKERS[w][0];
+                    foundMarker = MARKERS[w][1];
                     return;
                 }
             }

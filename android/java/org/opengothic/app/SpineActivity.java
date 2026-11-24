@@ -106,8 +106,10 @@ public final class SpineActivity extends Activity {
         resumed = true;
         SystemUi.hideBars(this);
         // the game is over: the files of the mod leave its folder
-        if (!gameRunning(this))
+        if (!gameRunning(this)) {
             SpineActivation.restore(store.root);
+            SefarisReport.afterRun(this);   // the engine log of the mod that was played goes to its report
+        }
         refreshState();
     }
 
@@ -227,6 +229,9 @@ public final class SpineActivity extends Activity {
         for (SpineApi.Project p : all)
             known.put(p.id, true);
         for (SpineStore.Mod m : installed.values()) {
+            // the mods of Sefaris share the store, they have their own screen
+            if (m.id >= SefarisApi.ID_BASE)
+                continue;
             if (!known.containsKey(m.id)) {
                 SpineApi.Project p = new SpineApi.Project();
                 p.id = m.id;
@@ -319,6 +324,12 @@ public final class SpineActivity extends Activity {
         status = label("", 13, GREY);
         status.setPadding(dp(14), 0, 0, 0);
         top.addView(status, new LinearLayout.LayoutParams(0, -2, 1.f));
+        // what each mod left out, what it needs, what the engine said while it ran
+        Button reports = button(Texts.t("Report", "Raport"));
+        reports.setOnClickListener(v -> ReportDialog.show(this));
+        LinearLayout.LayoutParams reportParams = new LinearLayout.LayoutParams(dp(100), dp(40));
+        reportParams.setMargins(0, 0, dp(8), 0);
+        top.addView(reports, reportParams);
         // the saves of the downloaded mods: export to a ZIP and import from one
         Button saves = button(Texts.t("Saves", "Zapisy"));
         saves.setOnClickListener(v -> startActivity(new Intent(this, SpineSavesActivity.class)));

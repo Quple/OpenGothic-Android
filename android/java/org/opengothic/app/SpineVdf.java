@@ -48,6 +48,11 @@ final class SpineVdf {
         return found;
     }
 
+    /** The symbol that gave the library away, or null. */
+    String marker() {
+        return scan != null ? scan.marker() : null;
+    }
+
     /** How many bytes of the archive were needed: the end of the last script file. */
     long needed() {
         return end;

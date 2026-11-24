@@ -528,6 +528,11 @@ public final class SpineDetailsActivity extends Activity {
         TextView title = label(project.name, 24, CREAM);
         title.setTypeface(Typeface.create("serif", Typeface.NORMAL));
         top.addView(title, new LinearLayout.LayoutParams(0, -2, 1.f));
+        Button reports = button(Texts.t("Report", "Raport"));
+        reports.setOnClickListener(v -> ReportDialog.show(this));
+        LinearLayout.LayoutParams reportParams = new LinearLayout.LayoutParams(dp(100), dp(40));
+        reportParams.setMargins(0, 0, dp(8), 0);
+        top.addView(reports, reportParams);
         Button back = button(Texts.t("Back", "Wróć"));
         back.setOnClickListener(v -> finish());
         top.addView(back, new LinearLayout.LayoutParams(dp(90), dp(40)));

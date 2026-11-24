@@ -291,8 +291,10 @@ public final class LauncherActivity extends Activity {
             showFolderPicker(game);
         }
         // the game is over: the files of a mod from Spine leave the folder of the game
-        if (!SpineActivity.gameRunning(this))
+        if (!SpineActivity.gameRunning(this)) {
             SpineActivation.restore(new File(external, "spine"));
+            SefarisReport.afterRun(this);   // the engine log of a Sefaris mod that was played goes to the report of that mod
+        }
         checkGameExit();
     }
 
@@ -431,6 +433,18 @@ public final class LauncherActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    /** The two databases of mods of Gothic behind one tile of the header. */
+    private void chooseOnlineMods() {
+        final String[] items = {
+            "Spine\n" + Texts.t("the database of Clockwork Origins: mods in English, German, Polish, Russian", "baza Clockwork Origins: mody po angielsku, niemiecku, polsku, rosyjsku"),
+            "Sefaris\n" + Texts.t("sefaris.eu: Polish mods and translations", "sefaris.eu: polskie mody i spolszczenia")};
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(Texts.t("Mods of Gothic", "Mody do Gothica"))
+                .setItems(items, (d, which) -> startActivity(new Intent(this, which == 0 ? SpineActivity.class : SefarisActivity.class)))
+                .setNegativeButton(Texts.t("Cancel", "Anuluj"), null)
+                .show();
+    }
+
     private View buildUi() {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -446,10 +460,10 @@ public final class LauncherActivity extends Activity {
         LinearLayout names = new LinearLayout(this);
         names.setOrientation(LinearLayout.VERTICAL);
         header.addView(names, new LinearLayout.LayoutParams(-2, -2));
-        TextView title = text("OpenGothic", 32, CREAM);
+        TextView title = text("OpenGothic", 28, CREAM);
         title.setTypeface(Typeface.create("serif", Typeface.NORMAL));
         names.addView(title);
-        names.addView(text(Texts.t("Your library", "Twoja biblioteka"), 14, GREY));
+        names.addView(text(Texts.t("Your library", "Twoja biblioteka"), 13, GREY));
 
         // the game of the author: a small banner between the name and the buttons
         LinearLayout.LayoutParams promoParams = new LinearLayout.LayoutParams(0, dp(76), 1.f);
@@ -464,17 +478,17 @@ public final class LauncherActivity extends Activity {
         updateButton.setOnClickListener(v -> showUpdate());
         header.addView(updateButton);
 
-        // the mods of Gothic from Spine
-        TextView spine = chip("Spine");
-        spine.setOnClickListener(v -> startActivity(new Intent(this, SpineActivity.class)));
+        // the mods of Gothic from the two databases, Spine and Sefaris: one tile, the choice comes after it (the header is narrow)
+        TextView online = chip("Spine/Sefaris");
+        online.setOnClickListener(v -> chooseOnlineMods());
         LinearLayout.LayoutParams sp0 = new LinearLayout.LayoutParams(-2, -2);
-        sp0.setMargins(dp(10), 0, 0, 0);
-        header.addView(spine, sp0);
+        sp0.setMargins(dp(6), 0, 0, 0);
+        header.addView(online, sp0);
 
         TextView mods = chip(Texts.t("Mods", "Mody"));
         mods.setOnClickListener(v -> startActivity(new Intent(this, ModsActivity.class)));
         LinearLayout.LayoutParams mp0 = new LinearLayout.LayoutParams(-2, -2);
-        mp0.setMargins(dp(10), 0, 0, 0);
+        mp0.setMargins(dp(6), 0, 0, 0);
         header.addView(mods, mp0);
 
         // Keep save tools in one compact panel so the promotional game banner keeps
@@ -482,13 +496,15 @@ public final class LauncherActivity extends Activity {
         TextView saves = chip(Texts.t("Saves", "Zapisy"));
         saves.setOnClickListener(v -> showSavePanel());
         LinearLayout.LayoutParams savesParams = new LinearLayout.LayoutParams(-2, -2);
-        savesParams.setMargins(dp(10), 0, 0, 0);
+        savesParams.setMargins(dp(6), 0, 0, 0);
         header.addView(saves, savesParams);
 
         accountButton = chip("");
+        accountButton.setMaxWidth(dp(120));
+        accountButton.setEllipsize(android.text.TextUtils.TruncateAt.END);
         accountButton.setOnClickListener(v -> accountMenu());
         LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, -2);
-        ap.setMargins(dp(10), 0, 0, 0);
+        ap.setMargins(dp(6), 0, 0, 0);
         header.addView(accountButton, ap);
 
         // the games
@@ -544,7 +560,10 @@ public final class LauncherActivity extends Activity {
         Bitmap mark = loadCover("promo/summerhideout-logo.webp");
         if (mark != null)
             logo.setImageBitmap(mark);
-        row.addView(logo, new LinearLayout.LayoutParams(dp(56), -1));
+        row.addView(logo, new LinearLayout.LayoutParams(dp(44), -1));
+        // a banner that is too narrow for its text gives the room of the logo to it
+        box.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                logo.setVisibility(right - left < dp(300) ? View.GONE : View.VISIBLE));
 
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
@@ -578,9 +597,10 @@ public final class LauncherActivity extends Activity {
             about.setAutoSizeTextTypeUniformWithConfiguration(8, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
         texts.addView(about, new LinearLayout.LayoutParams(-1, 0, 1.f));
 
-        TextView discord = text("Discord \u203a", 12, GOLD);
+        TextView discord = text("Discord \u203a", 11, GOLD);
         discord.setGravity(Gravity.CENTER);
-        discord.setPadding(dp(10), dp(5), dp(10), dp(5));
+        discord.setSingleLine(true);
+        discord.setPadding(dp(8), dp(5), dp(8), dp(5));
         discord.setBackground(round(0x33c9a24a, GOLD, dp(1), dp(18)));
         discord.setOnClickListener(v -> openDiscord());
         row.addView(discord);
@@ -697,9 +717,11 @@ public final class LauncherActivity extends Activity {
     }
 
     private TextView chip(String s) {
-        TextView v = text(s, 14, 0xffe0e7e9);
+        // small padding: the header is shared with the banner of the game, which needs the room for its text
+        TextView v = text(s, 13, 0xffe0e7e9);
         v.setGravity(Gravity.CENTER);
-        v.setPadding(dp(16), dp(8), dp(16), dp(8));
+        v.setSingleLine(true);
+        v.setPadding(dp(10), dp(7), dp(10), dp(7));
         v.setBackground(round(0x33172530, 0xff33495a, dp(1), dp(20)));
         return v;
     }

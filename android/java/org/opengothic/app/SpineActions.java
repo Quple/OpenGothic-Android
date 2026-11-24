@@ -159,6 +159,14 @@ final class SpineActions {
             Toast.makeText(a, "Bad name of the ini", Toast.LENGTH_LONG).show();
             return;
         }
+        // what is wrong with the mod before it starts goes to its report (mod-logs/), and the player is told in short
+        java.util.List<String> warnings = SefarisReport.beforePlay(a, external, mod);
+        if (!warnings.isEmpty()) {
+            StringBuilder text = new StringBuilder();
+            for (String w : warnings)
+                text.append(text.length() > 0 ? "; " : "").append(w);
+            Toast.makeText(a, Texts.t("Warnings: ", "Ostrze\u017cenia: ") + text, Toast.LENGTH_LONG).show();
+        }
         try {
             // the files of the mod go to the folder of the game until the game is over
             SpineActivation.activate(store.root, rootOf(a, external, game), mod);

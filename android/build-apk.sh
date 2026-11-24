@@ -60,7 +60,8 @@ PY
 
 # The login to Steam and the downloads need JavaSteam, which only the Gradle build brings: this script has no libraries.
 # These classes are left out, the launcher goes on without Steam (the games are imported from a ZIP).
-sources=$(ls "$repo_dir"/android/java/org/opengothic/app/*.java | grep -v -E '/(SteamSession|SteamOwnership|SteamLoginActivity|SteamDownloadService)\.java$')
+# SefarisArchive (RAR and 7z of the mods from Sefaris) needs libarchive, so it is left out too: the mods are then ZIP only.
+sources=$(ls "$repo_dir"/android/java/org/opengothic/app/*.java | grep -v -E '/(SteamSession|SteamOwnership|SteamLoginActivity|SteamDownloadService|SefarisArchive)\.java$')
 javac -encoding UTF-8 -source 8 -target 8 -bootclasspath "$android_jar:$tools_dir/core-lambda-stubs.jar"   -d "$package_dir/classes" $sources
 jar cf "$package_dir/classes.jar" -C "$package_dir/classes" .
 "$tools_dir/d8" --release --min-api 24 --lib "$android_jar" --output "$package_dir/dex" "$package_dir/classes.jar"

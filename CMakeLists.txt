@@ -286,7 +286,9 @@ if(ANDROID)
       "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
       "com.google.protobuf:protobuf-java:4.31.1"
       "com.squareup.okhttp3:okhttp:5.3.2"
-      "com.squareup.okio:okio:3.16.0")
+      "com.squareup.okio:okio:3.16.0"
+      # RAR and 7z archives of the mods from Sefaris (android/java/org/opengothic/app/SefarisArchive.java)
+      "me.zhanghai.android.libarchive:library:1.1.6")
 endif()
 
 # installation

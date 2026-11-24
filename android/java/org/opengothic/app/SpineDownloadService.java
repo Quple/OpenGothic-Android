@@ -41,6 +41,7 @@ public final class SpineDownloadService extends Service {
         volatile boolean cancelled;
         volatile String error;       // what the player reads
         volatile String library;     // the mod needs Ikarus or LeGo
+        volatile String blockedIn = "";   // the file and the symbol that gave it away, for the report
         volatile boolean reported;   // the player was told how it ended
 
         State(int id, String title, boolean check) {
@@ -131,16 +132,20 @@ public final class SpineDownloadService extends Service {
                 return s.cancelled;
             }
         };
+        // what the report of the mod says (mod-logs/): the files that were left out, and how it ended
+        final java.util.List<String> skipped = new java.util.concurrent.CopyOnWriteArrayList<>();
+        SpineStore.Mod installedMod = null;
         try {
             SpineStore store = new SpineStore(external);
             String language = Locale.getDefault().getLanguage();
             if (s.check)
                 SpineInstaller.check(store, p, language, progress);
             else
-                SpineInstaller.install(store, p, language, progress);
+                installedMod = SpineInstaller.install(store, p, language, progress, skipped);
             s.done = true;
         } catch (SpineInstaller.Blocked b) {
             s.library = b.library;
+            s.blockedIn = b.file + (b.marker.isEmpty() ? "" : ", symbol " + b.marker);
         } catch (SpineInstaller.Cancelled c) {
             s.cancelled = true;
         } catch (IOException e) {
@@ -152,6 +157,12 @@ public final class SpineDownloadService extends Service {
         } finally {
             if (wake != null && wake.isHeld())
                 wake.release();
+            try {
+                SefarisReport.installSpine(SefarisReport.app(this), external, p, s.check, skipped, installedMod,
+                        s.error != null ? s.error : s.cancelled ? "cancelled by the player" : null, s.library, s.blockedIn);
+            } catch (RuntimeException e) {
+                Log.w("OpenGothic/Spine", "the report was not written: " + e);
+            }
             finish(s);
         }
     }
