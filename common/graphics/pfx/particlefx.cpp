@@ -94,6 +94,15 @@ ParticleFx::ParticleFx(const zenkit::IParticleEffect& src, std::string_view name
   visAlphaStart       = src.vis_alpha_start/255.f;
   visAlphaEnd         = src.vis_alpha_end/255.f;
 
+  // The original game draws the particles without the light of the scene. Here the alpha-blended ones are lit (the smoke, the dust, the fog must not glow
+  // at night), and the clouds of the spells became dark and grey: the ice block of the ice golem looked like a black magic. The spells (MFX_*) keep
+  // their own colours.
+  visUnlit            = visMaterial.alpha==Material::Transparent && name.size()>4 &&
+                        std::toupper(static_cast<unsigned char>(name[0]))=='M' &&
+                        std::toupper(static_cast<unsigned char>(name[1]))=='F' &&
+                        std::toupper(static_cast<unsigned char>(name[2]))=='X' &&
+                        name[3]=='_';
+
   trlFadeSpeed       = src.trl_fade_speed;
   trlTexture         = loadTexture(src.trl_texture_s);
   trlWidth           = src.trl_width;

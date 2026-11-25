@@ -71,6 +71,7 @@ class Effect final {
     Sound                 sfx;
     GlobalFx              gfx;
     LightGroup::Light     light;
+    float                 lightRange = 0; // the last range set by a key
 
     Npc*                  origin = nullptr;
     const Npc*            target = nullptr;

@@ -203,11 +203,22 @@ void mainForward(vec4 t) {
   alpha = (alpha-0.5)*2.0;
 #endif
 
-  color = textureAlbedo(color.rgb);
-  color *= diffuseLight(alpha);
-  color *= scene.exposure;
+#if (MESH_TYPE==T_PFX)
+  // the particle of a spell with the zero normal (see pfx.vert): a lit white surface of the day, without the sun, the shadow and the night
+  const bool unlit = (dot(shInp.normal,shInp.normal)<0.25);
+#else
+  const bool unlit = false;
+#endif
 
-  outColor = vec4(color,alpha);
+  if(unlit) {
+    outColor = vec4(textureAlbedo(color.rgb)*0.5,alpha);
+    } else {
+    color = textureAlbedo(color.rgb);
+    color *= diffuseLight(alpha);
+    color *= scene.exposure;
+
+    outColor = vec4(color,alpha);
+    }
   }
 #endif
 

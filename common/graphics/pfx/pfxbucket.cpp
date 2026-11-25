@@ -650,6 +650,7 @@ void PfxBucket::buildBilboard(PfxState& v, const Block& p, const ParState& ps, c
   v.bits0 |= uint32_t(decl.visYawAlign ? 1 : 0) << 2;
   v.bits0 |= uint32_t(0) << 3; // TODO: trails
   v.bits0 |= uint32_t(decl.visOrientation) << 4;
+  v.bits0 |= uint32_t(decl.visUnlit ? 1 : 0) << 6;
   v.dir   = ps.dir;
   }
 

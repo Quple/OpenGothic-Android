@@ -110,6 +110,8 @@ class ParticleFx final {
     float         visAlphaEnd          = 0.f;
     bool          visYawAlign          = false;
     bool          visZBias             = false;
+    /// The particle of a spell (MFX_*) with the alpha blending: not lit by the sun and the sky, as in the original game, where the particles are not lit at all
+    bool          visUnlit             = false;
 
     const Tempest::Texture2d* trlTexture = nullptr;
     float         trlFadeSpeed         = 0.f;

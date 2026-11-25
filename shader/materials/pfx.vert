@@ -87,6 +87,7 @@ vec4 processVertex(out Varyings shOut, in Vertex v, uint instanceId, uint vboOff
     const bool  visYawAlign      = bitfieldExtract(v.bits0, 2, 1)!=0;
     const bool  isTrail          = bitfieldExtract(v.bits0, 3, 1)!=0;
     const uint  visOrientation   = bitfieldExtract(v.bits0, 4, 2);
+    const bool  visUnlit         = bitfieldExtract(v.bits0, 6, 1)!=0;
 
     //const mat4  m      = scene.viewProject;
     const mat4  m      = scene.view;
@@ -100,7 +101,7 @@ vec4 processVertex(out Varyings shOut, in Vertex v, uint instanceId, uint vboOff
       }
 
     v.uv     = vec2(U[vboOffset],V[vboOffset]);
-    v.normal = -depth;
+    v.normal = visUnlit ? vec3(0) : -depth; // the zero normal: the fragment shader does not light this particle
 
     if(isTrail) {
       const uint colorB = pfx[instanceId].colorB;

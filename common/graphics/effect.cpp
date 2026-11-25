@@ -45,8 +45,12 @@ void Effect::setupLight(World& owner) {
   Vec3 pos3 = {pos.at(3,0),pos.at(3,1),pos.at(3,2)};
   light = owner.addLight(*lightPresetName);
   light.setPosition(pos3);
+  // A key without the light range keeps the range of the key before it (the cast of the ice cube sets 100, its collide key sets nothing): the new
+  // light must not fall back to the whole range of the preset, otherwise the hit lights the ground and the hero in blue for metres around.
   if(key!=nullptr && key->lightRange>0)
-    light.setRange(key->lightRange);
+    lightRange = key->lightRange;
+  if(lightRange>0)
+    light.setRange(lightRange);
   }
 
 void Effect::setupPfx(World& owner) {

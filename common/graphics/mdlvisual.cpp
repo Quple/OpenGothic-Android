@@ -1062,6 +1062,16 @@ const Animation::Sequence* MdlVisual::startAnimSpell(Npc &npc, std::string_view 
   const bool run = (skInst->bodyState()&BS_MAX)==BS_RUN; // not really the case, as in Gothic player can't cast spell, while running
 
   const Animation::Sequence *sq = solver.solveAnim(scheme,run,invest);
+
+  // DIAGNOSTICS: the animation of a spell of a character (the golems cast with the animations of their own model script); once for a change
+  static std::string lastLog;
+  std::string        msg = std::string(npc.displayName())+" ("+std::to_string(npc.instanceSymbol())+") scheme "+std::string(scheme)+
+                           (invest ? " invest" : " shoot")+(run ? " run" : "")+" -> "+(sq!=nullptr ? sq->name : std::string("none"));
+  if(msg!=lastLog) {
+    lastLog = msg;
+    Log::d("[spell-anim] ",msg);
+    }
+
   if(skInst->startAnim(solver,sq,0,BS_CASTING,Pose::NoHint,npc.world().tickCount())) {
     return sq;
     }
