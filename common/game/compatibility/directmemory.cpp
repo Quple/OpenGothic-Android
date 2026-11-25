@@ -1,4 +1,5 @@
 #include "directmemory.h"
+#include "gaplog.h"
 #include "hookaddresses.h"
 #include "logbudget.h"
 
@@ -677,6 +678,9 @@ void DirectMemory::setupEngineMemory() {
   handles.setup();
   handles.setSync([this](uint8_t* raw, zenkit::DaedalusInstance& inst, bool write) {
     syncHandleObject(raw,inst,write);
+    });
+  mem32.setObserver(Mem32::Type::instanceHandle,[this](ptr32_t region, ptr32_t address, uint32_t size, bool write) {
+    observeHandleAccess(region,address,size,write);
     });
   setupInstanceAliases();
   mem32.setCallbackR(Mem32::Type::mobHandle,[this](Compatibility::MobSlot& m, uint32_t id) {
@@ -2289,6 +2293,7 @@ void DirectMemory::setupHookEngine() {
       return;
     if(hooksUnanswered.size()<1000)
       hooksUnanswered.emplace_back(uint32_t(address),name);
+    GapLog::inst().note(GapLog::Kind::Hook, uint32_t(address), name, {}, "replaced bytes: "+std::to_string(oldInstr));
     Log::d("not implemented call [HookEngineI] (", reinterpret_cast<void*>(uint64_t(address)),
            " -> ", name, ")");
     });

@@ -27,6 +27,7 @@
 #include "graphics/renderdistance.h"
 
 #include "commandline.h"
+#include "game/compatibility/gaplog.h"
 #include "mainwindow.h"
 
 using namespace Tempest;
@@ -1076,6 +1077,7 @@ void Gothic::setupVmCommonApi(zenkit::DaedalusVm& vm) {
 
 void Gothic::notImplementedRoutine(std::string_view fn) {
   static std::set<std::string, std::less<>> s;
+  Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::External, 0, fn);
 
   if(s.find(fn)==s.end()){
     auto [v, _] = s.insert(std::string {fn});

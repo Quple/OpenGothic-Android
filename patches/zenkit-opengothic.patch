@@ -1,5 +1,5 @@
 diff --git a/include/zenkit/DaedalusVm.hh b/include/zenkit/DaedalusVm.hh
-index 17a81ee..6055808 100644
+index 17a81ee..56762de 100644
 --- a/include/zenkit/DaedalusVm.hh
 +++ b/include/zenkit/DaedalusVm.hh
 @@ -638,6 +638,10 @@ namespace zenkit {
@@ -13,6 +13,18 @@ index 17a81ee..6055808 100644
  		ZKAPI void unsafe_jump(uint32_t address);
  		ZKAPI std::shared_ptr<DaedalusInstance> unsafe_get_gi();
  		ZKAPI void unsafe_set_gi(std::shared_ptr<DaedalusInstance> i);
+@@ -675,6 +679,11 @@ namespace zenkit {
+ 			return _m_pc;
+ 		}
+ 
++		/// \return The frames of the call stack, the innermost last (OpenGothic: the reports of the compatibility layer).
++		[[nodiscard]] ZKAPI std::vector<DaedalusCallStackFrame> const& call_stack() const noexcept {
++			return _m_call_stack;
++		}
++
+ 		[[nodiscard]] ZKAPI std::int32_t
+ 		get_int(std::shared_ptr<DaedalusInstance> const& context,
+ 		        std::variant<int32_t, float, DaedalusSymbol*, std::shared_ptr<DaedalusInstance>> const& value,
 diff --git a/include/zenkit/Object.hh b/include/zenkit/Object.hh
 index 5c77969..c5cd607 100644
 --- a/include/zenkit/Object.hh

@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "game/compatibility/directmemory.h"
+#include "game/compatibility/gaplog.h"
 #include "game/definitions/spelldefinitions.h"
 #include "game/serialize.h"
 #include "utils/string_frm.h"
@@ -96,7 +97,9 @@ GameScript::GameScript(GameSession &owner)
     throw std::runtime_error("Cannot find script symbol SELF, OTHER, ITEM, VICTIM, or HERO! Cannot proceed!");
 
   vmLang = Gothic::inst().settingsGetI("GAME", "language");
+  Compatibility::GapLog::inst().setVm(&vm);
   vm.register_exception_handler([](zenkit::DaedalusVm& v, const zenkit::DaedalusScriptError& exc, const zenkit::DaedalusInstruction& instr) {
+    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::ScriptError, 0, exc.what());
     const auto ret = zenkit::lenient_vm_exception_handler(v,exc,instr);
     // where the script was: the first times that every error happens, so a log is not drowned
     static std::unordered_map<std::string,int> seen;
@@ -386,6 +389,8 @@ void GameScript::dmaFallDamage(Npc& npc) {
 
 GameScript::~GameScript() {
   Gothic::inst().onSettingsChanged.ubind(this,&GameScript::initSettings);
+  Compatibility::GapLog::inst().flush();
+  Compatibility::GapLog::inst().setVm(nullptr);
   }
 
 void GameScript::initCommon() {

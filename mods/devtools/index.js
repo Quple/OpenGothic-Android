@@ -20,5 +20,26 @@ if (typeof ui !== "undefined" && typeof debug !== "undefined") {
     ui.tab("Debug", panel.draw);
     // the run of all the dialogs goes on when the menu is closed
     if (typeof events !== "undefined") events.on("tick", () => panel.views.Dialogs.tickAll());
+    // the same run from the console, a few dialogs per frame (comcheck dlg all stops the game, so it takes at most 300):
+    //   dlgall [words]   all the dialogs of the filter, the report goes to dialogtest_report.txt at the end
+    //   dlgall resume    after a crash: goes on with the dialogs without a result (dialogtest_progress.txt)
+    //   dlgall stop      ends it early and writes the report
+    // An unattended run (-autorun "wait 30; dlgall; wait 600") uses it, see docs/IKARUS_AUTOMATION.md
+    console.registerCommand("dlgall", ({ args }) => {
+        const view = panel.views.Dialogs;
+        if (args[0] === "stop") { view.stopAll("Stopped"); return; }
+        if (args[0] === "resume") {
+            // after a crash: the results of dialogtest_progress.txt are kept, the dialog that crashed is marked and left
+            view.filter = args.slice(1).join(" ");
+            view.refresh();
+            view.startAll(true);
+            console.log(view.message);
+            return;
+        }
+        view.filter = args.join(" ");
+        view.refresh();
+        view.startAll(false);
+        console.log(view.message);
+    });
     console.log("Developer tools are ready: the tab Debug");
 }

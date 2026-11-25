@@ -6,6 +6,7 @@
 #include <exception>
 
 #include "camera.h"
+#include "game/compatibility/gaplog.h"
 #include "game/dialogtest.h"
 #include "game/gamescript.h"
 #include "gothic.h"
@@ -325,6 +326,15 @@ JSValue setSymbol(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
 JSValue ikarus(JSContext* ctx, JSValueConst, int, JSValueConst*) {
   auto* w = world();
   return JS_NewString(ctx,w==nullptr ? "" : w->script().dmaReport().c_str());
+  }
+
+/// debug.gaps() -> the gaps of the compatibility layer as JSON text ({total, gaps:[{kind, address, name, class, stack, count}]}),
+/// see game/compatibility/gaplog.h; debug.gaps(true) also writes ikarus-gaps.json
+JSValue gaps(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  auto& g = Compatibility::GapLog::inst();
+  if(argc>0 && JS_ToBool(ctx,argv[0])>0)
+    g.flush();
+  return JS_NewString(ctx,g.json().c_str());
   }
 
 // --- the world
@@ -921,6 +931,7 @@ void game::installDebug(JSContext* ctx) {
   js::fn(ctx,dbg,"symbol",    symbol,1);
   js::fn(ctx,dbg,"setSymbol", setSymbol,2);
   js::fn(ctx,dbg,"ikarus",    ikarus,0);
+  js::fn(ctx,dbg,"gaps",      gaps,1);
   js::fn(ctx,dbg,"triggers",  triggers,2);
   js::fn(ctx,dbg,"trigger",   trigger,2);
   js::fn(ctx,dbg,"points",    points,2);

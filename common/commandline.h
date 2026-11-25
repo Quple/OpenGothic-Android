@@ -56,6 +56,9 @@ class CommandLine {
     int                 defaultSaveSlot()  const { return saveSlot;   }
     /// the errors of the scripts and of the program are shown on the screen (a phone has no log to read): the default of the touch version
     bool                doShowErrors()     const { return showErrors; }
+    /// -autorun "<commands>": a run without a person, see utils/autorun.h; -autoexit <seconds>: the limit of its time
+    const std::string&  autoRun()          const { return autoRunCmd; }
+    int                 autoExit()         const { return autoExitSec; }
 
     std::string         wrldDef;
 
@@ -68,6 +71,8 @@ class CommandLine {
     std::u16string      gcutscene;
     std::vector<std::string> arguments;
     int                 saveSlot = -1;
+    std::string         autoRunCmd;
+    int                 autoExitSec = 0;
 #ifdef OPENGOTHIC_TOUCH_UI
     bool                showErrors   = true;
 #else

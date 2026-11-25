@@ -1,5 +1,6 @@
 #include "mem32.h"
 #include "logbudget.h"
+#include "gaplog.h"
 
 #include <Tempest/Log>
 #include <cassert>
@@ -136,6 +137,7 @@ void Mem32::free(ptr32_t address) {
 const void* Mem32::deref(ptr32_t address, uint32_t size) {
   auto r = translate(address);
   if(r==nullptr) {
+    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "deref");
     if(Compatibility::logBudget("mem32:deref")) Log::e("deref: address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
     return nullptr;
     }
@@ -152,6 +154,7 @@ const void* Mem32::deref(ptr32_t address, uint32_t size) {
 void* Mem32::derefv(ptr32_t address, uint32_t size) {
   auto rgn = translate(address);
   if(rgn==nullptr) {
+    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "deref");
     if(Compatibility::logBudget("mem32:deref")) Log::e("deref: address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
     return nullptr;
     }
@@ -171,6 +174,7 @@ void* Mem32::derefv(ptr32_t address, uint32_t size) {
 auto Mem32::deref(ptr32_t address) -> std::tuple<void*, uint32_t> {
   auto r = translate(address);
   if(r==nullptr) {
+    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "deref");
     if(Compatibility::logBudget("mem32:deref")) Log::e("deref: address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
     return {nullptr,0};
     }
@@ -207,6 +211,7 @@ void Mem32::compactage() {
 void Mem32::writeInt(ptr32_t address, int32_t v) {
   auto r = translate(address);
   if(r==nullptr) {
+    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "write");
     Log::e("mem_writeint: address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
     return;
     }
@@ -229,11 +234,13 @@ void Mem32::writeInt(ptr32_t address, int32_t v) {
   std::memcpy(ptr,&v,4);
   lastWrite = address;
   memSyncWrite(rgn.type, rgn, address, 4);
+  observe(rgn, address, 4, true);
   }
 
 int32_t Mem32::readInt(ptr32_t address) {
   const auto r = translate(address);
   if(r==nullptr) {
+    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "read");
     if(Compatibility::logBudget("mem32:mem_readint")) Log::e("mem_readint:  address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
     return 0;
     }
@@ -250,6 +257,7 @@ int32_t Mem32::readInt(ptr32_t address) {
     return ret;
     }
   memSyncRead(rgn.type, rgn, address, 4);
+  observe(rgn, address, 4, false);
 
   auto ptr = reinterpret_cast<uint8_t*>(rgn.real)+dAddr;
   int32_t ret = 0;
@@ -265,6 +273,7 @@ uint8_t Mem32::readByte(ptr32_t address) {
   const auto    rgn   = *r;
   const ptr32_t dAddr = address-rgn.address;
   memSyncRead(rgn.type, rgn, address, 1);
+  observe(rgn, address, 1, false);
   return reinterpret_cast<uint8_t*>(rgn.real)[dAddr];
   }
 
@@ -279,6 +288,7 @@ void Mem32::writeByte(ptr32_t address, uint8_t v) {
   memSyncRead(rgn.type, rgn, address, 1);
   reinterpret_cast<uint8_t*>(rgn.real)[address-rgn.address] = v;
   memSyncWrite(rgn.type, rgn, address, 1);
+  observe(rgn, address, 1, true);
   }
 
 void Mem32::copyBytes(ptr32_t psrc, ptr32_t pdst, uint32_t size) {
@@ -313,6 +323,8 @@ void Mem32::copyBytes(ptr32_t psrc, ptr32_t pdst, uint32_t size) {
               reinterpret_cast<uint8_t*>(src.real)+sOff,
               sz);
   memSyncWrite(dst.type, dst, ptr32_t(dst.address+dOff), uint32_t(sz));
+  observe(src, ptr32_t(src.address+sOff), uint32_t(sz), false);
+  observe(dst, ptr32_t(dst.address+dOff), uint32_t(sz), true);
   }
 
 Mem32::Region* Mem32::implAlloc(uint32_t size) {

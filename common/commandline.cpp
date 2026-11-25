@@ -137,6 +137,17 @@ CommandLine::CommandLine(int argc, const char** argv) {
       if(i<argc)
         wrldDef = argv[i];
       }
+    else if(arg=="-autorun") {
+      ++i;
+      if(i<argc)
+        autoRunCmd = argv[i];
+      }
+    else if(arg=="-autoexit") {
+      ++i;
+      if(i<argc) {
+        try { autoExitSec = std::max(0,std::stoi(argv[i])); } catch(...) { Log::e("-autoexit: not a number: ",argv[i]); }
+        }
+      }
     else if(arg=="-window") {
       isWindow = true;
       }

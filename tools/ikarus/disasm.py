@@ -116,6 +116,53 @@ class Dat:
                 out.write(f'{pc:08x} {OPS[op]:9}{arg}\n')
                 pc += size
 
+    def find(self, name):
+        name = name.upper()
+        return next((i for i, s in enumerate(self.symbols)
+                     if s["name"].upper() == name and s["type"] in (5, 6, 7)
+                     and isinstance(s["value"], int) and not (s["flags"] & (4 | 8))), None)
+
+    def disasm_lines(self, name, limit=None):
+        """The code of a function as lines with the names of the symbols and of the called functions, None if unknown"""
+        idx = self.find(name)
+        if idx is None:
+            return None
+        if not hasattr(self, '_labels'):
+            self._labels = {}
+            for address, index in self.functions():
+                self._labels.setdefault(address, self.sym(index))
+            self._starts = sorted(self._labels)
+        start = self.symbols[idx]["value"]
+        import bisect
+        i = bisect.bisect_right(self._starts, start)
+        end = self._starts[i] if i < len(self._starts) else len(self.code)
+        out, pc = [], start
+        while pc < end and (limit is None or len(out) < limit):
+            op = self.code[pc]
+            size = 6 if op == 245 else 5 if op in (61, 62, 64, 65, 67, 75, 76, 80) else 1
+            arg = ''
+            if size >= 5 and pc + 5 <= len(self.code):
+                value = struct.unpack_from('<I', self.code, pc + 1)[0]
+                if op == 61:
+                    arg = ' ' + self._labels.get(value, f'{value:#x}')
+                elif op in (75, 76):
+                    arg = f' -> {value - start:+d}'
+                elif op == 64:
+                    arg = ' ' + str(struct.unpack_from('<i', self.code, pc + 1)[0])
+                else:
+                    arg = ' ' + self.sym(value)
+                    s = self.symbols[value] if value < len(self.symbols) else None
+                    if op == 65 and s and s['flags'] & 1 and s['type'] in (2, 3) and s['value'] and s['count'] == 1:
+                        arg += f' (= {s["value"][0]!r})' if s['type'] == 3 else f' (= {s["value"][0]:#x})' \
+                            if s['value'][0] > 0xFFFF else f' (= {s["value"][0]})'
+                    if op == 245:
+                        arg += f'[{self.code[pc + 5]}]'
+            out.append(f'{pc - start:+6d}  {OPS.get(op, "op%d" % op):8}{arg}')
+            pc += size
+        if pc < end:
+            out.append(f'   ... ({end - pc} more bytes)')
+        return out
+
     def disasm(self, name):
         name = name.upper()
         idx = next((i for i, s in enumerate(self.symbols)

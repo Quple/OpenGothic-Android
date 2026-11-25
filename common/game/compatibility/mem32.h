@@ -83,6 +83,11 @@ class Mem32 {
     /// For the log: the address of the last write that went through a callback
     ptr32_t lastWriteAddress() const { return lastWrite; }
 
+    /// The reads and the writes of the scripts (readInt, writeInt, the bytes, copyBytes) in the regions of a type: the
+    /// layer sees which fields of its objects are used (GapLog, Kind::Field). `region` is the start of the region.
+    using Observer = std::function<void(ptr32_t region, ptr32_t address, uint32_t size, bool write)>;
+    void    setObserver(Type t, Observer fn) { observers[t] = std::move(fn); }
+
     void    writeInt (ptr32_t address, int32_t v);
     int32_t readInt  (ptr32_t address);
     void    copyBytes(ptr32_t src, ptr32_t dst, uint32_t size);
@@ -134,5 +139,14 @@ class Mem32 {
     ptr32_t             lastWrite = 0;
     std::vector<Region> region;
     std::unordered_map<Type, Callback> memMap;
+    std::unordered_map<Type, Observer> observers;
+
+    void     observe(const Region& rgn, ptr32_t address, uint32_t size, bool write) {
+      if(rgn.type==Type::plain || observers.empty())
+        return;
+      auto it = observers.find(rgn.type);
+      if(it!=observers.end())
+        it->second(rgn.address, address, size, write);
+      }
   };
 

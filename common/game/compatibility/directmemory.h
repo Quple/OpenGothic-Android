@@ -270,6 +270,7 @@ class DirectMemory {
     void        tickVobStates();
     void        setupEngineCalls();
     void        syncHandleObject(uint8_t* raw, zenkit::DaedalusInstance& inst, bool write);
+    void        observeHandleAccess(ptr32_t region, ptr32_t address, uint32_t size, bool write);
 
     // views, textures and fonts of LeGo
     struct FontInfo {

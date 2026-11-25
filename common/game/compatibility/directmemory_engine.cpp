@@ -1,4 +1,5 @@
 #include "directmemory.h"
+#include "gaplog.h"
 
 #include <Tempest/Log>
 
@@ -102,6 +103,38 @@ void DirectMemory::syncHandleObject(uint8_t* raw, zenkit::DaedalusInstance& inst
   m[8] = -s; m[9] = 0; m[10] = c;  m[11] = pos.z;
   m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
   std::memcpy(raw+TRAFO,m,sizeof(m));
+  }
+
+/// A script reads or writes the memory of a character or an item through its handle (MEM_ReadInt(ptr+offset)). What
+/// syncHandleObject does not fill reads as 0 and a write there is lost: such a field is a gap (GapLog, Kind::Field), the
+/// class and the offset name the field (tools/ikarus/enginedb.py field oCNpc <offset>).
+void DirectMemory::observeHandleAccess(ptr32_t region, ptr32_t address, uint32_t size, bool write) {
+  const uint32_t off  = (address-region) % InstanceHandles::SlotSize;
+  auto           inst = handles.instanceAt(address);
+  if(inst==nullptr)
+    return;
+  const bool isNpc  = dynamic_cast<zenkit::INpc*>(inst.get())!=nullptr;
+  const bool isItem = !isNpc && dynamic_cast<zenkit::IItem*>(inst.get())!=nullptr;
+  if(!isNpc && !isItem)
+    return;
+  auto inside = [&](size_t begin, size_t length) { return off>=begin && off+size<=begin+length; };
+  if(write) {
+    // only the position in the matrix of the vob is taken back (a teleport by the scripts)
+    if(inside(TRAFO+3*4,4) || inside(TRAFO+7*4,4) || inside(TRAFO+11*4,4))
+      return;
+    } else {
+    if(inside(0,4) || inside(TRAFO,16*4))
+      return;
+    if(isItem) {
+      auto* tsym = vm.find_symbol_by_name("OCITEM.TEXT");
+      auto* csym = vm.find_symbol_by_name("OCITEM.COUNT");
+      if(tsym!=nullptr && inside(tsym->offset_as_member(),zenkit::IItem::text_count*sizeof(zString)))
+        return;
+      if(csym!=nullptr && inside(csym->offset_as_member(),zenkit::IItem::text_count*sizeof(int32_t)))
+        return;
+      }
+    }
+  GapLog::inst().note(GapLog::Kind::Field, off, write ? "write" : "read", isNpc ? "oCNpc" : "oCItem");
   }
 
 // the input of Gothic (zCInput) that the scripts of CoM use for the keys

@@ -1,0 +1,2588 @@
+diff --git a/common/commandline.cpp b/common/commandline.cpp
+index cd27fd97..5c26f348 100644
+--- a/common/commandline.cpp
++++ b/common/commandline.cpp
+@@ -137,6 +137,17 @@ CommandLine::CommandLine(int argc, const char** argv) {
+       if(i<argc)
+         wrldDef = argv[i];
+       }
++    else if(arg=="-autorun") {
++      ++i;
++      if(i<argc)
++        autoRunCmd = argv[i];
++      }
++    else if(arg=="-autoexit") {
++      ++i;
++      if(i<argc) {
++        try { autoExitSec = std::max(0,std::stoi(argv[i])); } catch(...) { Log::e("-autoexit: not a number: ",argv[i]); }
++        }
++      }
+     else if(arg=="-window") {
+       isWindow = true;
+       }
+diff --git a/common/commandline.h b/common/commandline.h
+index 4e34bb7a..9b8542d5 100644
+--- a/common/commandline.h
++++ b/common/commandline.h
+@@ -56,6 +56,9 @@ class CommandLine {
+     int                 defaultSaveSlot()  const { return saveSlot;   }
+     /// the errors of the scripts and of the program are shown on the screen (a phone has no log to read): the default of the touch version
+     bool                doShowErrors()     const { return showErrors; }
++    /// -autorun "<commands>": a run without a person, see utils/autorun.h; -autoexit <seconds>: the limit of its time
++    const std::string&  autoRun()          const { return autoRunCmd; }
++    int                 autoExit()         const { return autoExitSec; }
+ 
+     std::string         wrldDef;
+ 
+@@ -68,6 +71,8 @@ class CommandLine {
+     std::u16string      gcutscene;
+     std::vector<std::string> arguments;
+     int                 saveSlot = -1;
++    std::string         autoRunCmd;
++    int                 autoExitSec = 0;
+ #ifdef OPENGOTHIC_TOUCH_UI
+     bool                showErrors   = true;
+ #else
+diff --git a/common/game/compatibility/cpu32.cpp b/common/game/compatibility/cpu32.cpp
+index b2a0da22..0387c749 100644
+--- a/common/game/compatibility/cpu32.cpp
++++ b/common/game/compatibility/cpu32.cpp
+@@ -7,6 +7,7 @@
+ #include <limits>
+ 
+ #include "directmemory.h"
++#include "gaplog.h"
+ 
+ using namespace Tempest;
+ using namespace Compatibility;
+@@ -291,12 +292,21 @@ void Cpu32::callFunction(ptr32_t func) {
+ 
+   // An unresolved call has no successful return value. Do this before the
+   // log-once check too: repeated calls used to inherit a previous EAX/ST0.
++  static std::unordered_set<ptr32_t> once;
++  const bool first = once.insert(func).second;
++  {
++    // ECX and the arguments in the order of the declaration (the first one is on the top of the stack)
++    std::vector<uint32_t> regs = {ecx};
++    for(size_t i=stack.size(); i>0 && regs.size()<9; --i)
++      regs.push_back(stack[i-1]);
++    // the name is searched in all the symbols of the scripts: only the first time
++    GapLog::inst().note(GapLog::Kind::Call, func, first ? owner.demangleAddress(func) : std::string_view(), {}, {}, regs);
++  }
+   eax = 0;
+   st0 = 0;
+   stack.clear();
+ 
+-  static std::unordered_set<ptr32_t> once;
+-  if(!once.insert(func).second)
++  if(!first)
+     return;
+ 
+   auto str = owner.demangleAddress(func);
+diff --git a/common/game/compatibility/directmemory.cpp b/common/game/compatibility/directmemory.cpp
+index e5db5b96..17ac3154 100644
+--- a/common/game/compatibility/directmemory.cpp
++++ b/common/game/compatibility/directmemory.cpp
+@@ -1,4 +1,5 @@
+ #include "directmemory.h"
++#include "gaplog.h"
+ #include "hookaddresses.h"
+ #include "logbudget.h"
+ 
+@@ -678,6 +679,9 @@ void DirectMemory::setupEngineMemory() {
+   handles.setSync([this](uint8_t* raw, zenkit::DaedalusInstance& inst, bool write) {
+     syncHandleObject(raw,inst,write);
+     });
++  mem32.setObserver(Mem32::Type::instanceHandle,[this](ptr32_t region, ptr32_t address, uint32_t size, bool write) {
++    observeHandleAccess(region,address,size,write);
++    });
+   setupInstanceAliases();
+   mem32.setCallbackR(Mem32::Type::mobHandle,[this](Compatibility::MobSlot& m, uint32_t id) {
+     memoryCallback(m,id,std::memory_order::acquire);
+@@ -2289,6 +2293,7 @@ void DirectMemory::setupHookEngine() {
+       return;
+     if(hooksUnanswered.size()<1000)
+       hooksUnanswered.emplace_back(uint32_t(address),name);
++    GapLog::inst().note(GapLog::Kind::Hook, uint32_t(address), name, {}, "replaced bytes: "+std::to_string(oldInstr));
+     Log::d("not implemented call [HookEngineI] (", reinterpret_cast<void*>(uint64_t(address)),
+            " -> ", name, ")");
+     });
+diff --git a/common/game/compatibility/directmemory.h b/common/game/compatibility/directmemory.h
+index 10ab75dc..114201e9 100644
+--- a/common/game/compatibility/directmemory.h
++++ b/common/game/compatibility/directmemory.h
+@@ -270,6 +270,7 @@ class DirectMemory {
+     void        tickVobStates();
+     void        setupEngineCalls();
+     void        syncHandleObject(uint8_t* raw, zenkit::DaedalusInstance& inst, bool write);
++    void        observeHandleAccess(ptr32_t region, ptr32_t address, uint32_t size, bool write);
+ 
+     // views, textures and fonts of LeGo
+     struct FontInfo {
+diff --git a/common/game/compatibility/directmemory_engine.cpp b/common/game/compatibility/directmemory_engine.cpp
+index 6c4ce0e4..a0ad0486 100644
+--- a/common/game/compatibility/directmemory_engine.cpp
++++ b/common/game/compatibility/directmemory_engine.cpp
+@@ -1,4 +1,5 @@
+ #include "directmemory.h"
++#include "gaplog.h"
+ 
+ #include <Tempest/Log>
+ 
+@@ -104,6 +105,38 @@ void DirectMemory::syncHandleObject(uint8_t* raw, zenkit::DaedalusInstance& inst
+   std::memcpy(raw+TRAFO,m,sizeof(m));
+   }
+ 
++/// A script reads or writes the memory of a character or an item through its handle (MEM_ReadInt(ptr+offset)). What
++/// syncHandleObject does not fill reads as 0 and a write there is lost: such a field is a gap (GapLog, Kind::Field), the
++/// class and the offset name the field (tools/ikarus/enginedb.py field oCNpc <offset>).
++void DirectMemory::observeHandleAccess(ptr32_t region, ptr32_t address, uint32_t size, bool write) {
++  const uint32_t off  = (address-region) % InstanceHandles::SlotSize;
++  auto           inst = handles.instanceAt(address);
++  if(inst==nullptr)
++    return;
++  const bool isNpc  = dynamic_cast<zenkit::INpc*>(inst.get())!=nullptr;
++  const bool isItem = !isNpc && dynamic_cast<zenkit::IItem*>(inst.get())!=nullptr;
++  if(!isNpc && !isItem)
++    return;
++  auto inside = [&](size_t begin, size_t length) { return off>=begin && off+size<=begin+length; };
++  if(write) {
++    // only the position in the matrix of the vob is taken back (a teleport by the scripts)
++    if(inside(TRAFO+3*4,4) || inside(TRAFO+7*4,4) || inside(TRAFO+11*4,4))
++      return;
++    } else {
++    if(inside(0,4) || inside(TRAFO,16*4))
++      return;
++    if(isItem) {
++      auto* tsym = vm.find_symbol_by_name("OCITEM.TEXT");
++      auto* csym = vm.find_symbol_by_name("OCITEM.COUNT");
++      if(tsym!=nullptr && inside(tsym->offset_as_member(),zenkit::IItem::text_count*sizeof(zString)))
++        return;
++      if(csym!=nullptr && inside(csym->offset_as_member(),zenkit::IItem::text_count*sizeof(int32_t)))
++        return;
++      }
++    }
++  GapLog::inst().note(GapLog::Kind::Field, off, write ? "write" : "read", isNpc ? "oCNpc" : "oCItem");
++  }
++
+ // the input of Gothic (zCInput) that the scripts of CoM use for the keys
+ static constexpr uint32_t ZCINPUT_ZINPUT            = 9246288;   // the pointer to the object
+ static constexpr uint32_t ZCINPUT_WIN32__CLEARKEYBUFFER = 5068240;
+diff --git a/common/game/compatibility/directmemory_files.cpp b/common/game/compatibility/directmemory_files.cpp
+index f6f96c02..0cfca361 100644
+--- a/common/game/compatibility/directmemory_files.cpp
++++ b/common/game/compatibility/directmemory_files.cpp
+@@ -8,6 +8,7 @@
+ #include <cstring>
+ 
+ #include "game/serialize.h"
++#include "gaplog.h"
+ #include "hookaddresses.h"
+ #include "logbudget.h"
+ 
+@@ -276,6 +277,8 @@ auto DirectMemory::loadingTexture() -> std::string {
+   }
+ 
+ void DirectMemory::eventSaveGame(Serialize& fout) {
++  // a phone may end the game without a goodbye: the list of the gaps is written with every save
++  GapLog::inst().flush();
+   for(auto& f:vfs)
+     dumpFile("saved",f.first,f.second);
+ 
+diff --git a/common/game/compatibility/gaplog.cpp b/common/game/compatibility/gaplog.cpp
+new file mode 100644
+index 00000000..d4deeac9
+--- /dev/null
++++ b/common/game/compatibility/gaplog.cpp
+@@ -0,0 +1,179 @@
++#include "gaplog.h"
++
++#include <Tempest/Log>
++#include <zenkit/DaedalusVm.hh>
++
++#include <cstdio>
++#include <fstream>
++
++using namespace Compatibility;
++
++namespace {
++void appendEscaped(std::string& out, std::string_view s) {
++  out += '"';
++  for(char c:s) {
++    const auto u = uint8_t(c);
++    switch(c) {
++      case '"':  out += "\\\""; break;
++      case '\\': out += "\\\\"; break;
++      case '\n': out += "\\n";  break;
++      case '\r': out += "\\r";  break;
++      case '\t': out += "\\t";  break;
++      default:
++        if(u<0x20 || u>=0x7F) {
++          // the names of the scripts are cp1252 and the hidden symbols have \xFF: JSON gets them as escapes, not UTF-8
++          char buf[8];
++          std::snprintf(buf,sizeof(buf),"\\u%04x",unsigned(u));
++          out += buf;
++          } else {
++          out += c;
++          }
++      }
++    }
++  out += '"';
++  }
++
++std::string hex(uint32_t v) {
++  char buf[16];
++  std::snprintf(buf,sizeof(buf),"0x%08x",unsigned(v));
++  return buf;
++  }
++}
++
++GapLog& GapLog::inst() {
++  static GapLog log;
++  return log;
++  }
++
++void GapLog::setVm(const zenkit::DaedalusVm* v) {
++  std::lock_guard<std::recursive_mutex> guard(sync);
++  vm = v;
++  }
++
++std::string_view GapLog::kindName(Kind k) {
++  switch(k) {
++    case Kind::Call:        return "call";
++    case Kind::Hook:        return "hook";
++    case Kind::Unmapped:    return "unmapped";
++    case Kind::Field:       return "field";
++    case Kind::External:    return "external";
++    case Kind::ScriptError: return "script";
++    }
++  return "?";
++  }
++
++std::vector<std::string> GapLog::scriptStack() const {
++  std::vector<std::string> ret;
++  if(vm==nullptr)
++    return ret;
++  auto& cs = vm->call_stack();
++  for(size_t i=cs.size(); i>0 && ret.size()<10; --i) {
++    auto* f = cs[i-1].function;
++    if(f!=nullptr)
++      ret.emplace_back(f->name());
++    }
++  return ret;
++  }
++
++void GapLog::note(Kind kind, uint32_t address, std::string_view name, std::string_view cls,
++                  std::string_view detail, std::initializer_list<uint32_t> regs) {
++  note(kind,address,name,cls,detail,std::vector<uint32_t>(regs));
++  }
++
++void GapLog::note(Kind kind, uint32_t address, std::string_view name, std::string_view cls,
++                  std::string_view detail, const std::vector<uint32_t>& regs) {
++  std::lock_guard<std::recursive_mutex> guard(sync);
++  ++all;
++  // a call or an address is one gap whatever name it has (the name is looked up only the first time)
++  const bool named = kind!=Kind::Call && kind!=Kind::Unmapped;
++  Key key{uint8_t(kind),address,named ? std::string(name) : std::string(),std::string(cls)};
++  auto it = entries.find(key);
++  if(it!=entries.end()) {
++    it->second.count++;
++    dirty = true;
++    return;
++    }
++  if(entries.size()>=MaxEntries)
++    return;
++  if((kind==Kind::Unmapped || kind==Kind::Field) && ++perKind[uint8_t(kind)]>MaxPerAddressKind)
++    return;
++  Entry e;
++  e.kind    = kind;
++  e.address = address;
++  e.name    = name;
++  e.cls     = cls;
++  e.detail  = detail;
++  e.stack   = scriptStack();
++  e.regs    = regs;
++  e.count   = 1;
++  auto& ref = entries.emplace(std::move(key),std::move(e)).first->second;
++  dirty = true;
++  Tempest::Log::i("IKGAP ",entryJson(ref));
++  }
++
++std::string GapLog::entryJson(const Entry& e) const {
++  std::string s = "{\"kind\":";
++  appendEscaped(s,kindName(e.kind));
++  if(e.kind==Kind::Field)
++    s += ",\"address\":" + std::to_string(e.address); else
++    s += ",\"address\":\"" + hex(e.address) + "\"";
++  if(!e.name.empty())   { s += ",\"name\":";   appendEscaped(s,e.name);   }
++  if(!e.cls.empty())    { s += ",\"class\":";  appendEscaped(s,e.cls);    }
++  if(!e.detail.empty()) { s += ",\"detail\":"; appendEscaped(s,e.detail); }
++  if(!e.regs.empty()) {
++    s += ",\"regs\":[";
++    for(size_t i=0; i<e.regs.size(); ++i) {
++      if(i>0)
++        s += ',';
++      s += '"' + hex(e.regs[i]) + '"';
++      }
++    s += ']';
++    }
++  s += ",\"stack\":[";
++  for(size_t i=0; i<e.stack.size(); ++i) {
++    if(i>0)
++      s += ',';
++    appendEscaped(s,e.stack[i]);
++    }
++  s += "],\"count\":" + std::to_string(e.count) + "}";
++  return s;
++  }
++
++std::string GapLog::json() const {
++  std::lock_guard<std::recursive_mutex> guard(sync);
++  std::string s = "{\"schema\":1,\"total\":" + std::to_string(all) + ",\"gaps\":[\n";
++  bool first = true;
++  for(auto& [k,e]:entries) {
++    if(!first)
++      s += ",\n";
++    first = false;
++    s += entryJson(e);
++    }
++  s += "\n]}\n";
++  return s;
++  }
++
++size_t GapLog::size() const {
++  std::lock_guard<std::recursive_mutex> guard(sync);
++  return entries.size();
++  }
++
++uint64_t GapLog::total() const {
++  std::lock_guard<std::recursive_mutex> guard(sync);
++  return all;
++  }
++
++void GapLog::flush() {
++  std::lock_guard<std::recursive_mutex> guard(sync);
++  if(!dirty)
++    return;
++  // next to log.txt (the working directory of the game, the files of the application on Android)
++  std::ofstream f("ikarus-gaps.json",std::ios::binary|std::ios::trunc);
++  if(!f) {
++    Tempest::Log::e("GapLog: cannot write ikarus-gaps.json");
++    return;
++    }
++  const auto data = json();
++  f.write(data.data(),std::streamsize(data.size()));
++  dirty = false;
++  }
+diff --git a/common/game/compatibility/gaplog.h b/common/game/compatibility/gaplog.h
+new file mode 100644
+index 00000000..ac0545fe
+--- /dev/null
++++ b/common/game/compatibility/gaplog.h
+@@ -0,0 +1,84 @@
++#pragma once
++
++#include <cstdint>
++#include <initializer_list>
++#include <map>
++#include <mutex>
++#include <string>
++#include <string_view>
++#include <tuple>
++#include <vector>
++
++namespace zenkit {
++class DaedalusVm;
++}
++
++namespace Compatibility {
++
++/// The machine-readable list of what the scripts of a mod asked for and did not get: a call of the engine that nobody
++/// answers, a hook that nobody fires, memory that does not exist, a field of a character that the handle does not have, an
++/// external without a binding, an error of a script.
++///
++/// The first time of every gap is a line of log.txt ("IKGAP {json}"), so it is in the reports of the phones too; the whole
++/// list with the counts is ikarus-gaps.json next to log.txt (written at a save, at the end of the game and on request).
++/// tools/ikarus/worklist.py turns them, with the static audit and the engine database, into tasks (docs/IKARUS_AUTOMATION.md).
++class GapLog {
++  public:
++    enum class Kind : uint8_t {
++      Call,         // CALL__thiscall & co: an address of the engine without a handler (Cpu32)
++      Hook,         // HookEngine: a place of the engine that OpenGothic does not fire
++      Unmapped,     // MEM_ReadInt & co: an address of the pretended memory where nothing lives
++      Field,        // a field of oCNpc/oCItem that the handle does not fill (it reads 0, a write is lost)
++      External,     // an external function of the scripts without a binding
++      ScriptError,  // an exception of the VM
++      };
++
++    static GapLog& inst();
++
++    /// The VM of the game: the functions on its call stack say who asked
++    void     setVm(const zenkit::DaedalusVm* vm);
++
++    /// `address`: the address (Call, Hook, Unmapped), the offset in the object (Field); `cls`: the class of the object (Field);
++    /// `name`: the external, the error, the functions of a hook; `regs`: ECX and the stack (Call)
++    void     note(Kind kind, uint32_t address, std::string_view name = {}, std::string_view cls = {},
++                  std::string_view detail = {}, std::initializer_list<uint32_t> regs = {});
++    void     note(Kind kind, uint32_t address, std::string_view name, std::string_view cls,
++                  std::string_view detail, const std::vector<uint32_t>& regs);
++
++    /// Writes ikarus-gaps.json (all the gaps with their counts)
++    void     flush();
++    size_t   size() const;
++    uint64_t total() const;
++    /// The gaps as JSON, for the mods (debug.gaps()) and the autorun
++    std::string json() const;
++
++    static std::string_view kindName(Kind k);
++
++  private:
++    GapLog() = default;
++
++    struct Entry {
++      Kind                     kind    = Kind::Call;
++      uint32_t                 address = 0;
++      std::string              name, cls, detail;
++      std::vector<std::string> stack;
++      std::vector<uint32_t>    regs;
++      uint64_t                 count   = 0;
++      };
++    using Key = std::tuple<uint8_t,uint32_t,std::string,std::string>;
++
++    std::string                  entryJson(const Entry& e) const;
++    std::vector<std::string>     scriptStack() const;
++
++    mutable std::recursive_mutex sync;
++    const zenkit::DaedalusVm*    vm = nullptr;
++    std::map<Key,Entry>          entries;
++    uint64_t                     all = 0;
++    bool                         dirty = false;
++    uint32_t                     perKind[8] = {};
++    static constexpr size_t      MaxEntries = 4000;
++    // a script that walks over memory that does not exist must not push the other gaps out
++    static constexpr uint32_t    MaxPerAddressKind = 1000;
++  };
++
++}
+diff --git a/common/game/compatibility/mem32.cpp b/common/game/compatibility/mem32.cpp
+index 4b32d521..492cfbbc 100644
+--- a/common/game/compatibility/mem32.cpp
++++ b/common/game/compatibility/mem32.cpp
+@@ -1,5 +1,6 @@
+ #include "mem32.h"
+ #include "logbudget.h"
++#include "gaplog.h"
+ 
+ #include <Tempest/Log>
+ #include <cassert>
+@@ -136,6 +137,7 @@ void Mem32::free(ptr32_t address) {
+ const void* Mem32::deref(ptr32_t address, uint32_t size) {
+   auto r = translate(address);
+   if(r==nullptr) {
++    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "deref");
+     if(Compatibility::logBudget("mem32:deref")) Log::e("deref: address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
+     return nullptr;
+     }
+@@ -152,6 +154,7 @@ const void* Mem32::deref(ptr32_t address, uint32_t size) {
+ void* Mem32::derefv(ptr32_t address, uint32_t size) {
+   auto rgn = translate(address);
+   if(rgn==nullptr) {
++    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "deref");
+     if(Compatibility::logBudget("mem32:deref")) Log::e("deref: address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
+     return nullptr;
+     }
+@@ -171,6 +174,7 @@ void* Mem32::derefv(ptr32_t address, uint32_t size) {
+ auto Mem32::deref(ptr32_t address) -> std::tuple<void*, uint32_t> {
+   auto r = translate(address);
+   if(r==nullptr) {
++    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "deref");
+     if(Compatibility::logBudget("mem32:deref")) Log::e("deref: address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
+     return {nullptr,0};
+     }
+@@ -207,6 +211,7 @@ void Mem32::compactage() {
+ void Mem32::writeInt(ptr32_t address, int32_t v) {
+   auto r = translate(address);
+   if(r==nullptr) {
++    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "write");
+     Log::e("mem_writeint: address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
+     return;
+     }
+@@ -229,11 +234,13 @@ void Mem32::writeInt(ptr32_t address, int32_t v) {
+   std::memcpy(ptr,&v,4);
+   lastWrite = address;
+   memSyncWrite(rgn.type, rgn, address, 4);
++  observe(rgn, address, 4, true);
+   }
+ 
+ int32_t Mem32::readInt(ptr32_t address) {
+   const auto r = translate(address);
+   if(r==nullptr) {
++    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::Unmapped, address, {}, {}, "read");
+     if(Compatibility::logBudget("mem32:mem_readint")) Log::e("mem_readint:  address translation failure: ", reinterpret_cast<void*>(uint64_t(address)));
+     return 0;
+     }
+@@ -250,6 +257,7 @@ int32_t Mem32::readInt(ptr32_t address) {
+     return ret;
+     }
+   memSyncRead(rgn.type, rgn, address, 4);
++  observe(rgn, address, 4, false);
+ 
+   auto ptr = reinterpret_cast<uint8_t*>(rgn.real)+dAddr;
+   int32_t ret = 0;
+@@ -265,6 +273,7 @@ uint8_t Mem32::readByte(ptr32_t address) {
+   const auto    rgn   = *r;
+   const ptr32_t dAddr = address-rgn.address;
+   memSyncRead(rgn.type, rgn, address, 1);
++  observe(rgn, address, 1, false);
+   return reinterpret_cast<uint8_t*>(rgn.real)[dAddr];
+   }
+ 
+@@ -279,6 +288,7 @@ void Mem32::writeByte(ptr32_t address, uint8_t v) {
+   memSyncRead(rgn.type, rgn, address, 1);
+   reinterpret_cast<uint8_t*>(rgn.real)[address-rgn.address] = v;
+   memSyncWrite(rgn.type, rgn, address, 1);
++  observe(rgn, address, 1, true);
+   }
+ 
+ void Mem32::copyBytes(ptr32_t psrc, ptr32_t pdst, uint32_t size) {
+@@ -313,6 +323,8 @@ void Mem32::copyBytes(ptr32_t psrc, ptr32_t pdst, uint32_t size) {
+               reinterpret_cast<uint8_t*>(src.real)+sOff,
+               sz);
+   memSyncWrite(dst.type, dst, ptr32_t(dst.address+dOff), uint32_t(sz));
++  observe(src, ptr32_t(src.address+sOff), uint32_t(sz), false);
++  observe(dst, ptr32_t(dst.address+dOff), uint32_t(sz), true);
+   }
+ 
+ Mem32::Region* Mem32::implAlloc(uint32_t size) {
+diff --git a/common/game/compatibility/mem32.h b/common/game/compatibility/mem32.h
+index 80343440..2dfaa36e 100644
+--- a/common/game/compatibility/mem32.h
++++ b/common/game/compatibility/mem32.h
+@@ -83,6 +83,11 @@ class Mem32 {
+     /// For the log: the address of the last write that went through a callback
+     ptr32_t lastWriteAddress() const { return lastWrite; }
+ 
++    /// The reads and the writes of the scripts (readInt, writeInt, the bytes, copyBytes) in the regions of a type: the
++    /// layer sees which fields of its objects are used (GapLog, Kind::Field). `region` is the start of the region.
++    using Observer = std::function<void(ptr32_t region, ptr32_t address, uint32_t size, bool write)>;
++    void    setObserver(Type t, Observer fn) { observers[t] = std::move(fn); }
++
+     void    writeInt (ptr32_t address, int32_t v);
+     int32_t readInt  (ptr32_t address);
+     void    copyBytes(ptr32_t src, ptr32_t dst, uint32_t size);
+@@ -134,5 +139,14 @@ class Mem32 {
+     ptr32_t             lastWrite = 0;
+     std::vector<Region> region;
+     std::unordered_map<Type, Callback> memMap;
++    std::unordered_map<Type, Observer> observers;
++
++    void     observe(const Region& rgn, ptr32_t address, uint32_t size, bool write) {
++      if(rgn.type==Type::plain || observers.empty())
++        return;
++      auto it = observers.find(rgn.type);
++      if(it!=observers.end())
++        it->second(rgn.address, address, size, write);
++      }
+   };
+ 
+diff --git a/common/game/gamescript.cpp b/common/game/gamescript.cpp
+index 793c63d5..3d15e364 100644
+--- a/common/game/gamescript.cpp
++++ b/common/game/gamescript.cpp
+@@ -7,6 +7,7 @@
+ #include <unordered_map>
+ 
+ #include "game/compatibility/directmemory.h"
++#include "game/compatibility/gaplog.h"
+ #include "game/definitions/spelldefinitions.h"
+ #include "game/serialize.h"
+ #include "utils/string_frm.h"
+@@ -96,7 +97,9 @@ GameScript::GameScript(GameSession &owner)
+     throw std::runtime_error("Cannot find script symbol SELF, OTHER, ITEM, VICTIM, or HERO! Cannot proceed!");
+ 
+   vmLang = Gothic::inst().settingsGetI("GAME", "language");
++  Compatibility::GapLog::inst().setVm(&vm);
+   vm.register_exception_handler([](zenkit::DaedalusVm& v, const zenkit::DaedalusScriptError& exc, const zenkit::DaedalusInstruction& instr) {
++    Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::ScriptError, 0, exc.what());
+     const auto ret = zenkit::lenient_vm_exception_handler(v,exc,instr);
+     // where the script was: the first times that every error happens, so a log is not drowned
+     static std::unordered_map<std::string,int> seen;
+@@ -386,6 +389,8 @@ void GameScript::dmaFallDamage(Npc& npc) {
+ 
+ GameScript::~GameScript() {
+   Gothic::inst().onSettingsChanged.ubind(this,&GameScript::initSettings);
++  Compatibility::GapLog::inst().flush();
++  Compatibility::GapLog::inst().setVm(nullptr);
+   }
+ 
+ void GameScript::initCommon() {
+diff --git a/common/gothic.cpp b/common/gothic.cpp
+index 4225b914..89795518 100644
+--- a/common/gothic.cpp
++++ b/common/gothic.cpp
+@@ -27,6 +27,7 @@
+ #include "graphics/renderdistance.h"
+ 
+ #include "commandline.h"
++#include "game/compatibility/gaplog.h"
+ #include "mainwindow.h"
+ 
+ using namespace Tempest;
+@@ -1076,6 +1077,7 @@ void Gothic::setupVmCommonApi(zenkit::DaedalusVm& vm) {
+ 
+ void Gothic::notImplementedRoutine(std::string_view fn) {
+   static std::set<std::string, std::less<>> s;
++  Compatibility::GapLog::inst().note(Compatibility::GapLog::Kind::External, 0, fn);
+ 
+   if(s.find(fn)==s.end()){
+     auto [v, _] = s.insert(std::string {fn});
+diff --git a/common/mainwindow.cpp b/common/mainwindow.cpp
+index a96e891c..3e29c6c5 100644
+--- a/common/mainwindow.cpp
++++ b/common/mainwindow.cpp
+@@ -32,6 +32,7 @@
+ #include "scripting/gameapi.h"
+ #include "utils/dbgpainter.h"
+ #include "utils/crashlog.h"
++#include "utils/autorun.h"
+ 
+ #include "commandline.h"
+ #include "gothic.h"
+@@ -1208,6 +1209,8 @@ uint64_t MainWindow::tick() {
+   if(errorScreen.isActive())
+     clearInput();
+   Scripting::game::tick();
++  if(AutoRun::inst().active())
++    AutoRun::inst().tick(Gothic::inst().world()!=nullptr && Gothic::inst().checkLoading()==Gothic::LoadState::Idle);
+   if(auto* w = Gothic::inst().world()) {
+     // a script (CoM, fistfight) closes the inventory of the player
+     if(w->script().dmaTakeInventoryClose() && inventory.isActive())
+diff --git a/common/scripting/game/game_debug.cpp b/common/scripting/game/game_debug.cpp
+index 988872a2..b9fc545e 100644
+--- a/common/scripting/game/game_debug.cpp
++++ b/common/scripting/game/game_debug.cpp
+@@ -6,6 +6,7 @@
+ #include <exception>
+ 
+ #include "camera.h"
++#include "game/compatibility/gaplog.h"
+ #include "game/dialogtest.h"
+ #include "game/gamescript.h"
+ #include "gothic.h"
+@@ -327,6 +328,15 @@ JSValue ikarus(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+   return JS_NewString(ctx,w==nullptr ? "" : w->script().dmaReport().c_str());
+   }
+ 
++/// debug.gaps() -> the gaps of the compatibility layer as JSON text ({total, gaps:[{kind, address, name, class, stack, count}]}),
++/// see game/compatibility/gaplog.h; debug.gaps(true) also writes ikarus-gaps.json
++JSValue gaps(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
++  auto& g = Compatibility::GapLog::inst();
++  if(argc>0 && JS_ToBool(ctx,argv[0])>0)
++    g.flush();
++  return JS_NewString(ctx,g.json().c_str());
++  }
++
+ // --- the world
+ 
+ /// debug.placeOnGround(npc, waypoint, dx, dz) -> landing position or null.
+@@ -921,6 +931,7 @@ void game::installDebug(JSContext* ctx) {
+   js::fn(ctx,dbg,"symbol",    symbol,1);
+   js::fn(ctx,dbg,"setSymbol", setSymbol,2);
+   js::fn(ctx,dbg,"ikarus",    ikarus,0);
++  js::fn(ctx,dbg,"gaps",      gaps,1);
+   js::fn(ctx,dbg,"triggers",  triggers,2);
+   js::fn(ctx,dbg,"trigger",   trigger,2);
+   js::fn(ctx,dbg,"points",    points,2);
+diff --git a/common/utils/autorun.cpp b/common/utils/autorun.cpp
+new file mode 100644
+index 00000000..e8a97889
+--- /dev/null
++++ b/common/utils/autorun.cpp
+@@ -0,0 +1,240 @@
++#include "autorun.h"
++
++#include <Tempest/Application>
++#include <Tempest/Log>
++#include <Tempest/Platform>
++#include <Tempest/SystemApi>
++
++#include <cctype>
++#include <cstdio>
++#include <fstream>
++
++#include "game/compatibility/gaplog.h"
++#include "scripting/modhost.h"
++#include "utils/gamelog.h"
++#include "world/world.h"
++#include "commandline.h"
++#include "gothic.h"
++
++using namespace Tempest;
++
++namespace {
++std::string trim(std::string_view s) {
++  size_t b = 0, e = s.size();
++  while(b<e && std::isspace(uint8_t(s[b])))
++    ++b;
++  while(e>b && std::isspace(uint8_t(s[e-1])))
++    --e;
++  return std::string(s.substr(b,e-b));
++  }
++
++void appendJson(std::string& out, std::string_view s) {
++  out += '"';
++  for(char c:s) {
++    const auto u = uint8_t(c);
++    if(c=='"' || c=='\\') {
++      out += '\\';
++      out += c;
++      }
++    else if(c=='\n')
++      out += "\\n";
++    else if(c=='\r')
++      out += "\\r";
++    else if(c=='\t')
++      out += "\\t";
++    else if(u<0x20) {
++      char buf[8];
++      std::snprintf(buf,sizeof(buf),"\\u%04x",unsigned(u));
++      out += buf;
++      }
++    else
++      out += c;   // the log is UTF-8
++    }
++  out += '"';
++  }
++}
++
++AutoRun& AutoRun::inst() {
++  static AutoRun r;
++  return r;
++  }
++
++AutoRun::AutoRun() {
++  auto& cmd = CommandLine::inst();
++  const int limit = cmd.autoExit();
++  if(cmd.autoRun().empty() && limit<=0)
++    return;
++  enabled   = true;
++  startTime = Application::tickCount();
++  if(limit>0)
++    limitMs = uint64_t(limit)*1000;
++  std::string_view all = cmd.autoRun();
++  while(!all.empty()) {
++    const size_t sep = all.find(';');
++    auto c = trim(all.substr(0,sep));
++    if(!c.empty())
++      commands.push_back(std::move(c));
++    if(sep==std::string_view::npos)
++      break;
++    all.remove_prefix(sep+1);
++    }
++  logSerial = GameLog::serial();
++  Log::i("autorun: ",commands.size()," command(s), the limit ",limitMs/1000," s");
++  }
++
++void AutoRun::tick(bool worldReady) {
++  if(!enabled || finished)
++    return;
++  const uint64_t now = Application::tickCount();
++  if(now-startTime>=limitMs) {
++    Log::e("autorun: the limit of ",limitMs/1000," s is over");
++    finish("timeout");
++    return;
++    }
++  if(!worldReady)
++    return;
++  if(readyTime==0) {
++    readyTime = now;
++    auto& lines = Scripting::ModHost::inst().lines();
++    modSerial = lines.empty() ? 0 : lines.back().serial;
++    Log::i("autorun: the world is loaded after ",(now-startTime)/1000," s");
++    }
++  if(now<waitUntil)
++    return;
++  if(!waitText.empty()) {
++    // waitfor: a line of the console of the mods that has the text
++    for(auto& l:Scripting::ModHost::inst().lines()) {
++      if(l.serial<=scanSerial)
++        continue;
++      scanSerial = l.serial;
++      if(l.text.find(waitText)!=std::string::npos) {
++        Log::i("autorun: seen \"",waitText,"\"");
++        waitText.clear();
++        break;
++        }
++      }
++    if(!waitText.empty()) {
++      if(now<waitTextUntil)
++        return;
++      Log::e("autorun: \"",waitText,"\" did not come");
++      waitText.clear();
++      }
++    }
++  if(next>=commands.size()) {
++    finish("done");
++    return;
++    }
++
++  const std::string c = commands[next++];
++  done.push_back(c);
++  Log::i("autorun> ",c);
++  if(c=="quit") {
++    finish("done");
++    return;
++    }
++  if(c.rfind("wait",0)==0 && (c.size()==4 || std::isspace(uint8_t(c[4])))) {
++    double sec = 1;
++    try { sec = std::stod(c.substr(4)); } catch(...) { Log::e("autorun: wait: not a number: ",c); }
++    waitUntil = now + uint64_t(std::max(0.0,sec)*1000.0);
++    return;
++    }
++  if(c.rfind("waitfor ",0)==0) {
++    // waitfor <text> [seconds]: the text may have spaces; a number at the end is the limit (default: the rest of the run)
++    std::string arg = trim(c.substr(8));
++    uint64_t    lim = limitMs;
++    const size_t sp = arg.find_last_of(' ');
++    if(sp!=std::string::npos) {
++      try {
++        size_t used = 0;
++        const double sec = std::stod(arg.substr(sp+1),&used);
++        if(used==arg.size()-sp-1) {
++          lim = uint64_t(std::max(0.0,sec)*1000.0);
++          arg = trim(arg.substr(0,sp));
++          }
++        }
++      catch(...) {}
++      }
++    if(arg.size()>=2 && arg.front()=='"' && arg.back()=='"')
++      arg = arg.substr(1,arg.size()-2);
++    waitText      = arg;
++    waitTextUntil = now + lim;
++    // the lines since the command before: it may have printed the text already
++    scanSerial    = cmdSerial;
++    return;
++    }
++  if(c=="gaps") {
++    Compatibility::GapLog::inst().flush();
++    return;
++    }
++  {
++    auto& lines = Scripting::ModHost::inst().lines();
++    cmdSerial = lines.empty() ? 0 : lines.back().serial;
++  }
++  Scripting::ModHost::inst().execute(c);
++  }
++
++void AutoRun::finish(const char* result) {
++  finished = true;
++  writeReport(result);
++  Log::i("autorun: ",result,", the report is autorun-report.json");
++  Tempest::SystemApi::exit();
++  }
++
++void AutoRun::writeReport(const char* result) {
++  auto& gaps = Compatibility::GapLog::inst();
++  gaps.flush();
++
++  std::string s = "{\"schema\":1,\"result\":";
++  appendJson(s,result);
++  s += ",\"seconds\":" + std::to_string((Application::tickCount()-startTime)/1000);
++  s += ",\"worldLoaded\":" + std::string(readyTime!=0 ? "true" : "false");
++  if(auto* w = Gothic::inst().world()) {
++    s += ",\"world\":";
++    appendJson(s,w->name());
++    }
++  s += ",\"commands\":[";
++  for(size_t i=0; i<commands.size(); ++i) {
++    if(i>0)
++      s += ',';
++    appendJson(s,commands[i]);
++    }
++  s += "],\"commandsRun\":" + std::to_string(done.size());
++
++  // what the mods said (comcheck prints PASS/FAIL there)
++  s += ",\"console\":[";
++  bool first = true;
++  for(auto& l:Scripting::ModHost::inst().lines()) {
++    if(l.serial<=modSerial)
++      continue;
++    if(!first)
++      s += ',';
++    first = false;
++    static const char* lv[] = {"info","warn","error","debug"};
++    s += "{\"level\":\"" + std::string(lv[std::min<int>(l.level,3)]) + "\",\"source\":";
++    appendJson(s,l.source);
++    s += ",\"text\":";
++    appendJson(s,l.text);
++    s += '}';
++    }
++  s += ']';
++
++  // the errors of the log since the start (the newest 300)
++  std::vector<GameLog::Line> lines;
++  GameLog::since(logSerial,100000,lines);
++  std::vector<const GameLog::Line*> errors;
++  for(auto& l:lines)
++    if(l.level==GameLog::Error)
++      errors.push_back(&l);
++  const size_t from = errors.size()>300 ? errors.size()-300 : 0;
++  s += ",\"logErrors\":" + std::to_string(errors.size()) + ",\"errors\":[";
++  for(size_t i=from; i<errors.size(); ++i) {
++    if(i>from)
++      s += ',';
++    appendJson(s,errors[i]->text);
++    }
++  s += "],\"gapsTotal\":" + std::to_string(gaps.total());
++  s += ",\"gaps\":" + gaps.json() + "}\n";
++
++  std::ofstream f("autorun-report.json",std::ios::binary|std::ios::trunc);
++  f.write(s.data(),std::streamsize(s.size()));
++  }
+diff --git a/common/utils/autorun.h b/common/utils/autorun.h
+new file mode 100644
+index 00000000..88e90cbe
+--- /dev/null
++++ b/common/utils/autorun.h
+@@ -0,0 +1,48 @@
++#pragma once
++
++#include <cstdint>
++#include <string>
++#include <vector>
++
++/// A run of the game without a person: an agent (or a script of CI) starts the game, the commands run once the world is
++/// loaded, and the game ends by itself with a report. See docs/IKARUS_AUTOMATION.md.
++///
++///   Gothic2Notr -g <game> -game:<mod>.ini -nomenu -window -noerrors -autorun "wait 20; comcheck test ikarus; wait 5" -autoexit 300
++///
++/// The commands are separated by ';'. `wait <seconds>` waits (real time, with the world loaded), `waitfor <text> [seconds]`
++/// waits for a line of the console of the mods with the text (since the command before it), `quit` ends the run, `gaps`
++/// writes ikarus-gaps.json; any other command goes to the console of the mods (`comcheck ...`, `dlgall`, `eval <mod> <code>`,
++/// the commands of the mods). After the last command the run ends. -autoexit <seconds> ends it in any case (default 600),
++/// the report then says "timeout".
++///
++/// The report is autorun-report.json next to log.txt: the result, the commands, the lines of the console of the mods, the
++/// errors of the log and the gaps of the compatibility layer (GapLog); ikarus-gaps.json is written too.
++class AutoRun {
++  public:
++    static AutoRun& inst();
++
++    bool active() const { return enabled; }
++    /// From the main loop, every frame; `worldReady`: a world is loaded and nothing is loading
++    void tick(bool worldReady);
++
++  private:
++    AutoRun();
++    void finish(const char* result);
++    void writeReport(const char* result);
++
++    bool                     enabled   = false;
++    bool                     finished  = false;
++    std::vector<std::string> commands;
++    size_t                   next      = 0;
++    uint64_t                 startTime = 0;   // the start of the program
++    uint64_t                 readyTime = 0;   // the world was there the first time
++    uint64_t                 waitUntil = 0;
++    uint64_t                 limitMs   = 600000;
++    uint64_t                 logSerial = 0;
++    uint64_t                 modSerial = 0;
++    uint64_t                 cmdSerial = 0;   // the last line of the console before the last command
++    uint64_t                 scanSerial = 0;
++    std::string              waitText;        // waitfor
++    uint64_t                 waitTextUntil = 0;
++    std::vector<std::string> done;
++  };
+diff --git a/docs/IKARUS.md b/docs/IKARUS.md
+index 5964836b..c47e21c2 100644
+--- a/docs/IKARUS.md
++++ b/docs/IKARUS.md
+@@ -1,5 +1,7 @@
+ # Ikarus and LeGo
+ 
++Unattended work (engine database, gap records, runs of the game without a person, task lists): [IKARUS_AUTOMATION.md](IKARUS_AUTOMATION.md).
++
+ Current DAT/source audit and remaining gaps: [24 October 2026](ARCHOLOS_AUDIT_2026-10-24.md).
+ See [the audit tool documentation](../tools/ikarus/README.md) for `--dat`, static
+ call counts, complete disassembly and semantic-review reports. Counts below are
+diff --git a/docs/IKARUS_AUTOMATION.md b/docs/IKARUS_AUTOMATION.md
+new file mode 100644
+index 00000000..60f28038
+--- /dev/null
++++ b/docs/IKARUS_AUTOMATION.md
+@@ -0,0 +1,111 @@
++# Ikarus/LeGo bez obsługi: konwerter silnika, rejestr luk, przebieg gry bez człowieka
++
++Stan: **25.11.2026, praca wstrzymana na polecenie użytkownika** (pauza). Wszystko poniżej jest zaimplementowane,
++zbudowane (desktop, MSVC, `-DOPENGOTHIC_TOUCH_UI=ON`) i sprawdzone na Kronikach Myrtany, chyba że napisano inaczej.
++Zmiany są też w jednym pliku: `patches/025-ikarus-automation.patch` (zastosowanie: niżej).
++
++## Po co
++
++Do tej pory każda luka Ikarusa/LeGo wymagała ręcznej pracy: ktoś grał na telefonie, czytał log, szukał adresu w
++źródłach Ikarusa, zgadywał sygnaturę funkcji silnika, pisał handler i znowu grał. Teraz pętla jest zamknięta i może ją
++prowadzić agent AI bez człowieka:
++
++```
++modcheck.py  ->  DAT moda  ->  audyt statyczny  ->  gra bez człowieka (-autorun)  ->  rejestr luk  ->  worklist (zadania)
++     ^                                                                                                     |
++     +---------------------------- agent implementuje zadanie, buduje, uruchamia ponownie <----------------+
++```
++
++## Elementy
++
++| Element | Plik | Co robi |
++|---|---|---|
++| Konwerter silnika | `tools/ikarus/enginedb.py` | Z nagłówków Gothic API (Union, https://github.com/gothicuef/gothic-api) buduje bazy JSON dla G1, G1A, G2, G2A: ok. 11 tys. funkcji z pełną sygnaturą C++ i konwencją wywołania, 650 klas z polami i offsetami (z klasami bazowymi i polami bitowymi), zmienne globalne, statyczne składowe, vtable. Komendy: `build --fetch`, `lookup`, `find`, `class`, `field`, `stub` (szkielet handlera C++), `symbolize` (nazwy adresów w dowolnym logu/CSV). |
++| Rejestr luk w grze | `common/game/compatibility/gaplog.h/.cpp` | Każda luka trafia do rejestru z licznikiem i stosem wywołań skryptu: wywołanie silnika bez handlera (Cpu32, z ECX i argumentami), hook bez mostu, odczyt/zapis nieistniejącej pamięci, pole `oCNpc`/`oCItem` czytane przez uchwyt a niewypełniane (`observeHandleAccess`), external bez bindingu, wyjątek VM. Pierwsze wystąpienie to linia `IKGAP {json}` w `log.txt` (więc jest też w raportach z telefonów), całość z licznikami w `ikarus-gaps.json` (zapis przy każdym zapisie gry, na końcu sesji, na żądanie). JS: `debug.gaps(flush)`. |
++| Stos skryptu | `patches/zenkit-opengothic.patch` | ZenKit dostał `DaedalusVm::call_stack()` (sam akcesor, bez zmiany działania). |
++| Obserwator pamięci | `mem32.h/.cpp` | `Mem32::setObserver(Type, fn)`: odczyty i zapisy skryptów w regionach typowanych (readInt/writeInt/bajty/copyBytes). |
++| Gra bez człowieka | `common/utils/autorun.h/.cpp`, `commandline.*`, `mainwindow.cpp` | `-autorun "<komendy>"` i `-autoexit <s>`. Komendy po `;`: `wait <s>`, `waitfor <tekst> [s]`, `gaps`, `quit`, reszta do konsoli modów (`comcheck ...`, `dlgall`, `eval <mod> <kod>`). Po ostatniej komendzie gra sama się zamyka i pisze `autorun-report.json` (wynik, konsola modów, błędy logu, luki). |
++| Wszystkie dialogi z konsoli | `mods/devtools/index.js` | `dlgall [słowa]`, `dlgall resume` (po crashu, pomija dialog, który go wywołał), `dlgall stop` — to samo co przycisk „Test all”, kilka dialogów na klatkę. |
++| Lista zadań | `tools/ikarus/worklist.py` | Łączy audyt, DAT, bazę silnika, rekordy z gry (log.txt z telefonu, `ikarus-gaps.json`, `autorun-report.json`, crash) i oryginalny exe. Jedno zadanie = jeden plik `.md`: sygnatura, klasa i jej układ, gdzie są handlery tej samej klasy, bajtkod wywołujących funkcji z nazwami adresów, kod x86 w miejscu hooka wewnątrz funkcji (capstone), rekordy z gry, szkielet C++, kryterium „gotowe”, zasady warstwy. Kolejność: crash, nieudane testy, trafienia w grze, zasięg w skryptach. |
++| Jedna komenda | `tools/ikarus/modcheck.py` | Instalacja gry → GOTHIC.DAT (najnowszy wolumen, jak w VDF Gothica) → baza silnika → audyt → (opcjonalnie) przebieg gry → worklist → `SUMMARY.md`. Crash bez raportu jest zadaniem z ogonem logu i nazwą dialogu (`dialogtest_last.txt`). Folderu gry nie zmienia. |
++| `disasm.py` | `tools/ikarus/disasm.py` | `Dat.find`, `Dat.disasm_lines` (tekst z nazwami celów `bl` i wartościami stałych) dla worklist. |
++
++## Użycie
++
++Raz na maszynę:
++
++```powershell
++python tools/ikarus/enginedb.py build --fetch                       # klonuje gothic-api do build-ikarus/, ~15 s
++pip install --target build-ikarus/pylib capstone                   # opcjonalnie: kod x86 hooków w zadaniach
++# gra desktop (Vulkan; obecnie buduje się tylko z touch UI, patrz "Znane problemy"):
++cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake -S . -B build-desktop -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOPENGOTHIC_TOUCH_UI=ON && cmake --build build-desktop --target Gothic2Notr'
++```
++
++Mod:
++
++```powershell
++$g = 'C:/Program Files (x86)/Steam/steamapps/common/TheChroniclesOfMyrtana'
++python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini                        # tylko statycznie
++python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini --run "wait 30; comcheck test ikarus; comcheck fix all; wait 5" --timeout 300
++python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini --run "wait 30; dlgall; wait 1100" --timeout 1300 --out build-ikarus/com-dialogs
++# log z telefonu:
++python tools/ikarus/worklist.py --audit build-ikarus/TheChroniclesOfMyrtana/audit --dat build-ikarus/TheChroniclesOfMyrtana/GOTHIC.DAT --gaps <log.txt> --out build-ikarus/phone
++```
++
++Wynik: `build-ikarus/<mod>/SUMMARY.md`, `worklist/INDEX.md`, `worklist/tasks/NNN-*.md`, `run/autorun-report.json`,
++`run/log.txt`. Gra działa w `build-ikarus/<mod>/run` (tam `Gothic.ini`, logi, kopia `mods/`). Po zmianie C++ dodaj
++`--fresh`, żeby audyt czytał nowe rejestracje. `--save N` wczytuje zapis zamiast nowej gry.
++
++Pętla agenta: weź pierwsze zadanie z `INDEX.md` → zaimplementuj według karty → zbuduj → ten sam `modcheck.py ... --run`
++→ zadanie znika z listy, a test w przebiegu przechodzi → commit.
++
++## Wyniki na Kronikach (25.11.2026)
++
++- Konwerter: wszystkie 178 adresów z audytu CoM mają nazwę i sygnaturę (128 to początki funkcji, 50 hooków wewnątrz
++  funkcji z offsetem, np. `0x437d9f` = `oCSavegameInfo::Archive+0x42f`).
++- Przebieg nowej gry + `comcheck test ikarus` + `comcheck fix all`: 76–90 s, bez człowieka. Wyniki:
++  - **FAIL** `QSORT_G2`: tablica z liczbą ujemną kończy się `-3` (komparator bez znaku), test oczekuje kolejności ze
++    znakiem; trzeba rozstrzygnąć na podstawie oryginału, kto ma rację (test czy warstwa). Także `comcheck fix sort`:
++    „the log still says TODO: QSORT_G2”.
++  - **FAIL** „a pointer of a character is positive”: wskaźnik postaci = 0 w teście.
++  - Luka co klatkę: odczyt nieistniejącego globalnego `zrenderer` (0x00982f08) przez
++    `_SPRITE_DORENDER → ZRND_XD3D_SETRENDERSTATE → CALL_END` (ok. 50 razy na sekundę).
++  - Błędy ZenKit „Accessing member without an instance” w `RESTORENPCNAMES` (C_NPC.AIVAR) i `INIT_ITEMGROUPS_MEAT` (C_ITEM.HP).
++  - 38 hooków bez mostu (te same co w `ARCHOLOS_BLOCKERS_2026-10-26.md`), 0 nieznanych wywołań silnika, 0 pól uchwytów.
++- `dlgall` na wszystkich 6145 dialogach: po ok. 18 min gra **zakończyła się bez raportu** (kod 0xCFFFFFFF, bez
++  `crash.log`) na dialogu `PC_BOW_H_01`. Sam ten dialog osobno przechodzi — przyczyna zależy od stanu po wcześniejszych
++  dialogach (pamięć? stan świata?). Do zbadania: `dlgall resume`, ewentualnie debugger.
++- Przez 18 min dialogów żadne nieznane wywołanie silnika ani pole uchwytu się nie pojawiło: braki CoM to dziś głównie
++  semantyka i hooki, nie brakujące adresy.
++
++Zadania tych wyników: `build-ikarus/TheChroniclesOfMyrtana/worklist`, `build-ikarus/com-dialogs/worklist`,
++`build-ikarus/com-crash/worklist` (lokalnie, `build-*/` jest w `.gitignore`).
++
++## Znane problemy i następne kroki
++
++1. **`waitfor Done:` po `dlgall` nie działa**: `DialogView.stopAll` zapisuje komunikat „Done: …” tylko do `view.message`,
++   do konsoli trafia tylko raport („DIALOG TEST REPORT”). Poprawka: w `stopAll` dodać `console.log(this.message)` albo
++   czekać na `waitfor DIALOG TEST REPORT`. Do tego czasu zwykłe `wait <s>` z zapasem.
++2. **Desktop bez touch UI się nie kompiluje**: `common/world/rainfx.cpp:388` używa `AndroidInput::preferences()` bez
++   `#ifdef OPENGOTHIC_TOUCH_UI` (problem sprzed tej pracy). Budować z `-DOPENGOTHIC_TOUCH_UI=ON` albo dodać osłonę.
++3. Crash bez raportu: nie ma przechwycenia stosu C++ na Windows w przebiegu (brak `cdb`). Do dodania: zrzut
++   (`MiniDumpWriteDump`) albo uruchamianie pod debuggerem w `modcheck.py`.
++4. `observeHandleAccess` obejmuje tylko uchwyty `oCNpc`/`oCItem`; movery (`zCMover`) i moby (`oCMobLockable`) mają
++   wypełniane pola i można je objąć tym samym sposobem.
++5. Gry G1: `enginedb` ma bazę G1, ale audyt rozwiązuje `MEMINT_SWITCHG1G2` zawsze na G2; DAT z G1 trzeba sprawdzić.
++6. Inne mody: Spine/Sefaris na Androidzie **usuwają** mody z Ikarusem/LeGo przy instalacji (`SpineScan`). Na desktopie
++   wystarczy rozpakowany mod i `modcheck.py --game <folder> --ini <ini>`; skompresowane wolumeny: `--dat` z ZenKit.
++7. Zasady warstwy (bez pustych handlerów, bez oznaczania adresu jako obsłużonego bez skutku) są w każdej karcie zadania.
++
++## Stosowanie patcha na czystym repozytorium
++
++```powershell
++git apply --check patches/025-ikarus-automation.patch
++git apply patches/025-ikarus-automation.patch
++```
++
++Patch zawiera też nową wersję `patches/zenkit-opengothic.patch`. Na czystym klonie CMake nałoży ją na ZenKit sam. W
++istniejącym checkoucie, gdzie stara wersja jest już nałożona na `lib/ZenKit`, CMake jej nie nałoży (nie da się jej
++odwrócić ani nałożyć): wtedy wycofać starą (`git -C lib/ZenKit apply -R <stary patch>` albo `git -C lib/ZenKit checkout .`
++— to kasuje tylko wygenerowane zmiany submodułu) i ponownie uruchomić konfigurację CMake. Nowe pliki źródłowe są zbierane
++przez `GLOB_RECURSE`, więc po nałożeniu patcha konfigurację trzeba uruchomić ponownie.
+diff --git a/mods/devtools/index.js b/mods/devtools/index.js
+index b76491ce..2559f12f 100644
+--- a/mods/devtools/index.js
++++ b/mods/devtools/index.js
+@@ -20,5 +20,26 @@ if (typeof ui !== "undefined" && typeof debug !== "undefined") {
+     ui.tab("Debug", panel.draw);
+     // the run of all the dialogs goes on when the menu is closed
+     if (typeof events !== "undefined") events.on("tick", () => panel.views.Dialogs.tickAll());
++    // the same run from the console, a few dialogs per frame (comcheck dlg all stops the game, so it takes at most 300):
++    //   dlgall [words]   all the dialogs of the filter, the report goes to dialogtest_report.txt at the end
++    //   dlgall resume    after a crash: goes on with the dialogs without a result (dialogtest_progress.txt)
++    //   dlgall stop      ends it early and writes the report
++    // An unattended run (-autorun "wait 30; dlgall; wait 600") uses it, see docs/IKARUS_AUTOMATION.md
++    console.registerCommand("dlgall", ({ args }) => {
++        const view = panel.views.Dialogs;
++        if (args[0] === "stop") { view.stopAll("Stopped"); return; }
++        if (args[0] === "resume") {
++            // after a crash: the results of dialogtest_progress.txt are kept, the dialog that crashed is marked and left
++            view.filter = args.slice(1).join(" ");
++            view.refresh();
++            view.startAll(true);
++            console.log(view.message);
++            return;
++        }
++        view.filter = args.join(" ");
++        view.refresh();
++        view.startAll(false);
++        console.log(view.message);
++    });
+     console.log("Developer tools are ready: the tab Debug");
+ }
+diff --git a/patches/zenkit-opengothic.patch b/patches/zenkit-opengothic.patch
+index fbfb01eb..3d85910c 100644
+--- a/patches/zenkit-opengothic.patch
++++ b/patches/zenkit-opengothic.patch
+@@ -1,5 +1,5 @@
+ diff --git a/include/zenkit/DaedalusVm.hh b/include/zenkit/DaedalusVm.hh
+-index 17a81ee..6055808 100644
++index 17a81ee..56762de 100644
+ --- a/include/zenkit/DaedalusVm.hh
+ +++ b/include/zenkit/DaedalusVm.hh
+ @@ -638,6 +638,10 @@ namespace zenkit {
+@@ -13,6 +13,18 @@ index 17a81ee..6055808 100644
+  		ZKAPI void unsafe_jump(uint32_t address);
+  		ZKAPI std::shared_ptr<DaedalusInstance> unsafe_get_gi();
+  		ZKAPI void unsafe_set_gi(std::shared_ptr<DaedalusInstance> i);
++@@ -675,6 +679,11 @@ namespace zenkit {
++ 			return _m_pc;
++ 		}
++ 
+++		/// \return The frames of the call stack, the innermost last (OpenGothic: the reports of the compatibility layer).
+++		[[nodiscard]] ZKAPI std::vector<DaedalusCallStackFrame> const& call_stack() const noexcept {
+++			return _m_call_stack;
+++		}
+++
++ 		[[nodiscard]] ZKAPI std::int32_t
++ 		get_int(std::shared_ptr<DaedalusInstance> const& context,
++ 		        std::variant<int32_t, float, DaedalusSymbol*, std::shared_ptr<DaedalusInstance>> const& value,
+ diff --git a/include/zenkit/Object.hh b/include/zenkit/Object.hh
+ index 5c77969..c5cd607 100644
+ --- a/include/zenkit/Object.hh
+diff --git a/tools/ikarus/README.md b/tools/ikarus/README.md
+index 1733d490..2d385664 100644
+--- a/tools/ikarus/README.md
++++ b/tools/ikarus/README.md
+@@ -1,5 +1,8 @@
+ # Daedalus / Ikarus / LeGo audit
+ 
++`modcheck.py` (one command per mod), `enginedb.py` (addresses, signatures and layouts of ZenGin from gothic-api) and
++`worklist.py` (one task per gap) are described in [docs/IKARUS_AUTOMATION.md](../../docs/IKARUS_AUTOMATION.md).
++
+ `analyze.py` is the compatibility entry point for `audit.py`. The tool translates
+ Daedalus source declarations and calls into JSONL IR and compares the compiled
+ DAT calls with the current C++ bindings. It does not execute the game or scripts.
+diff --git a/tools/ikarus/disasm.py b/tools/ikarus/disasm.py
+index 6c4caa5f..746a9c83 100644
+--- a/tools/ikarus/disasm.py
++++ b/tools/ikarus/disasm.py
+@@ -116,6 +116,53 @@ class Dat:
+                 out.write(f'{pc:08x} {OPS[op]:9}{arg}\n')
+                 pc += size
+ 
++    def find(self, name):
++        name = name.upper()
++        return next((i for i, s in enumerate(self.symbols)
++                     if s["name"].upper() == name and s["type"] in (5, 6, 7)
++                     and isinstance(s["value"], int) and not (s["flags"] & (4 | 8))), None)
++
++    def disasm_lines(self, name, limit=None):
++        """The code of a function as lines with the names of the symbols and of the called functions, None if unknown"""
++        idx = self.find(name)
++        if idx is None:
++            return None
++        if not hasattr(self, '_labels'):
++            self._labels = {}
++            for address, index in self.functions():
++                self._labels.setdefault(address, self.sym(index))
++            self._starts = sorted(self._labels)
++        start = self.symbols[idx]["value"]
++        import bisect
++        i = bisect.bisect_right(self._starts, start)
++        end = self._starts[i] if i < len(self._starts) else len(self.code)
++        out, pc = [], start
++        while pc < end and (limit is None or len(out) < limit):
++            op = self.code[pc]
++            size = 6 if op == 245 else 5 if op in (61, 62, 64, 65, 67, 75, 76, 80) else 1
++            arg = ''
++            if size >= 5 and pc + 5 <= len(self.code):
++                value = struct.unpack_from('<I', self.code, pc + 1)[0]
++                if op == 61:
++                    arg = ' ' + self._labels.get(value, f'{value:#x}')
++                elif op in (75, 76):
++                    arg = f' -> {value - start:+d}'
++                elif op == 64:
++                    arg = ' ' + str(struct.unpack_from('<i', self.code, pc + 1)[0])
++                else:
++                    arg = ' ' + self.sym(value)
++                    s = self.symbols[value] if value < len(self.symbols) else None
++                    if op == 65 and s and s['flags'] & 1 and s['type'] in (2, 3) and s['value'] and s['count'] == 1:
++                        arg += f' (= {s["value"][0]!r})' if s['type'] == 3 else f' (= {s["value"][0]:#x})' \
++                            if s['value'][0] > 0xFFFF else f' (= {s["value"][0]})'
++                    if op == 245:
++                        arg += f'[{self.code[pc + 5]}]'
++            out.append(f'{pc - start:+6d}  {OPS.get(op, "op%d" % op):8}{arg}')
++            pc += size
++        if pc < end:
++            out.append(f'   ... ({end - pc} more bytes)')
++        return out
++
+     def disasm(self, name):
+         name = name.upper()
+         idx = next((i for i, s in enumerate(self.symbols)
+diff --git a/tools/ikarus/enginedb.py b/tools/ikarus/enginedb.py
+new file mode 100644
+index 00000000..0df013e1
+--- /dev/null
++++ b/tools/ikarus/enginedb.py
+@@ -0,0 +1,625 @@
++#!/usr/bin/env python3
++"""The engine database of ZenGin, converted from the Gothic API headers of the Union team.
++
++Every address of Gothic.exe / Gothic2.exe with its C++ signature and calling convention, the layouts of the classes
++(the fields with offsets), the global variables, static members and the tables of virtual functions. With it an
++address that a mod calls (CALL__thiscall), hooks (HookEngineF) or a field that it reads (MEM_ReadInt(ptr+off)) has a
++name, a signature and a C++ skeleton for DirectMemory, without a person looking it up.
++
++    python tools/ikarus/enginedb.py build --fetch            # clone gothic-api to build-ikarus/, write the JSON databases
++    python tools/ikarus/enginedb.py lookup 0x437d9f 7a63c0   # the function (and the offset inside it)
++    python tools/ikarus/enginedb.py field oCNpc 0x9ac        # the field at an offset of a class (bases included)
++    python tools/ikarus/enginedb.py class zCView             # the layout
++    python tools/ikarus/enginedb.py stub 0x749cb0            # a C++ skeleton of the handler (register_thiscall ...)
++    python tools/ikarus/enginedb.py symbolize log.txt        # the addresses in a text get their names
++
++Source: https://github.com/gothicuef/gothic-api (BSD-style licence, keep its notice). The databases are generated into
++build-ikarus/enginedb/ and are not committed. Only the Python standard library is needed.
++"""
++import argparse
++import bisect
++import json
++import re
++import subprocess
++import sys
++from pathlib import Path
++
++REPO = Path(__file__).resolve().parents[2]
++DEFAULT_API = REPO / 'build-ikarus' / 'gothic-api'
++DEFAULT_OUT = REPO / 'build-ikarus' / 'enginedb'
++API_URL = 'https://github.com/gothicuef/gothic-api'
++SCHEMA = 1
++
++ENGINES = {
++    # key: (directory of gothic-api, the game of OpenGothic)
++    'G1':  'Gothic_I_Classic',
++    'G1A': 'Gothic_I_Addon',
++    'G2':  'Gothic_II_Classic',
++    'G2A': 'Gothic_II_Addon',
++}
++ALIASES = {'G2NOTR': 'G2A', 'NOTR': 'G2A', 'GOTHIC2': 'G2A', 'GOTHIC1': 'G1', 'GOTHIC': 'G1'}
++
++CONVS = ('__thiscall', '__stdcall', '__cdecl', '__fastcall')
++INTEGRAL = {'int', 'long', 'short', 'char', 'bool', 'unsigned', 'signed', 'unsigned int', 'unsigned long',
++            'unsigned short', 'unsigned char', 'signed char', 'int32_t', 'uint32_t', 'BOOL', 'DWORD', 'WORD',
++            'BYTE', 'UINT', 'ULONG', 'LONG', 'size_t', 'wchar_t', 'zBOOL', 'zDWORD', 'zWORD', 'zBYTE', 'zUINT32',
++            'zINT', 'zUINT', 'zLONG'}
++TWO_SLOTS = {'double', '__int64', 'unsigned __int64', 'long double'}
++
++
++# ----------------------------------------------------------------------------------------------------------------------
++# parsing of the undecorated MSVC names (Names.txt)
++
++def _split_depth0(text, sep=','):
++    out, depth, cur = [], 0, []
++    for ch in text:
++        if ch in '(<[':
++            depth += 1
++        elif ch in ')>]':
++            depth -= 1
++        if ch == sep and depth == 0:
++            out.append(''.join(cur).strip())
++            cur = []
++        else:
++            cur.append(ch)
++    if ''.join(cur).strip():
++        out.append(''.join(cur).strip())
++    return out
++
++
++def _find_depth0(text, word):
++    """The position of a word outside of (), <> and []"""
++    depth = 0
++    i = 0
++    while i < len(text):
++        ch = text[i]
++        if ch in '(<[':
++            depth += 1
++        elif ch in ')>]':
++            depth -= 1
++        elif depth == 0 and text.startswith(word, i) and (i == 0 or not text[i-1].isalnum()) \
++                and (i+len(word) >= len(text) or not (text[i+len(word)].isalnum() or text[i+len(word)] == '_')):
++            return i
++        i += 1
++    return -1
++
++
++def clean_type(t):
++    t = re.sub(r'\b(?:class|struct|union|enum)\s+', '', t.strip())
++    t = re.sub(r'\s+', ' ', t)
++    t = re.sub(r'\s*([*&])', r'\1', t)
++    t = t.replace('const*', 'const *').replace('const&', 'const &')
++    return re.sub(r'\s*([*&])', r'\1', t).strip()
++
++
++def kind_of_type(raw):
++    """How a value of the type travels on the stack of x86: int, float, ptr, string (zSTRING const &), struct, wide"""
++    t = raw.strip()
++    is_enum = bool(re.match(r'\s*enum\b', t))
++    c = clean_type(t)
++    if c in ('void', ''):
++        return 'void'
++    if c.endswith(('*', '&')):
++        base = c.rstrip('*&').strip()
++        if re.fullmatch(r'zSTRING const|const zSTRING', base) and c.count('*') + c.count('&') == 1:
++            return 'string'
++        if re.fullmatch(r'char const|const char', base) and c.endswith('*'):
++            return 'cstring'
++        return 'ptr'
++    if c in ('float',):
++        return 'float'
++    if c in TWO_SLOTS:
++        return 'wide'
++    if is_enum or c in INTEGRAL or c.startswith(('unsigned ', 'signed ')):
++        return 'int'
++    if re.fullmatch(r'zT\w+|zE\w+|oT\w+|oE\w+|e\w+', c):   # typedefs of enums of the engine (zTRnd_AlphaBlendFunc)
++        return 'int'
++    return 'struct'
++
++
++def parse_function(sig):
++    text = sig.strip()
++    access = None
++    m = re.match(r'(public|protected|private):\s+', text)
++    if m:
++        access = m[1]
++        text = text[m.end():]
++    quals = []
++    while True:
++        m = re.match(r'(static|virtual)\s+', text)
++        if not m:
++            break
++        quals.append(m[1])
++        text = text[m.end():]
++    conv, ci = None, -1
++    for c in CONVS:
++        i = _find_depth0(text, c)
++        if i >= 0 and (ci < 0 or i < ci):
++            conv, ci = c, i
++    if conv is None:
++        return None
++    ret = text[:ci].strip()
++    rest = text[ci+len(conv):].strip()
++    const = False
++    if rest.endswith(' const'):
++        const = True
++        rest = rest[:-6].rstrip()
++    if not rest.endswith(')'):
++        return None
++    depth, open_at = 0, -1
++    for i in range(len(rest)-1, -1, -1):
++        if rest[i] == ')':
++            depth += 1
++        elif rest[i] == '(':
++            depth -= 1
++            if depth == 0:
++                open_at = i
++                break
++    if open_at < 0:
++        return None
++    qname = rest[:open_at].strip()
++    args_raw = rest[open_at+1:-1].strip()
++    args = [] if args_raw in ('', 'void') else _split_depth0(args_raw)
++    cls, method = None, qname
++    parts = _split_depth0(qname.replace('::', '\x00'), '\x00')
++    if len(parts) > 1:
++        cls, method = '::'.join(parts[:-1]), parts[-1]
++    conv = conv[2:]
++    if 'static' in quals and conv == 'thiscall':
++        conv = 'cdecl'
++    return {'name': qname, 'class': cls, 'method': method, 'conv': conv, 'access': access,
++            'virtual': 'virtual' in quals, 'static': 'static' in quals, 'const': const,
++            'ret': clean_type(ret), 'ret_kind': kind_of_type(ret) if ret else 'ctor',
++            'args': [clean_type(a) for a in args], 'arg_kinds': [kind_of_type(a) for a in args]}
++
++
++def parse_names(path):
++    functions, data, vtables = {}, {}, {}
++    entries = []
++    for line in path.read_text(encoding='latin-1').splitlines():
++        m = re.match(r'\s*0x([0-9A-Fa-f]+)\s+(.+?)\s*$', line)
++        if m:
++            entries.append((int(m[1], 16), m[2]))
++    imports = [a for a, n in entries if n.startswith(('__imp_', '&'))]
++    code_end = min(imports) if imports else 0xFFFFFFFF
++    for addr, name in entries:
++        if name.startswith('<') or 'RTTI' in name or name.startswith(('__real@', '??_C@', '__imp_', '&')):
++            continue
++        vt = re.fullmatch(r"const (.+?)::`vftable'(?:\{for `(.+?)'\})?", name)
++        if vt:
++            vtables[addr] = {'class': vt[1], 'for': vt[2]}
++            continue
++        f = parse_function(name) if '(' in name else None
++        if f:
++            f['sig'] = name
++            functions[addr] = f
++            continue
++        dec = re.fullmatch(r'_(\w+?)@(\d+)', name)
++        if dec and addr < code_end:
++            functions[addr] = {'name': dec[1], 'class': None, 'method': dec[1], 'conv': 'stdcall', 'access': None,
++                               'virtual': False, 'static': False, 'const': False, 'ret': '?', 'ret_kind': 'int',
++                               'args': [f'?{i}' for i in range(int(dec[2])//4)],
++                               'arg_kinds': ['int'] * (int(dec[2])//4), 'sig': name, 'import': True}
++            continue
++        if re.fullmatch(r'_\w+', name) and addr < code_end:
++            functions[addr] = {'name': name[1:], 'class': None, 'method': name[1:], 'conv': 'cdecl', 'access': None,
++                               'virtual': False, 'static': False, 'const': False, 'ret': '?', 'ret_kind': 'int',
++                               'args': None, 'arg_kinds': None, 'sig': name, 'crt': True}
++            continue
++        st = re.fullmatch(r'(?:(?:public|protected|private): )?(static )?(.+?)\s*([\w:<>,` \']+?)$', name)
++        data[addr] = {'name': (st[3] if st else name).strip(), 'type': clean_type(st[2]) if st else '', 'decl': name}
++    starts = sorted(set(functions) | set(data) | set(vtables))
++    for addr, f in functions.items():
++        i = bisect.bisect_right(starts, addr)
++        f['size'] = (starts[i] - addr) if i < len(starts) else 0
++    return functions, data, vtables
++
++
++# ----------------------------------------------------------------------------------------------------------------------
++# parsing of the class declarations (API/*.h): the fields and their offsets
++
++FIELD = re.compile(r'^\s*(?P<type>[^;(){}=]+?)\s*\b(?P<name>\w+)\s*(?P<arr>(?:\[[^\]]*\])*)\s*(?::\s*(?P<bits>\d+))?\s*;'
++                   r'\s*//\s*sizeof\s+(?P<size>[0-9A-Fa-f]+)h\s+offset\s+(?P<off>[0-9A-Fa-f]+h|bit)')
++SIZE_ONLY = re.compile(r'^\s*//\s*sizeof\s+([0-9A-Fa-f]+)h\s*$')
++SCOPE = re.compile(r'^\s*(?:typedef\s+)?(?P<kind>class|struct|union|enum)\s*(?P<name>\w+)?\s*(?::\s*(?P<bases>[^{]+?))?\s*\{')
++UNIT = {'char': 1, 'unsigned char': 1, 'signed char': 1, 'bool': 1, 'short': 2, 'unsigned short': 2, 'zBYTE': 1, 'zWORD': 2}
++
++
++def parse_headers(api_dir):
++    classes = {}
++    for header in sorted(api_dir.glob('*.h')):
++        stack = []           # (kind, qualified name or None, depth at which it opened)
++        depth = 0
++        pending = None
++        for line_no, line in enumerate(header.read_text(encoding='latin-1').splitlines(), 1):
++            code = line.split('//', 1)[0]
++            m = SIZE_ONLY.match(line)
++            if m:
++                pending = int(m[1], 16)
++            s = SCOPE.match(code)
++            if s and code.count('{') > code.count('}'):
++                kind, name = s['kind'], s['name']
++                owner = next((n for k, n, _ in reversed(stack) if k in ('class', 'struct') and n), None)
++                if kind in ('class', 'struct') and name:
++                    q = f'{owner}::{name}' if owner else name
++                    bases = [re.sub(r'^(?:public|protected|private|virtual)\s+', '', b.strip())
++                             for b in _split_depth0(s['bases'] or '')]
++                    if q not in classes:
++                        classes[q] = {'name': q, 'bases': [b for b in bases if b], 'size': pending,
++                                      'fields': [], 'header': header.name, 'line': line_no}
++                    stack.append((kind, q, depth))
++                else:
++                    stack.append((kind, None, depth))      # an enum, an anonymous union/struct: the fields go up
++                pending = None
++                depth += code.count('{') - code.count('}')
++                continue
++            if code.strip().startswith(('class ', 'struct ')) and ';' not in code and '{' not in code:
++                # the brace is on the next line; rare in these headers
++                pass
++            f = FIELD.match(line)
++            if f and stack:
++                owner = next((n for k, n, _ in reversed(stack) if k in ('class', 'struct') and n), None)
++                inside_enum = stack[-1][0] == 'enum'
++                if owner and not inside_enum:
++                    cls = classes[owner]
++                    raw_type = f['type'].strip()
++                    raw_type = re.sub(r'^(?:mutable|static|const)\s+', '', raw_type)
++                    entry = {'name': f['name'], 'type': clean_type(raw_type), 'kind': kind_of_type(raw_type),
++                             'size': int(f['size'], 16)}
++                    if f['arr']:
++                        entry['array'] = f['arr']
++                    if f['off'] == 'bit':
++                        entry['bits'] = int(f['bits'] or entry['size'])
++                        unit = UNIT.get(clean_type(raw_type), 4)
++                        prev = cls['fields'][-1] if cls['fields'] else None
++                        if prev and 'bits' in prev and prev.get('unit') == unit and prev['bit'] + prev['bits'] + entry['bits'] <= unit*8:
++                            entry['offset'], entry['bit'] = prev['offset'], prev['bit'] + prev['bits']
++                        elif prev and prev.get('offset') is not None:
++                            end = prev['offset'] + (prev.get('unit', 0) if 'bits' in prev else prev['size'])
++                            entry['offset'], entry['bit'] = end, 0
++                        else:
++                            entry['offset'], entry['bit'] = None, 0
++                        entry['unit'] = unit
++                        entry['size'] = unit
++                    else:
++                        entry['offset'] = int(f['off'][:-1], 16)
++                    cls['fields'].append(entry)
++            depth += code.count('{') - code.count('}')
++            while stack and depth <= stack[-1][2]:
++                stack.pop()
++    return classes
++
++
++def parse_globals(path):
++    out = {}
++    if not path.exists():
++        return out
++    for m in re.finditer(r'^\s*(?P<type>[\w:<>*& ]+?)\s*&?\s*(?P<name>\w+)\s*=\s*\*\s*\([^)]*\)\s*(?P<addr>0x[0-9A-Fa-f]+)\s*;',
++                         path.read_text(encoding='latin-1'), re.M):
++        out[int(m['addr'], 16)] = {'name': m['name'], 'type': clean_type(m['type'].rstrip('&').strip())}
++    return out
++
++
++def build_engine(api_root, key):
++    base = api_root / 'ZenGin' / ENGINES[key]
++    functions, data, vtables = parse_names(base / 'Names.txt')
++    classes = parse_headers(base / 'API')
++    globals_ = parse_globals(base / 'GlobalVariables.h')
++    for addr, g in globals_.items():
++        data.setdefault(addr, {}).update({'name': g['name'], 'type': g['type'], 'global': True})
++    return {'schema': SCHEMA, 'engine': key, 'source': API_URL, 'source_dir': ENGINES[key],
++            'functions': {f'0x{a:08x}': f for a, f in sorted(functions.items())},
++            'data': {f'0x{a:08x}': d for a, d in sorted(data.items())},
++            'vtables': {f'0x{a:08x}': v for a, v in sorted(vtables.items())},
++            'classes': classes}
++
++
++# ----------------------------------------------------------------------------------------------------------------------
++# the database as a library (worklist.py, audit tools)
++
++class EngineDb:
++    def __init__(self, data):
++        self.engine = data['engine']
++        self.functions = {int(k, 16): v for k, v in data['functions'].items()}
++        self.data = {int(k, 16): v for k, v in data['data'].items()}
++        self.vtables = {int(k, 16): v for k, v in data['vtables'].items()}
++        self.classes = data['classes']
++        self._starts = sorted(self.functions)
++        self._dstarts = sorted(self.data)
++        self._by_name = {}
++        for a, f in self.functions.items():
++            self._by_name.setdefault(f['name'].lower(), []).append(a)
++        self._class_lower = {k.lower(): k for k in self.classes}
++        self._vtable_of = {}
++        for a, v in sorted(self.vtables.items()):
++            if not v.get('for'):
++                self._vtable_of[v['class']] = a
++        for a, v in sorted(self.vtables.items()):
++            # multiple inheritance: the table of the first base is at offset 0 (zCView: {for zCViewBase})
++            self._vtable_of.setdefault(v['class'], a)
++
++    @staticmethod
++    def load(engine='G2A', out=DEFAULT_OUT):
++        key = ALIASES.get(engine.upper(), engine.upper())
++        path = Path(out) / f'{key}.json'
++        if not path.exists():
++            raise FileNotFoundError(f'{path} does not exist: run  python tools/ikarus/enginedb.py build --fetch')
++        return EngineDb(json.loads(path.read_text(encoding='utf-8')))
++
++    def function_at(self, addr):
++        """(the function, the offset in it) for an address of code; None when it is not in a known function"""
++        i = bisect.bisect_right(self._starts, addr) - 1
++        if i < 0:
++            return None, 0
++        start = self._starts[i]
++        f = self.functions[start]
++        off = addr - start
++        if off and f.get('size') and off >= f['size']:
++            return None, 0
++        return dict(f, address=start), off
++
++    def data_at(self, addr):
++        if addr in self.data:
++            return dict(self.data[addr], address=addr), 0
++        if addr in self.vtables:
++            v = self.vtables[addr]
++            return {'name': f"{v['class']}::vftable" + (f" for {v['for']}" if v.get('for') else ''), 'address': addr}, 0
++        i = bisect.bisect_right(self._dstarts, addr) - 1
++        if i >= 0 and addr - self._dstarts[i] < 64:
++            return dict(self.data[self._dstarts[i]], address=self._dstarts[i]), addr - self._dstarts[i]
++        return None, 0
++
++    def describe(self, addr):
++        f, off = self.function_at(addr)
++        if f:
++            return f"{f['name']}+0x{off:x}" if off else f['name']
++        d, off = self.data_at(addr)
++        if d:
++            return f"{d['name']}+0x{off:x}" if off else d['name']
++        return ''
++
++    def find(self, name):
++        return sorted(self._by_name.get(name.lower(), []))
++
++    def cls(self, name):
++        key = self._class_lower.get(name.lower())
++        return self.classes.get(key) if key else None
++
++    def vtable(self, cls):
++        return self._vtable_of.get(cls)
++
++    def class_of_vtable(self, addr):
++        v = self.vtables.get(addr)
++        return v['class'] if v else None
++
++    def layout(self, name, _seen=None):
++        """All the fields of a class with the fields of its bases (the first base is at 0), sorted by the offset"""
++        c = self.cls(name)
++        if c is None:
++            return []
++        _seen = _seen or set()
++        if c['name'] in _seen:
++            return []
++        _seen.add(c['name'])
++        out = []
++        for i, b in enumerate(c['bases']):
++            if i == 0:
++                out += [dict(f, owner=f.get('owner', b)) for f in self.layout(b, _seen)]
++        out += [dict(f, owner=c['name']) for f in c['fields']]
++        return sorted((f for f in out if f.get('offset') is not None), key=lambda f: (f['offset'], f.get('bit', 0)))
++
++    def field(self, name, offset):
++        """The fields that cover an offset of an object of the class (several for bit fields)"""
++        hits = [f for f in self.layout(name) if f['offset'] <= offset < f['offset'] + max(1, f['size'])]
++        return hits
++
++    # a skeleton of the C++ handler, in the style of directmemory*.cpp
++    CPP = {'int': 'int32_t', 'ptr': 'ptr32_t', 'float': 'float', 'string': 'std::string', 'cstring': 'ptr32_t',
++           'struct': 'ptr32_t', 'wide': 'int32_t'}
++
++    def stub(self, addr, hook=False):
++        f, off = self.function_at(addr)
++        if f is None:
++            return f'// 0x{addr:08x}: not a known function of {self.engine}'
++        const = re.sub(r'\W', '_', (f['class'] + '__' if f['class'] else '') + f['method']).upper().strip('_')
++        if hook or off:
++            return self._hook_stub(f, off, addr, const)
++        lines = [f"// 0x{addr:08x}  {f['sig']}"]
++        notes, params = [], []
++        conv = f['conv']
++        if conv == 'thiscall':
++            params.append(f"ptr32_t self /* {f['class']}* */")
++        if f['ret_kind'] == 'struct' or f['ret_kind'] == 'string' and not f['ret'].endswith(('*', '&')):
++            params.append(f"ptr32_t ret /* {f['ret']}* : the caller's memory for the result, return it in EAX */")
++            notes.append('the result is a structure by value: MSVC passes a hidden pointer after this')
++        if f['ret'] == 'zSTRING':
++            params[-1] = "ptr32_t ret /* zSTRING*: memAssignString(*mem32.deref<zString>(ret), ...); return ret */"
++        for i, (t, k) in enumerate(zip(f['args'] or [], f['arg_kinds'] or [])):
++            ct = self.CPP.get(k, 'int32_t')
++            if k == 'struct':
++                c = self.cls(t)
++                slots = (c['size'] + 3)//4 if c and c.get('size') else '?'
++                notes.append(f'argument {i} ({t}) is passed by value: {slots} stack slot(s), not a pointer; pop them as int32_t')
++                ct = 'int32_t'
++            if k == 'wide':
++                notes.append(f'argument {i} ({t}) takes 2 stack slots: declare two int32_t')
++            if k == 'string':
++                t += ': Cpu32 reads the zSTRING behind the pointer'
++            params.append(f'{ct} a{i} /* {t} */')
++        if f['args'] is None:
++            notes.append('a function of the C library: the arguments are not in the database, see its documentation')
++        ret = {'void': '', 'ctor': ' -> ptr32_t', 'float': ' -> float', 'int': ' -> int32_t', 'ptr': ' -> ptr32_t',
++               'string': ' -> ptr32_t', 'cstring': ' -> ptr32_t', 'struct': ' -> ptr32_t', 'wide': ' -> int32_t'}[f['ret_kind']]
++        reg = {'thiscall': 'register_thiscall', 'stdcall': 'register_stdcall', 'cdecl': 'register_cdecl',
++               'fastcall': 'register_thiscall'}[conv]
++        if conv == 'fastcall':
++            notes.append('__fastcall: the first two arguments are in ECX and EDX; Cpu32 has no adapter for EDX yet')
++        lines += [f'//   {n}' for n in notes]
++        lines.append(f'static constexpr uint32_t {const} = 0x{addr:08X};')
++        lines.append(f'cpu.{reg}({const}, [this]({", ".join(params)}){ret} {{')
++        if f['class'] in ('oCNpc', 'oCItem') or (f['class'] or '').startswith(('oCNpc', 'oCItem')):
++            lines.append('  // self is a handle of InstanceHandles: handles.instanceAt(self) -> zenkit::INpc/IItem, user_ptr -> Npc/Item')
++        lines.append('  // TODO: the effect in OpenGothic')
++        if ret:
++            lines.append('  return 0;')
++        lines.append('  });')
++        return '\n'.join(lines)
++
++    def _hook_stub(self, f, off, addr, const):
++        lines = [f"// hook at 0x{addr:08x} = {f['name']}+0x{off:x}", f"//   {f['sig']}"]
++        if off == 0:
++            lines.append('//   the entry of the function: ' +
++                         ('ECX = this; ' if f['conv'] == 'thiscall' else '') +
++                         ', '.join(f'ESP+{4*(i+1)} = {t}' for i, t in enumerate(f['args'] or [])) +
++                         ('' if f['args'] else '(no stack arguments)'))
++        else:
++            lines.append('//   inside the function: the registers depend on the code; '
++                         'disassemble the original executable at this address (worklist.py --exe does it)')
++        lines.append(f'static constexpr uint32_t {const}_HOOK = 0x{addr:08X};   // add to hookaddresses.h and isHookAnswered')
++        lines.append('// where OpenGothic does the same thing:')
++        lines.append('DirectMemory::HookRegs regs;')
++        if f['conv'] == 'thiscall' and off == 0:
++            lines.append(f"regs.ecx  = ptrOf(...);            // {f['class']}*")
++        for i, t in enumerate((f['args'] or []) if off == 0 else []):
++            lines.append(f'regs.args.push_back(...);          // ESP+{4*(i+1)}: {t}')
++        lines.append(f'fireHook({const}_HOOK, regs);       // then read back what the script left in regs')
++        return '\n'.join(lines)
++
++
++# ----------------------------------------------------------------------------------------------------------------------
++
++def parse_addr(text):
++    text = text.strip().lower()
++    if text.startswith('0x'):
++        return int(text, 16)
++    if re.fullmatch(r'[0-9a-f]+', text) and re.search(r'[a-f]', text):
++        return int(text, 16)
++    return int(text)
++
++
++def cmd_build(args):
++    api = Path(args.api)
++    if not (api / 'ZenGin').is_dir():
++        if not args.fetch:
++            sys.exit(f'{api} is not a checkout of gothic-api; add --fetch or --api <dir>')
++        api.parent.mkdir(parents=True, exist_ok=True)
++        subprocess.run(['git', 'clone', '--depth', '1', API_URL, str(api)], check=True)
++    rev = subprocess.run(['git', '-C', str(api), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
++    out = Path(args.out)
++    out.mkdir(parents=True, exist_ok=True)
++    for key in (args.engine or ENGINES):
++        db = build_engine(api, key)
++        db['revision'] = rev
++        path = out / f'{key}.json'
++        path.write_text(json.dumps(db, separators=(',', ':')), encoding='utf-8')
++        fields = sum(len(c['fields']) for c in db['classes'].values())
++        print(f"{key}: {len(db['functions'])} functions, {len(db['classes'])} classes ({fields} fields), "
++              f"{len(db['data'])} data, {len(db['vtables'])} vtables -> {path}")
++
++
++def cmd_lookup(args):
++    db = EngineDb.load(args.engine, args.out)
++    for a in args.address:
++        addr = parse_addr(a)
++        f, off = db.function_at(addr)
++        if f:
++            where = f' + 0x{off:x} (inside the function)' if off else ''
++            print(f"0x{addr:08x}  {f['sig']}{where}  [{f['conv']}]")
++            continue
++        d, off = db.data_at(addr)
++        if d:
++            print(f"0x{addr:08x}  data {d.get('decl') or d['name']}" + (f' + 0x{off:x}' if off else ''))
++            continue
++        print(f'0x{addr:08x}  unknown in {db.engine}')
++
++
++def cmd_find(args):
++    db = EngineDb.load(args.engine, args.out)
++    pat = re.compile(args.pattern, re.I)
++    for a, f in sorted(db.functions.items()):
++        if pat.search(f['sig']):
++            print(f"0x{a:08x}  {f['sig']}")
++
++
++def cmd_class(args):
++    db = EngineDb.load(args.engine, args.out)
++    c = db.cls(args.name)
++    if c is None:
++        sys.exit(f'no class {args.name} in {db.engine}')
++    size = f"0x{c['size']:x}" if c.get('size') else '?'
++    vt = db.vtable(c['name'])
++    print(f"class {c['name']} : {', '.join(c['bases']) or '-'}   sizeof {size}   vtable "
++          f"{'0x%08x' % vt if vt else '-'}   ({c['header']}:{c['line']})")
++    for f in db.layout(c['name']):
++        bit = f" bit {f['bit']}:{f['bits']}" if 'bits' in f else ''
++        print(f"  +0x{f['offset']:04x} {f['size']:5}  {f['type']} {f['name']}{f.get('array', '')}{bit}   ({f['owner']})")
++
++
++def cmd_field(args):
++    db = EngineDb.load(args.engine, args.out)
++    off = parse_addr(args.offset)
++    hits = db.field(args.cls, off)
++    if not hits:
++        print(f'{args.cls}+0x{off:x}: no field')
++    for f in hits:
++        inner = off - f['offset']
++        print(f"{args.cls}+0x{off:x} = {f['owner']}.{f['name']}{f.get('array', '')}" +
++              (f' + {inner}' if inner else '') + f"   ({f['type']}, {f['size']} bytes)")
++
++
++def cmd_stub(args):
++    db = EngineDb.load(args.engine, args.out)
++    for a in args.address:
++        print(db.stub(parse_addr(a), hook=args.hook))
++        print()
++
++
++def cmd_symbolize(args):
++    db = EngineDb.load(args.engine, args.out)
++    text = Path(args.file).read_text(encoding='utf-8', errors='replace') if args.file != '-' else sys.stdin.read()
++
++    def repl(m):
++        try:
++            addr = int(m[0], 16) if m[0].lower().startswith('0x') else int(m[0])
++        except ValueError:
++            return m[0]
++        if not 0x400000 <= addr < 0x1000000:
++            return m[0]
++        name = db.describe(addr)
++        return f'{m[0]} <{name}>' if name else m[0]
++    sys.stdout.write(re.sub(r'\b0x[0-9a-fA-F]{6,8}\b|\b(?:4|5|6|7|8|9|1[0-6])\d{6}\b', repl, text))
++
++
++def main():
++    sys.stdout.reconfigure(errors='backslashreplace')
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--engine', default='G2A', help='G1, G1A, G2, G2A (default; Gothic 2 NotR)')
++    ap.add_argument('--out', default=str(DEFAULT_OUT), help='the directory of the databases')
++    sub = ap.add_subparsers(dest='cmd', required=True)
++    b = sub.add_parser('build', help='convert gothic-api into JSON databases')
++    b.add_argument('--api', default=str(DEFAULT_API))
++    b.add_argument('--fetch', action='store_true', help='clone gothic-api when --api does not exist')
++    b.add_argument('--only', dest='engine', action='append', choices=list(ENGINES))
++    l = sub.add_parser('lookup', help='the names of addresses')
++    l.add_argument('address', nargs='+')
++    fd = sub.add_parser('find', help='the functions whose signature matches a regular expression')
++    fd.add_argument('pattern')
++    c = sub.add_parser('class', help='the layout of a class')
++    c.add_argument('name')
++    f = sub.add_parser('field', help='the field at an offset of a class')
++    f.add_argument('cls')
++    f.add_argument('offset')
++    s = sub.add_parser('stub', help='a C++ skeleton of a handler')
++    s.add_argument('address', nargs='+')
++    s.add_argument('--hook', action='store_true', help='a hook (HookEngine), not a call')
++    y = sub.add_parser('symbolize', help='add the names to the addresses of a text (a log, a CSV)')
++    y.add_argument('file', help="a file or '-'")
++    args = ap.parse_args()
++    if args.cmd == 'build' and args.engine is None:
++        args.engine = list(ENGINES)
++    {'build': cmd_build, 'lookup': cmd_lookup, 'find': cmd_find, 'class': cmd_class, 'field': cmd_field,
++     'stub': cmd_stub, 'symbolize': cmd_symbolize}[args.cmd](args)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tools/ikarus/modcheck.py b/tools/ikarus/modcheck.py
+new file mode 100644
+index 00000000..40d34202
+--- /dev/null
++++ b/tools/ikarus/modcheck.py
+@@ -0,0 +1,245 @@
++#!/usr/bin/env python3
++"""One command for a mod that uses Ikarus/LeGo: what does it need from OpenGothic, and what is missing.
++
++    python tools/ikarus/modcheck.py --game "C:/Games/TheChroniclesOfMyrtana" --ini TheChroniclesOfMyrtana.ini \
++        [--run "wait 30; comcheck test ikarus; wait 10"] [--save 3] [--timeout 400] [--out build-ikarus/<name>]
++
++Steps (each one is skipped when its result is there and --fresh is not given):
++  1. the scripts: GOTHIC.DAT from the newest volume of Data/ (and Data/ModVDF/) that has one, or _work/data/scripts/_compiled
++  2. the engine database (enginedb.py build --fetch), once for all the mods
++  3. the static audit (analyze.py --dat ...): every call of the engine, hook, external and its binding in C++
++  4. with --run: the game itself (build-desktop/opengothic/Gothic2Notr.exe or --og), without a person: -nomenu (or
++     -save N), the commands of --run, the report autorun-report.json and the gaps that the game recorded
++  5. the work list (worklist.py): one task per gap, by priority, with the signature, the scripts and a C++ skeleton
++The summary is printed and written to <out>/SUMMARY.md. Nothing is changed in the folder of the game.
++"""
++import argparse
++import json
++import re
++import shutil
++import struct
++import subprocess
++import sys
++import time
++from pathlib import Path
++
++HERE = Path(__file__).resolve().parent
++REPO = HERE.parents[1]
++DEFAULT_OG = REPO / 'build-desktop' / 'opengothic' / 'Gothic2Notr.exe'
++
++
++def volume_entries(path):
++    """(name, offset, size) of the files of an uncompressed VDF/MOD volume, and its timestamp"""
++    with path.open('rb') as s:
++        header = s.read(296)
++        if len(header) != 296 or not header[256:272].startswith(b'PSVDSC_V'):
++            return None, []
++        count, _, stamp, _, catalog, _ = struct.unpack_from('<6I', header, 272)
++        s.seek(catalog or 296)
++        raw = s.read(count * 80)
++    out = []
++    for i in range(len(raw) // 80):
++        e = raw[i*80:(i+1)*80]
++        name = e[:64].rstrip(b' \0').decode('latin-1').upper()
++        off, size, kind, _ = struct.unpack_from('<4I', e, 64)
++        if not kind & 0x80000000:
++            out.append((name, off, size))
++    return stamp, out
++
++
++def find_dat(game):
++    """The GOTHIC.DAT that the game would load: the newest volume wins, as in the VDF system of Gothic"""
++    best = None
++    for folder in (game / 'Data', game / 'Data' / 'ModVDF', game / 'data', game / 'data' / 'modvdf'):
++        if not folder.is_dir():
++            continue
++        for vol in list(folder.glob('*.mod')) + list(folder.glob('*.MOD')) + list(folder.glob('*.vdf')):
++            try:
++                stamp, entries = volume_entries(vol)
++            except OSError:
++                continue
++            for name, off, size in entries:
++                if name == 'GOTHIC.DAT' and (best is None or stamp > best[0]):
++                    best = (stamp, vol, off, size)
++    if best:
++        return best[1], best[2], best[3]
++    for loose in game.glob('_work/[Dd]ata/[Ss]cripts/_compiled/GOTHIC.DAT'):
++        return loose, 0, loose.stat().st_size
++    return None, 0, 0
++
++
++def engine_of(game):
++    system = game / 'system' if (game / 'system').is_dir() else game / 'System'
++    if (system / 'Gothic2.exe').exists() or (system / 'GOTHIC2.EXE').exists():
++        return 'G2A', next(iter(system.glob('[Gg]othic2.exe')), None)
++    if (system / 'Gothic.exe').exists() or (system / 'GOTHIC.EXE').exists():
++        return 'G1', next(iter(system.glob('[Gg]othic.exe')), None)
++    return 'G2A', None
++
++
++def run(cmd, **kw):
++    print('  $ ' + ' '.join(str(c) for c in cmd), flush=True)
++    return subprocess.run([str(c) for c in cmd], **kw)
++
++
++def main():
++    sys.stdout.reconfigure(errors='backslashreplace')
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--game', type=Path, required=True, help='the folder of the installation (with Data/ and System/)')
++    ap.add_argument('--ini', help='the ini of the mod in System/ (the -game: of OpenGothic)')
++    ap.add_argument('--dat', type=Path, help='GOTHIC.DAT, instead of searching the volumes')
++    ap.add_argument('--engine', help='G1 or G2A; by default from the executable in System/')
++    ap.add_argument('--out', type=Path)
++    ap.add_argument('--run', help='the commands of an unattended run of the game (see common/utils/autorun.h)')
++    ap.add_argument('--save', type=int, help='load this save slot instead of a new game')
++    ap.add_argument('--timeout', type=int, default=600, help='seconds for the run of the game')
++    ap.add_argument('--og', type=Path, default=DEFAULT_OG, help='Gothic2Notr.exe of OpenGothic')
++    ap.add_argument('--gaps', type=Path, nargs='*', default=[], help='more records: log.txt of a phone, ikarus-gaps.json')
++    ap.add_argument('--fresh', action='store_true', help='do every step again')
++    ap.add_argument('--only', choices=['dat', 'audit', 'run', 'worklist'], help='stop after this step')
++    args = ap.parse_args()
++
++    game = args.game.resolve()
++    name = re.sub(r'\.ini$', '', args.ini or game.name, flags=re.I)
++    out = (args.out or REPO / 'build-ikarus' / re.sub(r'[^\w.-]+', '_', name)).resolve()
++    out.mkdir(parents=True, exist_ok=True)
++    engine, exe = engine_of(game)
++    engine = args.engine or engine
++    py = sys.executable
++    summary = [f'# {name}', '', f'Game: `{game}`, engine {engine}.']
++
++    # 1. the scripts
++    dat = out / 'GOTHIC.DAT'
++    if args.fresh and dat.exists():
++        dat.unlink()
++    if not dat.exists():
++        if args.dat:
++            shutil.copyfile(args.dat, dat)
++            src = args.dat
++        else:
++            vol, off, size = find_dat(game)
++            if vol is None:
++                sys.exit(f'no GOTHIC.DAT in {game}/Data (a compressed volume? extract it with ZenKit and give --dat)')
++            with vol.open('rb') as s:
++                s.seek(off)
++                dat.write_bytes(s.read(size))
++            src = vol
++        print(f'1. scripts: {src} -> {dat} ({dat.stat().st_size} bytes)')
++    else:
++        print(f'1. scripts: {dat} (kept)')
++    raw = dat.read_bytes()
++    uses = [w for w in ('IKARUS_VERSION', 'LEGO_VERSION', 'MEM_INITALL', 'HOOKENGINEF') if w.encode() in raw]
++    summary.append(f'Scripts: `{dat}`; libraries: {", ".join(uses) or "none (no Ikarus/LeGo)"}.')
++    if args.only == 'dat':
++        return
++
++    # 2. the engine database
++    db = REPO / 'build-ikarus' / 'enginedb' / f'{engine}.json'
++    if not db.exists():
++        print('2. engine database')
++        run([py, HERE / 'enginedb.py', 'build', '--fetch'], check=True)
++    else:
++        print(f'2. engine database: {db} (kept)')
++
++    # 3. the static audit
++    audit = out / 'audit'
++    if args.fresh or not (audit / 'addresses.csv').exists() or (audit / 'addresses.csv').stat().st_mtime < dat.stat().st_mtime:
++        print('3. audit')
++        with (out / 'audit.log').open('w', encoding='utf-8') as log:
++            run([py, HERE / 'analyze.py', '--dat', dat, '--repo', REPO, '--out', audit], check=True, stdout=log,
++                stderr=subprocess.STDOUT)
++    else:
++        print(f'3. audit: {audit} (kept; the C++ changed? add --fresh)')
++    summary_json = json.loads((audit / 'summary.json').read_text(encoding='utf-8'))
++    summary.append('Static audit (call sites of the engine, by status): ' +
++                   ', '.join(f'{k} {v}' for k, v in sorted(summary_json.get('native_status', {}).items())) + '.')
++    if args.only == 'audit':
++        return
++
++    # 4. the game itself
++    gaps = list(args.gaps)
++    if args.run is not None:
++        og = args.og.resolve()
++        if not og.exists():
++            sys.exit(f'{og} does not exist: build the desktop game (docs/IKARUS_AUTOMATION.md) or give --og')
++        rundir = out / 'run'
++        if rundir.exists():
++            for f in ('autorun-report.json', 'ikarus-gaps.json', 'log.txt'):
++                (rundir / f).unlink(missing_ok=True)
++        rundir.mkdir(exist_ok=True)
++        # the mods of the repository (devtools: comcheck) are in the working directory of the game
++        shutil.copytree(REPO / 'mods', rundir / 'mods', dirs_exist_ok=True)
++        cmd = [og, '-g', str(game)]
++        if args.ini:
++            cmd.append('-game:' + args.ini)
++        cmd += ['-save', str(args.save)] if args.save is not None else ['-nomenu']
++        cmd += ['-window', '-noerrors', '-autorun', args.run, '-autoexit', str(args.timeout)]
++        print('4. the game')
++        t = time.time()
++        try:
++            r = run(cmd, cwd=rundir, timeout=args.timeout + 60)
++            code = r.returncode
++        except subprocess.TimeoutExpired:
++            code = 'killed after the timeout'
++        report = rundir / 'autorun-report.json'
++        print(f'   ended ({code}) after {int(time.time()-t)} s')
++        if report.exists():
++            rep = json.loads(report.read_text(encoding='utf-8', errors='replace'))
++            gaps.append(report)
++            fails = [c['text'] for c in rep.get('console', []) if c['text'].startswith('FAIL')]
++            summary.append(f"Run: {rep.get('result')} in {rep.get('seconds')} s, world {rep.get('world', '-')}, "
++                           f"{rep.get('logErrors')} errors in the log, {len(rep['gaps']['gaps'])} gaps "
++                           f"({rep.get('gapsTotal')} hits), {len(fails)} failed checks.")
++            for f in fails[:20]:
++                summary.append(f'- {f}')
++        else:
++            # the game ended without its report: a crash or a hang. The IKGAP lines of log.txt are still there; the
++            # tools of the dialogs say which one was running (dialogtest_last.txt)
++            last = (rundir / 'dialogtest_last.txt').read_text(encoding='utf-8', errors='replace').strip() \
++                if (rundir / 'dialogtest_last.txt').exists() else ''
++            tail = []
++            if (rundir / 'log.txt').exists():
++                tail = (rundir / 'log.txt').read_text(encoding='utf-8', errors='replace').splitlines()[-40:]
++                gaps.append(rundir / 'log.txt')
++            crash = rundir / 'crash.log'
++            what = f'the game ended without a report (exit {code})' + (f', in the dialog {last}' if last else '')
++            summary.append(f'Run: {what}; see {rundir / "log.txt"}' + (f' and {crash}' if crash.exists() else '') +
++                           ('. Go on with `dlgall resume` (the dialog that crashed is left).' if last else '.'))
++            record = {'kind': 'crash', 'name': what, 'count': 1, 'stack': [last] if last else [],
++                      'detail': '\n'.join(tail[-25:]) +
++                                ('\n--- crash.log\n' + crash.read_text(encoding='utf-8', errors='replace')[:4000]
++                                 if crash.exists() else '')}
++            (rundir / 'crash.json').write_text(json.dumps({'gaps': [record]}, indent=1), encoding='utf-8')
++            gaps.append(rundir / 'crash.json')
++    if args.only == 'run':
++        print('\n'.join(summary))
++        return
++
++    # 5. the work list
++    print('5. work list')
++    wl = out / 'worklist'
++    cmd = [py, HERE / 'worklist.py', '--audit', audit, '--dat', dat, '--engine', engine, '--out', wl]
++    if gaps:
++        cmd += ['--gaps'] + gaps
++    if exe:
++        cmd += ['--exe', exe]
++    r = run(cmd, capture_output=True, text=True, errors='replace')
++    print(r.stdout[-4000:])
++    if r.returncode:
++        print(r.stderr[-4000:])
++        sys.exit(r.returncode)
++    tasks = json.loads((wl / 'tasks.json').read_text(encoding='utf-8'))
++    by_kind = {}
++    for t in tasks:
++        by_kind[t['kind']] = by_kind.get(t['kind'], 0) + 1
++    summary.append(f"Work list: {len(tasks)} tasks (" + ', '.join(f'{k} {v}' for k, v in sorted(by_kind.items())) +
++                   f"), `{wl / 'INDEX.md'}`.")
++    summary += ['', '| # | task | hits | reach |', '|---|---|---|---|']
++    summary += [f"| {t['n']} | [{t['title']}](worklist/{t['file']}) | {t['hits']} | {t['reach']} |" for t in tasks[:25]]
++    (out / 'SUMMARY.md').write_text('\n'.join(summary) + '\n', encoding='utf-8')
++    print('\n'.join(summary[:12]))
++    print(f'\nSummary: {out / "SUMMARY.md"}')
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tools/ikarus/worklist.py b/tools/ikarus/worklist.py
+new file mode 100644
+index 00000000..d0d4c8c4
+--- /dev/null
++++ b/tools/ikarus/worklist.py
+@@ -0,0 +1,444 @@
++#!/usr/bin/env python3
++"""Tasks for the compatibility layer of Ikarus and LeGo, one file per gap, written so that a person or an AI agent can
++implement one without searching: what the mod calls, the C++ signature from the engine database, who calls it in the
++scripts (with the bytecode), what the game saw at run time, a skeleton of the handler and how to check it.
++
++    python tools/ikarus/worklist.py --audit build-ikarus/com/audit --dat build-ikarus/com/GOTHIC.DAT \
++        [--gaps log.txt ikarus-gaps.json ...] [--exe <Gothic2.exe>] [--engine G2A] --out build-ikarus/com/worklist
++
++Inputs: the output of analyze.py (--audit), the DAT (callers' bytecode), the engine database (enginedb.py build), the
++records of the game (lines "IKGAP {...}" of log.txt or ikarus-gaps.json, see common/game/compatibility/gaplog.h) and,
++optionally, the original executable for the x86 code around a hook inside a function (needs capstone:
++pip install --target build-ikarus/pylib capstone).
++
++Outputs: INDEX.md (the tasks by priority), tasks/NNN-*.md, tasks.json. Nothing of the mod is executed.
++"""
++import argparse
++import collections
++import csv
++import json
++import re
++import struct
++import sys
++from pathlib import Path
++
++HERE = Path(__file__).resolve().parent
++REPO = HERE.parents[1]
++sys.path.insert(0, str(HERE))
++PYLIB = REPO / 'build-ikarus' / 'pylib'
++if PYLIB.is_dir():
++    sys.path.insert(0, str(PYLIB))
++
++from enginedb import EngineDb, DEFAULT_OUT   # noqa: E402
++
++GAP_STATUSES = ('missing_native', 'missing_hook_bridge', 'registered_trivial')
++REVIEW_STATUSES = ('hook_declared_review_semantics', 'registered_review_semantics', 'registered_indirect_review_semantics')
++ENTRY = re.compile(r'^(INIT_GLOBAL|STARTUP_GLOBAL|INIT_\w+|STARTUP_\w+|DIA_\w+|ZS_\w+|B_\w+|SPELL_\w+|USE_\w+|EVT_\w+)$')
++LIB_PREFIX = re.compile(r'^(MEM_|MEMINT_|CALL_|CALLINT_|ASM_|ASMINT_|HOOK|_HOOK|LEGO_|FF_|_FF_|PM_|_PM_|HT_|_HT_|LIST_|'
++                        r'STR_|PRINT_|VIEW_|BAR_|BUTTON_|CURSOR_|TIMER|AI_FUNCTION|_AI_|TRIA_|BUFF_|ANIM8|EVENTPTR|'
++                        r'SB_|MEMINT|LOCALS|_@|_\^|MKF|ADDF|SUBF|MULF|DIVF|TRUNCF|ROUNDF|CASTTOINT|CASTFROMINT|PERMMEM|'
++                        r'CREATE|DELETE|FREE|NEW|HLP_|WRITENOP|REPLACEENGINEFUNC|ISHOOKED|REMOVEHOOK)')
++
++RULES = """\
++Rules of this layer (docs/IKARUS.md, the handoffs in docs/):
++- Calls of the engine are answered in C++ by `cpu.register_thiscall/stdcall/cdecl(address, lambda)` in
++  `common/game/compatibility/directmemory*.cpp`; the arguments are popped in the order of the declaration, `self` first.
++- Hooks (`HookEngineF`) are events: the address goes to `hookaddresses.h` and to `DirectMemory::isHookAnswered`, and
++  the place in OpenGothic that does the same thing calls `fireHook(address, regs)` with the registers and the stack
++  that the script reads (ECX, ESP+4, ...), then takes back what the script changed.
++- A whole function of the libraries can be replaced by its name (`vm.override_function`, `safeOverrideFunction`):
++  that is right when the function only exists to poke the memory of the engine.
++- No empty handler, no handler that only returns 0, no hidden log line, no address marked as answered without the
++  effect. When the effect cannot be done, leave it in the list and say why in the task.
++- Pointers of characters and items are handles (`InstanceHandles`, `handles.instanceAt(ptr)`), the vobs that
++  scripts find by name are movers (`MoverPool`); other memory of the engine does not exist.
++"""
++
++
++def read_csv(path):
++    if not path.exists():
++        return []
++    with path.open(encoding='utf-8', newline='') as f:
++        return list(csv.DictReader(f))
++
++
++def read_gaps(paths):
++    """The records of the game: ikarus-gaps.json (with counts) or the IKGAP lines of log.txt (the first time of each)"""
++    out = {}
++    for p in paths:
++        p = Path(p)
++        if not p.exists():
++            print(f'warning: {p} does not exist', file=sys.stderr)
++            continue
++        text = p.read_text(encoding='utf-8', errors='replace')
++        records = []
++        if p.suffix.lower() == '.json':
++            try:
++                data = json.loads(text)
++            except json.JSONDecodeError:
++                data = {}
++            g = data.get('gaps', [])
++            records = g.get('gaps', []) if isinstance(g, dict) else g      # autorun-report.json / ikarus-gaps.json
++            # the errors of the log of an autorun that concern the scripts: "Accessing member ... (in FUNC)", the layer
++            for e in data.get('errors', []):
++                m = re.search(r'\(in (\w+)\)\s*$', e)
++                if not m and not re.search(r'mem_|DMA|ASMINT|Ikarus|LeGo|not implemented|translation', e, re.I):
++                    continue
++                records.append({'kind': 'log', 'name': re.sub(r'\d+', 'N', e)[:160],
++                                'stack': [m[1]] if m else [], 'count': 1})
++            # the checks of the autorun (comcheck test ...) that failed
++            for c in data.get('console', []):
++                if c.get('text', '').startswith('FAIL'):
++                    records.append({'kind': 'check', 'name': c['text'][:200], 'count': 1})
++        else:
++            for m in re.finditer(r'IKGAP (\{.*\})\s*$', text, re.M):
++                try:
++                    records.append(json.loads(m[1]))
++                except json.JSONDecodeError:
++                    pass
++        for r in records:
++            key = (r.get('kind'), r.get('address'), r.get('name', ''), r.get('class', ''))
++            prev = out.get(key)
++            if prev and r.get('kind') == 'log':
++                prev['count'] += r.get('count', 1)
++            elif prev:
++                prev['count'] = max(prev.get('count', 1), r.get('count', 1))
++            else:
++                out[key] = dict(r, count=r.get('count', 1))
++    return list(out.values())
++
++
++def parse_int(v):
++    if v is None or v == '':
++        return None
++    if isinstance(v, int):
++        return v
++    v = str(v).strip()
++    return int(v, 16) if v.lower().startswith('0x') else int(v)
++
++
++class Graph:
++    def __init__(self, rows):
++        self.callers = collections.defaultdict(set)
++        for r in rows:
++            self.callers[r['callee']].add(r['caller'])
++
++    def reach(self, start, limit=4000):
++        """The functions from which `start` can be reached (its transitive callers)"""
++        seen, todo = set(), list(start)
++        while todo and len(seen) < limit:
++            f = todo.pop()
++            for c in self.callers.get(f, ()):
++                if c not in seen:
++                    seen.add(c)
++                    todo.append(c)
++        return seen
++
++
++def x86_disasm(exe, va, before=24, after=40):
++    """The x86 code around an address of the original executable, None without capstone or the file"""
++    try:
++        import capstone
++    except ImportError:
++        return None
++    data = exe.read_bytes()
++    pe = struct.unpack_from('<I', data, 0x3C)[0]
++    nsec = struct.unpack_from('<H', data, pe + 6)[0]
++    opt = struct.unpack_from('<H', data, pe + 20)[0]
++    base = struct.unpack_from('<I', data, pe + 24 + 28)[0]
++    sec = pe + 24 + opt
++    rva = va - base
++    for i in range(nsec):
++        vsize, vaddr, raw_size, raw = struct.unpack_from('<IIII', data, sec + 40*i + 8)
++        if vaddr <= rva < vaddr + max(vsize, raw_size):
++            off = raw + rva - vaddr
++            md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
++            # start a bit before, at an instruction boundary found by decoding forward from further back
++            lines = []
++            for back in range(before, -1, -1):
++                code = data[off-back:off+after]
++                ins = list(md.disasm(code, va-back))
++                if any(i.address == va for i in ins):
++                    for i in ins:
++                        mark = '=>' if i.address == va else '  '
++                        lines.append(f'{mark} {i.address:08x}  {i.mnemonic:6} {i.op_str}')
++                    return lines
++            return [f'   (no instruction starts at {va:#x})']
++    return None
++
++
++def slug(text):
++    return re.sub(r'[^A-Za-z0-9]+', '-', text).strip('-')[:60] or 'task'
++
++
++def annotate(line, db):
++    """A number of the bytecode that is an address of the engine gets its name"""
++    def repl(m):
++        text = m[0]
++        v = int(text, 16) if text.lower().startswith('0x') else int(text)
++        if not 0x400000 <= v < 0x1000000:
++            return text
++        name = db.describe(v)
++        return f'{text} <{name}>' if name else text
++    return re.sub(r'(?<=pushi    )\d{7,8}\b|(?<=\(= )0x[0-9a-f]{6,8}(?=\))', repl, line)
++
++
++def main():
++    sys.stdout.reconfigure(errors='backslashreplace')
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument('--audit', type=Path, required=True, help='the output directory of analyze.py')
++    ap.add_argument('--dat', type=Path, help='GOTHIC.DAT of the mod (the bytecode of the callers)')
++    ap.add_argument('--gaps', type=Path, nargs='*', default=[], help='log.txt / ikarus-gaps.json of runs of the game')
++    ap.add_argument('--exe', type=Path, help='the original Gothic2.exe / Gothic.exe (x86 code of hooks inside functions)')
++    ap.add_argument('--engine', default='G2A')
++    ap.add_argument('--enginedb', type=Path, default=DEFAULT_OUT)
++    ap.add_argument('--review', action='store_true', help='also the registered addresses that need a review of the semantics')
++    ap.add_argument('--out', type=Path, required=True)
++    args = ap.parse_args()
++
++    db = EngineDb.load(args.engine, args.enginedb)
++    dat = None
++    if args.dat:
++        from disasm import Dat
++        dat = Dat(str(args.dat))
++    addresses = read_csv(args.audit / 'addresses.csv')
++    sites = read_csv(args.audit / 'native-and-hooks.csv')
++    graph = Graph(read_csv(args.audit / 'callgraph.csv'))
++    functions = {r['function']: r for r in read_csv(args.audit / 'functions.csv')}
++    missing = read_csv(args.audit / 'missing-functions.csv')
++    gaps = read_gaps(args.gaps)
++
++    # the classes that already have handlers, and where: an example for a new one
++    handled_by_class = collections.defaultdict(set)
++    for r in addresses:
++        if r['handler'] and r['status'].startswith('registered'):
++            f, _ = db.function_at(parse_int(r['address']))
++            if f and f.get('class'):
++                handled_by_class[f['class']].add(r['handler'].split(':')[0])
++
++    tasks = {}
++
++    def task(key, **kw):
++        t = tasks.setdefault(key, {'key': key, 'runtime': [], 'sites': [], 'callers': set(), 'callbacks': set(),
++                                   'statuses': set(), 'static_call_sites': 0, 'wrapper_call_sites': 0})
++        for k, v in kw.items():
++            if isinstance(t.get(k), set):
++                t[k] |= set(v)
++            elif k in ('static_call_sites', 'wrapper_call_sites'):
++                t[k] += int(v or 0)
++            else:
++                t.setdefault(k, v)
++        return t
++
++    wanted = GAP_STATUSES + (REVIEW_STATUSES if args.review else ())
++    for r in addresses:
++        if r['status'] not in wanted:
++            continue
++        addr = parse_int(r['address'])
++        kind = 'hook' if 'hook' in r['status'] else 'call'
++        task((kind, addr), kind=kind, address=addr, statuses=[r['status']],
++             callers=[c for c in r['callers'].split(';') if c], callbacks=[c for c in r['callbacks'].split(';') if c],
++             static_call_sites=r['static_call_sites'], wrapper_call_sites=r['wrapper_call_sites'], handler=r['handler'])
++    for s in sites:
++        if s['address'] and s['status'] in wanted:
++            k = ('hook' if 'hook' in s['status'] else 'call', parse_int(s['address']))
++            if k in tasks:
++                tasks[k]['sites'].append(s)
++    for r in missing:
++        task(('external', r['function']), kind='external', name=r['function'], statuses=[r['status']],
++             static_call_sites=r['static_call_sites'])
++    for g in gaps:
++        kind = g.get('kind')
++        if kind in ('call', 'hook', 'unmapped'):
++            key = (kind, parse_int(g.get('address')))
++        elif kind == 'field':
++            key = ('field', g.get('class', ''), parse_int(g.get('address')))
++        else:
++            key = (kind, g.get('name', '') or g.get('detail', '')[:80])
++        t = task(key, kind=kind, address=parse_int(g.get('address')), name=g.get('name'), cls=g.get('class'),
++                 statuses=['runtime'])
++        t['runtime'].append(g)
++
++    # priority: seen in the game, then how much of the scripts reaches it
++    for t in tasks.values():
++        start = set(t['callers'])
++        for g in t['runtime']:
++            start |= set(g.get('stack', []))
++        reach = graph.reach(start | ({t['name']} if t.get('name') else set()))
++        reach |= start
++        t['reach'] = len(reach)
++        t['entries'] = sorted(f for f in reach if ENTRY.match(f))[:12]
++        t['story'] = sorted(f for f in reach if f.startswith(('DIA_', 'B_', 'ZS_', 'INIT_', 'STARTUP_')))[:12]
++        hits = sum(g.get('count', 1) for g in t['runtime'])
++        t['hits'] = hits
++        t['priority'] = (3 if t['kind'] == 'crash' else 2 if t['kind'] == 'check' else 1 if hits else 0, hits,
++                         len(t['story']) > 0, t['reach'], t['static_call_sites'])
++
++    ordered = sorted(tasks.values(), key=lambda t: t['priority'], reverse=True)
++    out = args.out
++    (out / 'tasks').mkdir(parents=True, exist_ok=True)
++    for old in (out / 'tasks').glob('*.md'):
++        old.unlink()
++    index = ['# Ikarus/LeGo work list', '',
++             f'Engine {db.engine}; audit `{args.audit}`; runtime records: {len(gaps)} from {len(args.gaps)} file(s).', '',
++             'Priority: seen in the game first (hits), then reached from dialogs/routines/init, then the number of',
++             'script functions that can reach it. A task is closed when the audit no longer lists it and a run',
++             'of the game (see docs/IKARUS_AUTOMATION.md) has no record of it.', '',
++             '| # | kind | what | status | hits | reach | file |', '|---|---|---|---|---|---|---|']
++    machine = []
++    for n, t in enumerate(ordered, 1):
++        title, body = render(t, db, dat, args, handled_by_class, functions)
++        name = f'{n:03d}-{slug(title)}.md'
++        (out / 'tasks' / name).write_text(body, encoding='utf-8')
++        index.append(f"| {n} | {t['kind']} | {title.replace('|', '/')} | {', '.join(sorted(t['statuses']))} | "
++                     f"{t['hits']} | {t['reach']} | [tasks/{name}](tasks/{name}) |")
++        machine.append({'n': n, 'file': f'tasks/{name}', 'title': title, 'kind': t['kind'],
++                        'address': f"0x{t['address']:08x}" if isinstance(t.get('address'), int) else None,
++                        'statuses': sorted(t['statuses']), 'hits': t['hits'], 'reach': t['reach'],
++                        'callers': sorted(t['callers']), 'entries': t['entries']})
++    (out / 'INDEX.md').write_text('\n'.join(index) + '\n', encoding='utf-8')
++    (out / 'tasks.json').write_text(json.dumps(machine, indent=1), encoding='utf-8')
++    print(f'{len(ordered)} tasks -> {out.resolve() / "INDEX.md"}')
++    for m in machine[:15]:
++        print(f"{m['n']:4} {m['kind']:9} {m['title'][:90]}  hits={m['hits']} reach={m['reach']}")
++
++
++def render(t, db, dat, args, handled_by_class, functions):
++    kind = t['kind']
++    addr = t.get('address')
++    lines = []
++    f, off = (db.function_at(addr) if isinstance(addr, int) else (None, 0))
++    if kind in ('call', 'hook'):
++        what = (f"{f['name']}+0x{off:x}" if off else f['name']) if f else f'unknown 0x{addr:08x}'
++        title = f"{'hook' if kind == 'hook' else 'call'} {what} (0x{addr:08x})"
++    elif kind == 'field':
++        hits = db.field(t.get('cls') or '', addr or 0) if t.get('cls') else []
++        fname = '/'.join(h['name'] for h in hits) or '?'
++        title = f"field {t.get('cls')}+0x{(addr or 0):x} {fname}"
++    elif kind == 'unmapped':
++        title = f"memory 0x{(addr or 0):08x} {db.describe(addr or 0) or ''}".strip()
++    elif kind == 'external':
++        title = f"external {t.get('name')}"
++    else:
++        title = f"{kind} {t.get('name') or ''}".strip()
++    lines += [f'# {title}', '']
++    lines.append(f"Status: {', '.join(sorted(t['statuses']))}. Engine {db.engine}. Static call sites "
++                 f"{t['static_call_sites']}, sites of the wrappers {t['wrapper_call_sites']}, script functions that "
++                 f"reach it {t['reach']}, records of the game {t['hits']}.")
++    if t.get('handler'):
++        lines.append(f"Current handler: `{t['handler']}`.")
++    lines.append('')
++
++    if f:
++        lines += ['## The engine', '', '```', f"0x{f['address']:08x}  {f['sig']}", f"calling convention: {f['conv']}"
++                  + (', virtual' if f.get('virtual') else '') + (f", the hook is 0x{off:x} bytes inside" if off else ''),
++                  '```', '']
++        cls = f.get('class')
++        if cls and db.cls(cls):
++            lay = db.layout(cls)
++            c = db.cls(cls)
++            vt = db.vtable(cls)
++            lines.append(f"`{cls}`: sizeof {('0x%x' % c['size']) if c.get('size') else '?'}, bases "
++                         f"{', '.join(c['bases']) or '-'}, vtable {('0x%08x' % vt) if vt else '-'}, "
++                         f"{len(lay)} fields (`python tools/ikarus/enginedb.py class {cls}`).")
++            lines.append('')
++        if cls and handled_by_class.get(cls):
++            lines.append(f"Other methods of `{cls}` are answered in: " +
++                         ', '.join(f'`{h}`' for h in sorted(handled_by_class[cls])) + ' (follow their style).')
++            lines.append('')
++        if off and args.exe:
++            code = x86_disasm(args.exe, addr)
++            if code:
++                code = [re.sub(r'(?<=[\s\[])0x[0-9a-f]{6}\b', lambda m: (lambda n: f'{m[0]} <{n}>' if n else m[0])(
++                        db.describe(int(m[0], 16))), c) for c in code]
++                lines += ['### The x86 code at the hook (original executable)', '', '```'] + code + ['```', '',
++                          'The script of the hook reads the registers at `=>` (EAX, ECX, ESI, EDI, EBP of LeGo) and the '
++                          'stack (ESP+n); `fireHook` must give it the values that these instructions use.', '']
++            elif code is None:
++                lines += ['(x86 code not shown: capstone or the executable is missing)', '']
++
++    if kind == 'field':
++        hits = db.field(t.get('cls') or '', addr or 0) if t.get('cls') else []
++        lines += ['## The field', '']
++        for h in hits:
++            lines.append(f"- `{h['owner']}.{h['name']}{h.get('array', '')}` at +0x{h['offset']:x}, {h['size']} bytes, "
++                         f"`{h['type']}`" + (f", bit {h['bit']}:{h['bits']}" if 'bits' in h else ''))
++        lines += ['', 'The scripts read or write this field of a character/item through its handle '
++                  '(`MEM_ReadInt(ptr+offset)`); today the handle memory gives 0 there and drops the write. '
++                  'Fill it in `DirectMemory::syncHandleObject` (read) and take writes back from it (write), or replace '
++                  'the script function that touches it.', '']
++
++    if t['callers'] or t['callbacks']:
++        lines += ['## The scripts', '']
++        if t['callers']:
++            lines.append('Direct callers: ' + ', '.join(f'`{c}`' for c in sorted(t['callers'])[:20]))
++        if t['callbacks']:
++            lines.append('Hook functions of the mod: ' + ', '.join(f'`{c}`' for c in sorted(t['callbacks'])[:20]))
++        if t['entries']:
++            lines.append('Reached from: ' + ', '.join(f'`{c}`' for c in t['entries']))
++        lines.append('')
++        if dat:
++            shown = 0
++            for name in sorted(t['callbacks'] - {''}) + sorted(t['callers']):
++                if shown >= 3:
++                    break
++                code = dat.disasm_lines(name, limit=60)
++                if not code:
++                    continue
++                code = [annotate(c, db) for c in code]
++                shown += 1
++                calls = functions.get(name.upper(), {}).get('static_call_sites', '?')
++                lines += [f'### `{name}` (bytecode, {calls} call sites)', '', '```'] + code + ['```', '']
++    if t['runtime']:
++        lines += ['## What the game recorded', '']
++        for g in t['runtime'][:5]:
++            lines.append('```json')
++            lines.append(json.dumps(g, indent=1, ensure_ascii=False)[:2500])
++            lines.append('```')
++        lines.append('')
++    if kind == 'unmapped' and isinstance(addr, int):
++        d, doff = db.data_at(addr)
++        f2, foff = db.function_at(addr)
++        lines += ['## The memory', '']
++        if d:
++            lines.append(f"0x{addr:08x} is `{d.get('decl') or d['name']}`" + (f' + 0x{doff:x}' if doff else '') +
++                         (f", type `{d['type']}`" if d.get('type') else '') + ' in the original engine.')
++        elif f2:
++            lines.append(f"0x{addr:08x} is the code of `{f2['sig']}` + 0x{foff:x} (a script reads or patches the code).")
++        else:
++            lines.append(f'0x{addr:08x} is not a known global of the engine: a pointer that the layer gave out and '
++                         'freed, or a field of an object that is not mirrored (follow the stack).')
++        stacks = [g.get('stack', []) for g in t['runtime']]
++        mods_fn = [f for s in stacks for f in s if not LIB_PREFIX.match(f)]
++        lines += ['', 'Either mirror it (an object at this address in `DirectMemory::setupEngineMemory`, filled from '
++                  'OpenGothic) or replace the first function of the stack that only pokes the engine'
++                  + (f" (here: `{mods_fn[0]}`)" if mods_fn else '') + ' by `safeOverrideFunction`.', '']
++    if kind == 'crash':
++        g = t['runtime'][0] if t['runtime'] else {}
++        lines += ['## The crash', '', f"{t.get('name')}.", '',
++                  'Reproduce it alone: the dialog or the function in the stack, with `-autorun "wait 30; comcheck dlg run '
++                  '<DIALOG>; wait 10"` (or `comcheck dlg scene <FUNCTION>`), on a debug build under a debugger '
++                  '(`cdb -g -o Gothic2Notr.exe ...` gives the C++ stack). The last lines of log.txt:', '',
++                  '```', g.get('detail', '')[:6000], '```', '']
++    if kind == 'check':
++        lines += ['## The failed check', '',
++                  f"`{t.get('name')}`", '',
++                  'A test of the game itself (`mods/devtools/lib/selftests.js` for `comcheck test`, '
++                  '`mods/devtools/lib/archoloschecks.js`, `fixcases.js`) failed in an unattended run. Read the test, '
++                  'decide whether the layer or the test is wrong (the original engine is the reference: '
++                  '`enginedb.py lookup/stub`, the x86 code with `--exe`), fix it and run the same command again.', '']
++    if kind in ('call', 'hook') and isinstance(addr, int):
++        lines += ['## Skeleton', '', '```cpp', db.stub(addr, hook=(kind == 'hook')), '```', '']
++    if kind == 'external':
++        lines += ['## Skeleton', '', 'An external of the scripts that OpenGothic does not bind: add it in '
++                  '`GameScript` (`bindExternal`) or, for one of the libraries, `vm.override_function` in DirectMemory.', '']
++    lines += ['## Done when', '',
++              '- `python tools/ikarus/modcheck.py --game <game> --ini <mod>.ini --fresh --only audit` no longer lists it;',
++              '- an unattended run (`modcheck.py ... --run "<commands>"`, docs/IKARUS_AUTOMATION.md) has no record of it',
++              '  and the check of the feature in that run passes;',
++              '- the commit says what the player sees and what is left.', '', RULES]
++    return title, '\n'.join(lines)
++
++
++if __name__ == '__main__':
++    main()

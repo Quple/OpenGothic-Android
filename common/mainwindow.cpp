@@ -32,6 +32,7 @@
 #include "scripting/gameapi.h"
 #include "utils/dbgpainter.h"
 #include "utils/crashlog.h"
+#include "utils/autorun.h"
 
 #include "commandline.h"
 #include "gothic.h"
@@ -1208,6 +1209,8 @@ uint64_t MainWindow::tick() {
   if(errorScreen.isActive())
     clearInput();
   Scripting::game::tick();
+  if(AutoRun::inst().active())
+    AutoRun::inst().tick(Gothic::inst().world()!=nullptr && Gothic::inst().checkLoading()==Gothic::LoadState::Idle);
   if(auto* w = Gothic::inst().world()) {
     // a script (CoM, fistfight) closes the inventory of the player
     if(w->script().dmaTakeInventoryClose() && inventory.isActive())

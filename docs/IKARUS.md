@@ -1,5 +1,7 @@
 # Ikarus and LeGo
 
+Unattended work (engine database, gap records, runs of the game without a person, task lists): [IKARUS_AUTOMATION.md](IKARUS_AUTOMATION.md).
+
 Current DAT/source audit and remaining gaps: [24 October 2026](ARCHOLOS_AUDIT_2026-10-24.md).
 See [the audit tool documentation](../tools/ikarus/README.md) for `--dat`, static
 call counts, complete disassembly and semantic-review reports. Counts below are

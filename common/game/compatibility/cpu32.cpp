@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "directmemory.h"
+#include "gaplog.h"
 
 using namespace Tempest;
 using namespace Compatibility;
@@ -291,12 +292,21 @@ void Cpu32::callFunction(ptr32_t func) {
 
   // An unresolved call has no successful return value. Do this before the
   // log-once check too: repeated calls used to inherit a previous EAX/ST0.
+  static std::unordered_set<ptr32_t> once;
+  const bool first = once.insert(func).second;
+  {
+    // ECX and the arguments in the order of the declaration (the first one is on the top of the stack)
+    std::vector<uint32_t> regs = {ecx};
+    for(size_t i=stack.size(); i>0 && regs.size()<9; --i)
+      regs.push_back(stack[i-1]);
+    // the name is searched in all the symbols of the scripts: only the first time
+    GapLog::inst().note(GapLog::Kind::Call, func, first ? owner.demangleAddress(func) : std::string_view(), {}, {}, regs);
+  }
   eax = 0;
   st0 = 0;
   stack.clear();
 
-  static std::unordered_set<ptr32_t> once;
-  if(!once.insert(func).second)
+  if(!first)
     return;
 
   auto str = owner.demangleAddress(func);

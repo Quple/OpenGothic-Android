@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "game/serialize.h"
+#include "gaplog.h"
 #include "hookaddresses.h"
 #include "logbudget.h"
 
@@ -276,6 +277,8 @@ auto DirectMemory::loadingTexture() -> std::string {
   }
 
 void DirectMemory::eventSaveGame(Serialize& fout) {
+  // a phone may end the game without a goodbye: the list of the gaps is written with every save
+  GapLog::inst().flush();
   for(auto& f:vfs)
     dumpFile("saved",f.first,f.second);
 

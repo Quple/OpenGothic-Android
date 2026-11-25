@@ -1,5 +1,8 @@
 # Daedalus / Ikarus / LeGo audit
 
+`modcheck.py` (one command per mod), `enginedb.py` (addresses, signatures and layouts of ZenGin from gothic-api) and
+`worklist.py` (one task per gap) are described in [docs/IKARUS_AUTOMATION.md](../../docs/IKARUS_AUTOMATION.md).
+
 `analyze.py` is the compatibility entry point for `audit.py`. The tool translates
 Daedalus source declarations and calls into JSONL IR and compares the compiled
 DAT calls with the current C++ bindings. It does not execute the game or scripts.
