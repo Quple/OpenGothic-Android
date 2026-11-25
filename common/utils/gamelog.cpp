@@ -51,3 +51,16 @@ uint64_t GameLog::serial() {
   std::lock_guard<std::mutex> g(b.sync);
   return b.next-1;
   }
+
+void GameLog::writeTail(std::ostream& out, size_t max) {
+  auto& b = buffer();
+  std::unique_lock<std::mutex> g(b.sync,std::try_to_lock);
+  if(!g.owns_lock()) {
+    out << "(the log is held by a thread, no lines)" << std::endl;
+    return;
+    }
+  const size_t first = b.lines.size()>max ? b.lines.size()-max : 0;
+  for(size_t i=first; i<b.lines.size(); ++i)
+    out << b.lines[i].text << '\n';
+  out.flush();
+  }

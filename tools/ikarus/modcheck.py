@@ -164,7 +164,7 @@ def main():
             sys.exit(f'{og} does not exist: build the desktop game (docs/IKARUS_AUTOMATION.md) or give --og')
         rundir = out / 'run'
         if rundir.exists():
-            for f in ('autorun-report.json', 'ikarus-gaps.json', 'log.txt'):
+            for f in ('autorun-report.json', 'ikarus-gaps.json', 'log.txt', 'crash.log', 'crash.dmp', 'crash.json'):
                 (rundir / f).unlink(missing_ok=True)
         rundir.mkdir(exist_ok=True)
         # the mods of the repository (devtools: comcheck) are in the working directory of the game
@@ -202,8 +202,12 @@ def main():
                 tail = (rundir / 'log.txt').read_text(encoding='utf-8', errors='replace').splitlines()[-40:]
                 gaps.append(rundir / 'log.txt')
             crash = rundir / 'crash.log'
+            dump = rundir / 'crash.dmp'
+            if isinstance(code, int):
+                code = f'{code:#x}' if code > 255 or code < 0 else str(code)
             what = f'the game ended without a report (exit {code})' + (f', in the dialog {last}' if last else '')
             summary.append(f'Run: {what}; see {rundir / "log.txt"}' + (f' and {crash}' if crash.exists() else '') +
+                           (f', the minidump {dump} (Visual Studio or WinDbg with the .pdb of the build)' if dump.exists() else '') +
                            ('. Go on with `dlgall resume` (the dialog that crashed is left).' if last else '.'))
             record = {'kind': 'crash', 'name': what, 'count': 1, 'stack': [last] if last else [],
                       'detail': '\n'.join(tail[-25:]) +

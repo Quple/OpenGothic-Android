@@ -385,9 +385,15 @@ void RainFx::tick(uint64_t dt) {
   settingsTimer += dt;
   if(settingsTimer>=1000) {
     settingsTimer = 0;
+#ifdef OPENGOTHIC_TOUCH_UI
     const auto pref = AndroidInput::preferences();
     level      = std::clamp(pref.rain,0,3);
     wetSetting = std::clamp(pref.wetGround,0,2);
+#else
+    // no settings screen of the touch interface: the defaults of its preferences (normal rain, wet ground with reflections)
+    level      = 2;
+    wetSetting = 2;
+#endif
     outdoor = isOutdoorWorld(owner.name());
     if(level!=loggedLevel || outdoor!=loggedOutdoor) {
       loggedLevel   = level;

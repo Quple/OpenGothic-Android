@@ -172,7 +172,8 @@ function createSelfTests(env) {
             eq(size, input.length, "size");
             const out = [];
             for (let i = 0; i < size; ++i) out.push(call("MEM_ArrayRead", [arr, i]));
-            eq(JSON.stringify(out), JSON.stringify([...input].sort((a, b) => a - b)), "the array after the sort");
+            // the comparator of the engine (zArraySortDefaultCompare, 0x553ca0) compares unsigned words: -3 is the last
+            eq(JSON.stringify(out), JSON.stringify([...input].sort((a, b) => (a >>> 0) - (b >>> 0))), "the array after the sort");
         } finally {
             call("MEM_ArrayFree", [arr]);
         }
@@ -181,8 +182,11 @@ function createSelfTests(env) {
     test("ikarus", "a pointer of a character is positive and the same every time", () => {
         needIkarus();
         needSymbol("MEM_InstToPtr");
-        const a = call("MEM_InstToPtr", [player]);
-        const b = call("MEM_InstToPtr", [player]);
+        needSymbol("HERO");
+        // MEM_InstToPtr(var int inst): a script that writes MEM_InstToPtr(hero) passes the index of the symbol HERO
+        const hero = debug.symbol("HERO").index;
+        const a = call("MEM_InstToPtr", [hero]);
+        const b = call("MEM_InstToPtr", [hero]);
         ok(a > 0 && a < 0x7fffffff, "the pointer is not in the positive range: " + a);
         eq(a, b, "the pointer of the same character");
     });

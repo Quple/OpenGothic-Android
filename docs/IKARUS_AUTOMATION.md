@@ -1,8 +1,8 @@
 # Ikarus/LeGo bez obsługi: konwerter silnika, rejestr luk, przebieg gry bez człowieka
 
-Stan: **25.11.2026, praca wstrzymana na polecenie użytkownika** (pauza). Wszystko poniżej jest zaimplementowane,
-zbudowane (desktop, MSVC, `-DOPENGOTHIC_TOUCH_UI=ON`) i sprawdzone na Kronikach Myrtany, chyba że napisano inaczej.
-Zmiany są też w jednym pliku: `patches/025-ikarus-automation.patch` (zastosowanie: niżej).
+Stan: **25.11.2026 wieczorem, praca wznowiona** (sekcja „Postęp 25.11 wieczorem” niżej). Wszystko poniżej jest zaimplementowane,
+zbudowane (desktop, MSVC, z `-DOPENGOTHIC_TOUCH_UI=ON` i bez) i sprawdzone na Kronikach Myrtany, chyba że napisano inaczej.
+Pierwsza część zmian jest też w jednym pliku: `patches/025-ikarus-automation.patch` (zastosowanie: niżej).
 
 ## Po co
 
@@ -37,7 +37,7 @@ Raz na maszynę:
 ```powershell
 python tools/ikarus/enginedb.py build --fetch                       # klonuje gothic-api do build-ikarus/, ~15 s
 pip install --target build-ikarus/pylib capstone                   # opcjonalnie: kod x86 hooków w zadaniach
-# gra desktop (Vulkan; obecnie buduje się tylko z touch UI, patrz "Znane problemy"):
+# gra desktop (Vulkan; z touch UI albo bez, -DOPENGOTHIC_TOUCH_UI=OFF):
 cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake -S . -B build-desktop -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOPENGOTHIC_TOUCH_UI=ON && cmake --build build-desktop --target Gothic2Notr'
 ```
 
@@ -47,7 +47,7 @@ Mod:
 $g = 'C:/Program Files (x86)/Steam/steamapps/common/TheChroniclesOfMyrtana'
 python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini                        # tylko statycznie
 python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini --run "wait 30; comcheck test ikarus; comcheck fix all; wait 5" --timeout 300
-python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini --run "wait 30; dlgall; wait 1100" --timeout 1300 --out build-ikarus/com-dialogs
+python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini --run "wait 30; dlgall; waitfor Done: 1700; wait 5" --timeout 1800 --out build-ikarus/com-dialogs   # ok. 630 dialogów; dalej: "wait 30; dlgall resume; waitfor Done: ..."
 # log z telefonu:
 python tools/ikarus/worklist.py --audit build-ikarus/TheChroniclesOfMyrtana/audit --dat build-ikarus/TheChroniclesOfMyrtana/GOTHIC.DAT --gaps <log.txt> --out build-ikarus/phone
 ```
@@ -81,15 +81,57 @@ Pętla agenta: weź pierwsze zadanie z `INDEX.md` → zaimplementuj według kart
 Zadania tych wyników: `build-ikarus/TheChroniclesOfMyrtana/worklist`, `build-ikarus/com-dialogs/worklist`,
 `build-ikarus/com-crash/worklist` (lokalnie, `build-*/` jest w `.gitignore`).
 
+## Postęp 25.11 wieczorem
+
+Zrobione (przebieg `wait 30; comcheck test ikarus; comcheck fix sort; wait 10`: 3/3 testy ikarus PASS, `fix sort` PASS,
+luki spadły z 39 (2951 trafień) do 38 hooków po 1 trafieniu, błędy logu z 84 do 76):
+
+- **QSORT_G2**: błąd był w teście, nie w warstwie. Komparator silnika `zArraySortDefaultCompare` (0x553ca0:
+  `cmp ecx,eax; jbe; sbb; neg`) porównuje słowa bez znaku, więc w Gothicu `-3` ląduje na końcu. Testy
+  (`selftests.js`, `fixcases.js`) oczekują teraz kolejności bez znaku.
+- **Wskaźnik postaci = 0**: błąd w teście. `MEM_InstToPtr(var int inst)` dostaje indeks symbolu (jak skrypt
+  `MEM_InstToPtr(hero)`), a test podawał obiekt JS, który `debug.call` zamieniał po cichu na 0. Test podaje teraz
+  `debug.symbol("HERO").index`. `debug.call` odrzuca obiekt dla parametru int/string z czytelnym błędem.
+- **`logSerial` w `fixcases.js`** zwracał numer najstarszej linii bufora, więc „błędy od początku przypadku” obejmowały
+  2000 najstarszych linii logu (stąd fałszywe „the log still says TODO: QSORT_G2”). `debug.log` zwraca teraz też
+  `last` (numer najnowszej linii).
+- **`zrenderer` (0x982f08)**: globalny wskaźnik jest odwzorowany (obiekt z vtable `zCRnd_D3D`). LeGo woła
+  `SetRenderState`/`DrawPolySimple`/`SetAlphaBlendFunc` z `ECX=[zrenderer]`; handlery w `directmemory_ui.cpp` już
+  istniały, ale odczyt wskaźnika kończył się luką ok. 50 razy na sekundę. Wizualnie sprite'ów nie sprawdzałem.
+- Znane problemy 1 i 2 rozwiązane: `stopAll` wypisuje „Done: …” do konsoli (sprawdzone: `dlgall PC_BOW; waitfor Done: 120`
+  kończy się po 67 s), a `rainfx.cpp` ma osłonę `#ifdef OPENGOTHIC_TOUCH_UI` (bez touch UI: deszcz 2, mokra ziemia 2,
+  jak domyślne ustawienia touch UI). Pełny build bez touch UI w `build-notouch` przechodzi.
+- Crash na Windows zostawia teraz dane: `crash.dmp` (minidump, `MiniDumpWriteDump`), kod i adres wyjątku w pierwszej
+  linii `crash.log`, 80 ostatnich linii logu z pamięci (linie info w `log.txt` są buforowane i crash je gubił),
+  rezerwa stosu na przepełnienie stosu, obsługa „pure virtual call” i „invalid parameter” CRT. `modcheck.py` kasuje
+  stare pliki crasha przed przebiegiem, pokazuje kod wyjścia szesnastkowo i wskazuje `crash.dmp`.
+
+Przebieg `dlgall` (30 min, limit `-autoexit 1800`): bez crasha, 669 z 6145 dialogów. **Narzędzie dialogów jest wolne:**
+ok. 20 dialogów na minutę przy jednym rdzeniu CPU zajętym w 100%, czyli pełny przebieg to ok. 5 godzin. Wcześniejszy
+crash na `PC_BOW_H_01` był więc dalej w kolejce, niż sądziłem. Przebieg można dzielić: `dlgall resume` czyta
+`dialogtest_progress.txt` z `build-ikarus/<out>/run` (modcheck go nie kasuje). Okno gry nie może być ukryte
+(`Start-Process -WindowStyle Hidden` ukrywa też okno gry i przebieg prawie staje).
+
+Nowe zadania z tego przebiegu (`build-ikarus/com-dialogs/worklist`): odczyt `0x0067b968` (`oCNpc::OnDamage+0x108`),
+`write to symbol PRINT.PARN table is not implemented`, `mem_free: address is not an owned allocation`,
+`mem_readint: address translation failure`, `_takeref - not a memory-instance: AI_TELEPORTALWAYS.NPC`, ostrzeżenia
+`MEM_WARN`/`MEM_PRINTSTACKTRACE` oraz kilkanaście „Accessing member … without an instance set”.
+
+„Accessing member … without an instance set” (`RESTORENPCNAMES`, `INIT_ITEMGROUPS_MEAT` i inne) zostawiłem. Skrypty
+czytają tam pola instancji, które w nowej grze jeszcze nie istnieją (np. `BDT_6289_VILLAN` wstawia dopiero
+`KQ405_HUNTERSSPAWN`, `ITGR_MEAT` tworzy dopiero `Itm_GetPtr`). OpenGothic działa z `ALLOW_NULL_INSTANCE_ACCESS`
+(odczyt 0, zapis pominięty). Nie sprawdziłem w kodzie x86, czy oryginalny `zCParser` robi to samo; do potwierdzenia,
+zanim te zadania zostaną zamknięte jako „jak w oryginale”.
+
+Następne kroki: wolność `dlgall` (profilowanie: co zajmuje ok. 3 s CPU na dialog), pełny przebieg dialogów
+(na szybszym PC albo w kilku częściach przez `dlgall resume`), potem zadania z `com-dialogs/worklist` od góry.
+
 ## Znane problemy i następne kroki
 
-1. **`waitfor Done:` po `dlgall` nie działa**: `DialogView.stopAll` zapisuje komunikat „Done: …” tylko do `view.message`,
-   do konsoli trafia tylko raport („DIALOG TEST REPORT”). Poprawka: w `stopAll` dodać `console.log(this.message)` albo
-   czekać na `waitfor DIALOG TEST REPORT`. Do tego czasu zwykłe `wait <s>` z zapasem.
-2. **Desktop bez touch UI się nie kompiluje**: `common/world/rainfx.cpp:388` używa `AndroidInput::preferences()` bez
-   `#ifdef OPENGOTHIC_TOUCH_UI` (problem sprzed tej pracy). Budować z `-DOPENGOTHIC_TOUCH_UI=ON` albo dodać osłonę.
-3. Crash bez raportu: nie ma przechwycenia stosu C++ na Windows w przebiegu (brak `cdb`). Do dodania: zrzut
-   (`MiniDumpWriteDump`) albo uruchamianie pod debuggerem w `modcheck.py`.
+1. ~~`waitfor Done:` po `dlgall` nie działa~~ — rozwiązane 25.11 wieczorem: `waitfor Done: <s>` działa.
+2. ~~Desktop bez touch UI się nie kompiluje~~ — rozwiązane 25.11 wieczorem (osłona w `rainfx.cpp`).
+3. Crash bez raportu: od 25.11 wieczorem `crash.dmp` i ogon logu w `crash.log` (patrz wyżej). Gdy proces zginie bez
+   wywołania filtra wyjątków (np. zabity przez sterownik), dalej zostaje tylko `dialogtest_last.txt`.
 4. `observeHandleAccess` obejmuje tylko uchwyty `oCNpc`/`oCItem`; movery (`zCMover`) i moby (`oCMobLockable`) mają
    wypełniane pola i można je objąć tym samym sposobem.
 5. Gry G1: `enginedb` ma bazę G1, ale audyt rozwiązuje `MEMINT_SWITCHG1G2` zawsze na G2; DAT z G1 trzeba sprawdzić.

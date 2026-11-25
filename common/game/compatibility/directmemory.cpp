@@ -624,6 +624,8 @@ void DirectMemory::setupEngineMemory() {
   mem32.pin(&zTimer,        MEMINT_zTimer_Address,          sizeof(zTimer), "zTimer");
   mem32.pin(&zFactory_Ptr,  ZFACTORY,                       4, "zFactory*");
   mem32.pin(&fontMan_Ptr,   ZFONTMAN,                       4, "zCFontMan*");
+  const ptr32_t ZRENDERER                      = 9973512;  //0x982F08
+  mem32.pin(&zRenderer_Ptr, ZRENDERER,                      4, "zCRenderer*");
   parserBase = ContentParserAddress;
   mem32.pin(ContentParserAddress, sizeof(zCParser), Mem32::Type::zCParser);
   mem32.pin(&focusList, OCNPCFOCUS__FOCUSLIST_G2, sizeof(focusList), "OCNPCFOCUS__FOCUSLIST_G2");
@@ -709,6 +711,13 @@ void DirectMemory::setupEngineMemory() {
     }
 
   fontMan_Ptr = mem32.alloc(sizeof(zCFontMan));
+
+  // the renderer: LeGo calls its methods (zRND_XD3D_SetRenderState, zRND_D3D_DrawPolySimple, SetAlphaBlendFunc)
+  // with ECX = [zrenderer]; the handlers in directmemory_ui.cpp draw into the UI pass and do not read the
+  // object, so it only holds the table of virtual functions of zCRnd_D3D
+  zRenderer_Ptr = mem32.alloc(64,"zCRnd_D3D");
+  if(auto vtbl = mem32.deref<uint32_t>(zRenderer_Ptr))
+    *vtbl = 0x0083b0c4;
 
   // ## UI data
   memGame.HPBAR    = mem32.alloc(sizeof(oCViewStatusBar));

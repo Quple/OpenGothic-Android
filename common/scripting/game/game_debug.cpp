@@ -82,6 +82,8 @@ JSValue log(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   // when there are more lines than the answer holds, the next call goes on after the last one that was given
   const uint64_t serial = lines.empty() ? std::max<uint64_t>(after,last) : lines.back().serial;
   JS_SetPropertyStr(ctx,ret,"serial",JS_NewFloat64(ctx,double(serial)));
+  // the serial of the newest line of the log: a later debug.log(last) has only what came after
+  JS_SetPropertyStr(ctx,ret,"last",JS_NewFloat64(ctx,double(last)));
   JS_SetPropertyStr(ctx,ret,"lines",arr);
   return ret;
   }
@@ -198,8 +200,15 @@ JSValue call(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
     auto* parameter = vm.find_symbol_by_index(sym->index()+1+i);
     if(parameter==nullptr)
       return fail("invalid parameter symbol");
-    if(parameter->type()!=zenkit::DaedalusDataType::INSTANCE)
+    if(parameter->type()!=zenkit::DaedalusDataType::INSTANCE) {
+      // an object for a number or a string would be pushed as 0 or "[object Object]" without a word
+      JSValue value = JS_IsArray(list) ? JS_GetPropertyUint32(ctx,list,i) : JS_UNDEFINED;
+      const bool object = JS_IsObject(value);
+      JS_FreeValue(ctx,value);
+      if(object)
+        return fail("parameter "+std::to_string(i+1)+" is "+typeName(parameter->type())+", not a character (for MEM_InstToPtr(hero) pass debug.symbol(\"HERO\").index)");
       continue;
+      }
     JSValue value = JS_IsArray(list) ? JS_GetPropertyUint32(ctx,list,i) : JS_UNDEFINED;
     characters[i] = JS_IsObject(value) ? game::resolveNpc(ctx,value) : nullptr;
     JS_FreeValue(ctx,value);

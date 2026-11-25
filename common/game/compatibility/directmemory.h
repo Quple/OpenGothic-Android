@@ -151,6 +151,7 @@ class DirectMemory {
     ptr32_t     gameman_Ptr     = 0;
     ptr32_t     zFactory_Ptr    = 0;
     ptr32_t     fontMan_Ptr     = 0;
+    ptr32_t     zRenderer_Ptr   = 0;
     ptr32_t     focusList[6]    = {};
 
     ptr32_t     scriptVariables = 0;

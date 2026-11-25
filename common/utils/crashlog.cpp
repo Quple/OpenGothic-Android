@@ -1,5 +1,6 @@
 #include "crashlog.h"
 #include "commandline.h"
+#include "gamelog.h"
 
 #include <Tempest/Except>
 #include <Tempest/Platform>
@@ -8,6 +9,7 @@
 #include <iostream>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <csignal>
 #include <fstream>
@@ -38,11 +40,45 @@ static char gpuName[64]="?";
 
 #ifdef __WINDOWS__
 #include <windows.h>
+#include <dbghelp.h>
 
-static LONG WINAPI exceptionHandler(PEXCEPTION_POINTERS) {
+/// crash.dmp next to crash.log: the threads, their stacks and the memory that the stacks point to (open it in Visual Studio
+/// or WinDbg with the .pdb of the build); the text log of the crash alone has no registers and no other threads
+static void writeMiniDump(PEXCEPTION_POINTERS ex) {
+  HANDLE file = CreateFileW(L"crash.dmp",GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+  if(file==INVALID_HANDLE_VALUE)
+    return;
+  MINIDUMP_EXCEPTION_INFORMATION info = {};
+  info.ThreadId          = GetCurrentThreadId();
+  info.ExceptionPointers = ex;
+  info.ClientPointers    = FALSE;
+  const auto type = MINIDUMP_TYPE(MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules);
+  MiniDumpWriteDump(GetCurrentProcess(),GetCurrentProcessId(),file,type,ex!=nullptr ? &info : nullptr,nullptr,nullptr);
+  CloseHandle(file);
+  }
+
+static LONG WINAPI exceptionHandler(PEXCEPTION_POINTERS ex) {
   SetUnhandledExceptionFilter(nullptr);
-  CrashLog::dumpStack("ExceptionFilter", nullptr);
+  // the code and the place of the fault are the first line of crash.log (0xC0000005 access violation, 0xC00000FD stack overflow)
+  char sig[96] = "ExceptionFilter";
+  if(ex!=nullptr && ex->ExceptionRecord!=nullptr) {
+    auto& r = *ex->ExceptionRecord;
+    std::snprintf(sig,sizeof(sig),"ExceptionFilter 0x%08lX at %p",static_cast<unsigned long>(r.ExceptionCode),r.ExceptionAddress);
+    if(r.ExceptionCode==EXCEPTION_ACCESS_VIOLATION && r.NumberParameters>=2)
+      std::snprintf(sig+std::strlen(sig),sizeof(sig)-std::strlen(sig),", %s 0x%llx",
+                    r.ExceptionInformation[0]==0 ? "read" : r.ExceptionInformation[0]==1 ? "write" : "execute",
+                    static_cast<unsigned long long>(r.ExceptionInformation[1]));
+    }
+  writeMiniDump(ex);
+  CrashLog::dumpStack(sig, nullptr);
   return EXCEPTION_EXECUTE_HANDLER;
+  }
+
+/// the deaths that the C runtime ends with a fast fail, without the filter above: a pure virtual call and a bad parameter of a function of the CRT
+static void crtDeath(const char* what) {
+  writeMiniDump(nullptr);
+  CrashLog::dumpStack(what, nullptr);
+  TerminateProcess(GetCurrentProcess(),3);
   }
 #endif
 
@@ -126,6 +162,15 @@ static void terminateHandler() {
 void CrashLog::setup() {
 #ifdef __WINDOWS__
   SetUnhandledExceptionFilter(exceptionHandler);
+  // the handler of a stack overflow needs some stack of its own (the trace and the dump)
+  ULONG guarantee = 128*1024;
+  SetThreadStackGuarantee(&guarantee);
+#if defined(_MSC_VER)
+  _set_purecall_handler([]() { crtDeath("pure virtual function call"); });
+  _set_invalid_parameter_handler([](const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, uintptr_t) {
+    crtDeath("invalid parameter of a function of the C runtime");
+    });
+#endif
 #endif
 
 #if defined(__ANDROID__)
@@ -199,6 +244,8 @@ void CrashLog::dumpStack(const char *sig, const char *extGpuLog) {
 #elif defined(__LINUX__) || defined(__APPLE__)
   tracebackLinux(fout);
 #endif
+  fout << std::endl << "---the last lines of the log---" << std::endl;
+  GameLog::writeTail(fout,80);
   fout.flush();
   }
 

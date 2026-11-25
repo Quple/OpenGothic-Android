@@ -33,7 +33,8 @@ function createFixCases(env) {
     const fail = (message) => ({ status: "fail", message });
     const look = (message) => ({ status: "look", message });
     const errorsSince = (serial, regex) => debug.log(serial, 2000).lines.map(l => l[1]).filter(t => regex.test(t));
-    const logSerial = () => debug.log(0, 1).serial;
+    // the serial of the newest line (debug.log(0, 1).serial is the oldest line that the log still holds)
+    const logSerial = () => debug.log(0, 1).last;
 
     function character(instance, offset = 250) {
         let n = npcs.find(instance);
@@ -130,8 +131,11 @@ function createFixCases(env) {
                 call("MEM_ArraySort", [arr]);
                 const out = [];
                 for (let i = 0; i < call("MEM_ArraySize", [arr]); ++i) out.push(call("MEM_ArrayRead", [arr, i]));
-                const want = [...input].sort((a, b) => a - b);
-                if (errorsSince(serial, /QSORT_G2/).length) return fail("the log still says TODO: QSORT_G2");
+                // the comparator of the engine (zArraySortDefaultCompare, 0x553ca0: cmp + jbe/sbb) compares
+                // unsigned words, so a negative number is after the largest positive one, as in Gothic
+                const want = [...input].sort((a, b) => (a >>> 0) - (b >>> 0));
+                const errors = errorsSince(serial, /QSORT_G2/);
+                if (errors.length) return fail("the log says: " + errors[0]);
                 return JSON.stringify(out) === JSON.stringify(want) ? pass(out.join(", ")) : fail(`got ${out.join(", ")}, wanted ${want.join(", ")}`);
             } finally {
                 call("MEM_ArrayFree", [arr]);

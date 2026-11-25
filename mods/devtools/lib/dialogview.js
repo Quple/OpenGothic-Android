@@ -103,6 +103,8 @@ class DialogView {
             (ok ? `The report is in ${ReportFile} (next to log.txt) and in the log.` : "The report could not be written.");
         const report = this.env.debug.dlgReport();
         if (report) for (const line of report.split("\n").slice(0, 80)) console.log(line);
+        // last, after the report: "waitfor Done:" of -autorun waits for this line
+        console.log(this.message);
         this.refresh();
     }
 
