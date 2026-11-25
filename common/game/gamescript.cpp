@@ -3010,6 +3010,13 @@ bool GameScript::npc_checkinfo(std::shared_ptr<zenkit::INpc> npcRef, int imp) {
         valid = vm.call_function<int>(conditionSymbol)!=0;
       }
     if(valid) {
+      // DIAGNOSTICS: a character starts a talk by itself when it has a valid info (an important one with imp=1)
+      static uint64_t lastLog = 0;
+      const uint64_t  now     = world().tickCount();
+      if(now>=lastLog+1000) {
+        lastLog = now;
+        Log::d("[talk] Npc_CheckInfo(",n->displayName(),", ",imp,") is true for the info ",info->symbol_index());
+        }
       return true;
       }
     }
@@ -3455,9 +3462,33 @@ void GameScript::ai_outputsvm(std::shared_ptr<zenkit::INpc> selfRef, std::shared
     }
   }
 
+/// B_CheerFight of ZS_WatchFight (the gesture T_WATCHFIGHT_YEAH and the voice $CHEERFRIEND*): a spectator that is an enemy of the hero does not cheer
+/// at a fight of the hero. In the fight on the farm of Akil one of the mercenaries (Alvares, Engardo: the guild of bandits, hostile to the hero)
+/// stood aside and cheered the others instead of fighting.
+static bool isEnemyCheeringAtHero(const Npc& self, const Npc* hero, const Npc* oth, const Npc* vic) {
+  if(hero==nullptr || &self==hero || !self.isEnemy(*hero))
+    return false;
+  return oth==hero || vic==hero;
+  }
+
+static bool startsWithNoCase(std::string_view str, std::string_view prefix) {
+  if(str.size()<prefix.size())
+    return false;
+  for(size_t i=0; i<prefix.size(); ++i)
+    if(std::toupper(static_cast<unsigned char>(str[i]))!=std::toupper(static_cast<unsigned char>(prefix[i])))
+      return false;
+  return true;
+  }
+
 void GameScript::ai_outputsvm_overlay(std::shared_ptr<zenkit::INpc> selfRef, std::shared_ptr<zenkit::INpc> targetRef, std::string_view name) {
   auto target = findNpc(targetRef);
   auto self   = findNpc(selfRef);
+
+  if(self!=nullptr && startsWithNoCase(name,"$CHEERFRIEND") &&
+     isEnemyCheeringAtHero(*self,world().player(),findNpc(vm.global_other()),findNpc(vm.global_victim()))) {
+    Log::d("[watchfight] ",self->displayName()," (",self->instanceSymbol(),") is an enemy of the hero, no cheering voice ",name);
+    return;
+    }
 
   if(target==nullptr && owner.version().game==1)
     target = findNpc(vm.global_other());
@@ -3477,6 +3508,12 @@ void GameScript::ai_startstate(std::shared_ptr<zenkit::INpc> selfRef, int func, 
     // Who starts a fight with whom and why (the reason is the script variable AIV_ATTACKREASON, the AR_* constants of B_Attack): this is what
     // the log needs when a group of characters joins a fight, see B_AssessFightSound and the scripts that call B_Attack.
     if(const auto* fsym = vm.find_symbol_by_index(uint32_t(func))) {
+      if(fsym->name()=="ZS_TALK" || fsym->name()=="ZS_Talk")
+        Log::d("[talk] ",self->displayName()," (",self->instanceSymbol(),") gets ZS_Talk from the script (AI_StartState), state ",state,
+               ", other ",oth!=nullptr ? oth->displayName() : std::string_view("-"));
+      if(startsWithNoCase(fsym->name(),"ZS_WatchFight"))
+        Log::d("[watchfight] ",self->displayName()," (",self->instanceSymbol(),") starts ",fsym->name(),": attacker ",oth!=nullptr ? oth->displayName() : std::string_view("-"),
+               ", victim ",vic!=nullptr ? vic->displayName() : std::string_view("-"));
       if(fsym->name()=="ZS_ATTACK" || fsym->name()=="ZS_Attack")
         Log::d("[attack] ",self->displayName()," starts ",fsym->name()," against ",oth!=nullptr ? oth->displayName() : std::string_view("-"),
                ", victim ",vic!=nullptr ? vic->displayName() : std::string_view("-"),", AIV_ATTACKREASON ",self->handle().aivar[9]);
@@ -3487,6 +3524,17 @@ void GameScript::ai_startstate(std::shared_ptr<zenkit::INpc> selfRef, int func, 
 
 void GameScript::ai_playani(std::shared_ptr<zenkit::INpc> npcRef, std::string_view name) {
   auto npc = findNpc(npcRef);
+  if(npc!=nullptr && startsWithNoCase(name,"T_WATCHFIGHT")) {
+    Npc* hero = world().player();
+    Npc* oth  = findNpc(vm.global_other());
+    Npc* vic  = findNpc(vm.global_victim());
+    const bool noCheer = startsWithNoCase(name,"T_WATCHFIGHT_YEAH") && isEnemyCheeringAtHero(*npc,hero,oth,vic);
+    Log::d("[watchfight] ",npc->displayName()," (",npc->instanceSymbol(),") ",name,": attacker ",oth!=nullptr ? oth->displayName() : std::string_view("-"),
+           ", victim ",vic!=nullptr ? vic->displayName() : std::string_view("-"),", enemy of the hero ",(hero!=nullptr && npc->isEnemy(*hero)) ? 1 : 0,
+           noCheer ? ", skipped" : "");
+    if(noCheer)
+      return;
+    }
   if(npc!=nullptr && dma!=nullptr)
     dma->noteAiPlayAni(*npc,name);
   if(npc!=nullptr)

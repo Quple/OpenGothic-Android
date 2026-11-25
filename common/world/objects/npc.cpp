@@ -2376,11 +2376,25 @@ bool Npc::setGoToLadder() {
   }
 
 void Npc::commitDamage() {
-  if(currentTarget==nullptr)
+  const bool heroInvolved = isPlayer() || (currentTarget!=nullptr && currentTarget->isPlayer());
+  if(currentTarget==nullptr) {
+    if(isPlayer())
+      Log::d("[fight] the blow of the hero has no target: nothing is in the focus");
     return;
-  if(!fghAlgo.isInAttackRange(*this,*currentTarget,owner.script()))
+    }
+  const bool inRange = fghAlgo.isInAttackRange(*this,*currentTarget,owner.script());
+  const bool inAngle = fghAlgo.isInFocusAngle(*this,*currentTarget);
+  if(heroInvolved) {
+    // the distance of the fight is between the roots of both models (see fightDistanceTo): the height is the difference of the root heights
+    const auto  d     = fightDistanceTo(*currentTarget);
+    const float reach = fghAlgo.prefferedAttackDistance(*this,*currentTarget,owner.script());
+    Log::d("[fight] ",displayName()," (",instanceSymbol(),") strikes ",currentTarget->displayName(),": distance ",int(d.length()),
+           " (height ",int(d.y),"), reach ",int(reach),inRange ? "" : " OUT OF REACH",", angle ",inAngle ? "ok" : "OUT OF THE FOCUS ANGLE",
+           ", weapon state ",int(weaponState()));
+    }
+  if(!inRange)
     return;
-  if(!fghAlgo.isInFocusAngle(*this,*currentTarget))
+  if(!inAngle)
     return;
   currentTarget->takeDamage(*this,nullptr);
   }
@@ -5297,6 +5311,7 @@ void Npc::startDialog(Npc& pl) {
     return;
   if(puppet)
     puppetInteract = true;
+  Log::d("[talk] the hero starts the talk with ",displayName()," (",instanceSymbol(),")");
   if(perceptionProcess(pl,nullptr,0,PERC_ASSESSTALK))
     setOther(&pl);
   }
