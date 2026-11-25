@@ -3511,6 +3511,8 @@ void GameScript::ai_startstate(std::shared_ptr<zenkit::INpc> selfRef, int func, 
       if(fsym->name()=="ZS_TALK" || fsym->name()=="ZS_Talk")
         Log::d("[talk] ",self->displayName()," (",self->instanceSymbol(),") gets ZS_Talk from the script (AI_StartState), state ",state,
                ", other ",oth!=nullptr ? oth->displayName() : std::string_view("-"));
+      if(startsWithNoCase(fsym->name(),"ZS_Flee") || startsWithNoCase(fsym->name(),"ZS_MM_Flee"))
+        Log::d("[flee] ",self->displayName()," (",self->instanceSymbol(),") starts ",fsym->name()," from ",oth!=nullptr ? oth->displayName() : std::string_view("-"));
       if(startsWithNoCase(fsym->name(),"ZS_WatchFight"))
         Log::d("[watchfight] ",self->displayName()," (",self->instanceSymbol(),") starts ",fsym->name(),": attacker ",oth!=nullptr ? oth->displayName() : std::string_view("-"),
                ", victim ",vic!=nullptr ? vic->displayName() : std::string_view("-"));

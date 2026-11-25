@@ -3649,15 +3649,21 @@ void Npc::nextAiAction(AiQueue& queue, uint64_t dt) {
       }
     case AI_SetNpcsToState:{
       const int32_t r = act.i0*act.i0;
-      owner.detectNpc(position(),float(hnpc->senses_range),[&act,this,r](Npc& other) {
+      // The caster is 'other' of the new state, as in the original engine: B_StopMagicFlee makes the character run away from 'other' after
+      // the animation of the fear. The old 'other' of the character is not the caster: the mage Talamon (and the others) did not run away.
+      int count = 0;
+      owner.detectNpc(position(),float(hnpc->senses_range),[&act,this,r,&count](Npc& other) {
         if(&other==this)
           return;
         if(other.isDead())
           return;
         if(qDistTo(other)>float(r))
           return;
-        other.aiPush(AiQueue::aiStartState(act.func,1,other.currentOther,other.currentVictim,other.hnpc->wp));
+        other.aiPush(AiQueue::aiStartState(act.func,1,this,other.currentVictim,other.hnpc->wp));
+        ++count;
         });
+      const auto* sym = owner.script().findSymbol(act.func.ptr);
+      Log::d("[fear] ",displayName()," sets ",count," characters to the state ",sym!=nullptr ? std::string_view(sym->name()) : std::string_view("?"));
       break;
       }
     case AI_SetWalkMode:{
