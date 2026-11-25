@@ -98,6 +98,132 @@ index 958592da..cfa413d5 100644
        };
  
      ShaderReflection::Stage stage = ShaderReflection::Stage::Compute;
+diff --git a/Engine/gapi/vulkan/vcommandbuffer.cpp b/Engine/gapi/vulkan/vcommandbuffer.cpp
+index 140a653e..bf4f35b6 100644
+--- a/Engine/gapi/vulkan/vcommandbuffer.cpp
++++ b/Engine/gapi/vulkan/vcommandbuffer.cpp
+@@ -3,6 +3,9 @@
+ #include "vcommandbuffer.h"
+ 
+ #include <Tempest/Attachment>
++#include <Tempest/Log>
++
++#include <atomic>
+ 
+ #include "vdevice.h"
+ #include "vcommandpool.h"
+@@ -168,6 +171,9 @@ VCommandBuffer::~VCommandBuffer() {
+     vkFreeCommandBuffers(device.device.impl,pool.impl,1,&impl);
+     }
+ 
++  if(!spare.empty())
++    vkFreeCommandBuffers(device.device.impl,pool.impl,uint32_t(spare.size()),spare.data());
++
+   if(chunks.size()==0)
+     return;
+ 
+@@ -184,15 +190,16 @@ VCommandBuffer::~VCommandBuffer() {
+ void VCommandBuffer::reset() {
+   vkAssert(vkResetCommandPool(device.device.impl,pool.impl,0));
+ 
+-  SmallArray<VkCommandBuffer,MaxCmdChunks> flat(chunks.size());
++  // The command buffers are not freed: after the reset of the pool they are empty, and the next frame records into them again.
++  // Freeing and allocating every chunk in every frame (~30 chunks a frame, one per pass) leaks the address space of the GPU on some Mali drivers:
++  // 16 MB of the mappings of /dev/mali0 for every allocation, and the process ends with std::bad_alloc after ~15 s of the game.
+   auto node = chunks.begin();
+   if(chunks.size()>0) {
++    spare.reserve(spare.size()+chunks.size());
+     impl = node->val[0].impl;
+-    vkResetCommandBuffer(impl,VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+     }
+   for(size_t i=1; i<chunks.size(); ++i) {
+-    auto cmd = node->val[i%chunks.chunkSize].impl;
+-    vkFreeCommandBuffers(device.device.impl,pool.impl,1,&cmd);
++    spare.push_back(node->val[i%chunks.chunkSize].impl);
+     if((i+1)%chunks.chunkSize==0)
+       node = node->next;
+     }
+@@ -1096,13 +1103,7 @@ void VCommandBuffer::barrier(const AbstractGraphicsApi::SyncDesc& s, const Abstr
+   auto cmd = impl;
+   if(state==RenderPass) {
+     if(chunks.size()==0) {
+-      VkCommandBuffer cmdBuf = nullptr;
+-      VkCommandBufferAllocateInfo allocInfo = {};
+-      allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+-      allocInfo.commandPool        = pool.impl;
+-      allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+-      allocInfo.commandBufferCount = 1;
+-      vkAssert(vkAllocateCommandBuffers(device.device.impl,&allocInfo,&cmdBuf));
++      VkCommandBuffer cmdBuf = takeCmdBuffer();
+ 
+       VkCommandBufferBeginInfo beginInfo = {};
+       beginInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+@@ -1159,6 +1160,30 @@ void VCommandBuffer::vkCmdEndRenderingKHR(VkCommandBuffer impl) {
+     }
+   }
+ 
++VkCommandBuffer VCommandBuffer::takeCmdBuffer() {
++  if(!spare.empty()) {
++    VkCommandBuffer ret = spare.back();
++    spare.pop_back();
++    return ret;
++    }
++
++  VkCommandBufferAllocateInfo allocInfo = {};
++  allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
++  allocInfo.commandPool        = pool.impl;
++  allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
++  allocInfo.commandBufferCount = 1;
++
++  VkCommandBuffer ret = nullptr;
++  vkAssert(vkAllocateCommandBuffers(device.device.impl,&allocInfo,&ret));
++
++  // for the log of the player: the number stops growing when the command buffers are used again
++  static std::atomic<uint32_t> total{0};
++  const uint32_t n = ++total;
++  if(n==1 || n%256==0)
++    Log::d("[vk] command buffers allocated: ",n);
++  return ret;
++  }
++
+ void VCommandBuffer::pushChunk() {
+   if(impl!=nullptr) {
+     Chunk ch;
+@@ -1171,12 +1196,7 @@ void VCommandBuffer::pushChunk() {
+ void VCommandBuffer::newChunk() {
+   pushChunk();
+ 
+-  VkCommandBufferAllocateInfo allocInfo = {};
+-  allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+-  allocInfo.commandPool        = pool.impl;
+-  allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+-  allocInfo.commandBufferCount = 1;
+-  vkAssert(vkAllocateCommandBuffers(device.device.impl,&allocInfo,&impl));
++  impl = takeCmdBuffer();
+ 
+   VkCommandBufferBeginInfo beginInfo = {};
+   beginInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+diff --git a/Engine/gapi/vulkan/vcommandbuffer.h b/Engine/gapi/vulkan/vcommandbuffer.h
+index d9072740..927506ca 100644
+--- a/Engine/gapi/vulkan/vcommandbuffer.h
++++ b/Engine/gapi/vulkan/vcommandbuffer.h
+@@ -114,6 +114,7 @@ class VCommandBuffer:public AbstractGraphicsApi::CommandBuffer {
+ 
+     void pushChunk();
+     void newChunk();
++    VkCommandBuffer takeCmdBuffer();
+ 
+     void bindVbo(const VBuffer& vbo, size_t stride);
+     void implSetUniforms(const PipelineStage st);
+@@ -140,6 +141,8 @@ class VCommandBuffer:public AbstractGraphicsApi::CommandBuffer {
+     VDevice&                                device;
+     VCommandPool                            pool;
+     VkCommandBuffer                         impl=nullptr;
++    // The command buffers of the chunks of the previous frames. They are allocated once and recorded again after the reset of the pool.
++    std::vector<VkCommandBuffer>            spare;
+ 
+     ResourceState                           resState;
+     std::shared_ptr<VFramebufferMap::RenderPass> passRp;
 diff --git a/Engine/gapi/vulkan/vdescriptorarray.cpp b/Engine/gapi/vulkan/vdescriptorarray.cpp
 index 0919283f..cf0f816f 100644
 --- a/Engine/gapi/vulkan/vdescriptorarray.cpp
@@ -351,6 +477,43 @@ index a9532d8b..839e4ab9 100644
  
      inst.emplace_back(pLay,val);
      }
+diff --git a/Engine/gapi/vulkan/vpoolcache.cpp b/Engine/gapi/vulkan/vpoolcache.cpp
+index b4e6cb9e..3f2ae401 100644
+--- a/Engine/gapi/vulkan/vpoolcache.cpp
++++ b/Engine/gapi/vulkan/vpoolcache.cpp
+@@ -4,6 +4,9 @@
+ #include "vdevice.h"
+ #include "vdescriptorarray.h"
+ 
++#include <Tempest/Log>
++
++#include <atomic>
+ #include <bit>
+ 
+ using namespace Tempest;
+@@ -148,6 +151,12 @@ VkDescriptorPool VPoolCache::allocPool() {
+ 
+   VkDescriptorPool ret = VK_NULL_HANDLE;
+   vkAssert(vkCreateDescriptorPool(dev.device.impl, &poolInfo, nullptr, &ret));
++
++  // for the log of the player: the pools of the push descriptors are made again when more than MaxCache of them are used in a frame
++  static std::atomic<uint32_t> total{0};
++  const uint32_t n = ++total;
++  if(n==1 || n%256==0)
++    Log::d("[vk] descriptor pools created for the push descriptors: ",n);
+   return ret;
+   }
+ 
+@@ -263,6 +272,9 @@ VPoolCache::Inst VPoolCache::allocBindless(const PushBlock& pb, const LayoutDesc
+     }
+ 
+   ret.set  = desc.set;
++  // for the log of the player: a set is kept until one of its resources is destroyed
++  if(descriptors.size()%256==0)
++    Log::d("[vk] bindless descriptor sets kept: ",descriptors.size());
+   return ret;
+   }
+ 
 diff --git a/Engine/gapi/vulkan/vpushdescriptor.cpp b/Engine/gapi/vulkan/vpushdescriptor.cpp
 index f002ef23..dd6ad058 100644
 --- a/Engine/gapi/vulkan/vpushdescriptor.cpp
