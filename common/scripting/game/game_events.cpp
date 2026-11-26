@@ -97,10 +97,15 @@ void game::tick() {
     }
 
   if(host.hasHandlers("tick")) {
+    // the time of the game (World::tickCount): it goes on only when the game makes a step, while this event comes with every
+    // pass of the loop of the window; the tool of the dialogs runs its dialogs once per step of the game
+    const auto* gw = Gothic::inst().world();
+    const double gameTime = gw!=nullptr ? double(gw->tickCount()) : -1.0;
     host.emit("tick",[&](JSContext* ctx) {
       JSValue o = JS_NewObject(ctx);
       number(ctx,o,"dt",double(dt));
       number(ctx,o,"time",double(nowMs));
+      number(ctx,o,"gameTime",gameTime);
       return o;
       });
     }

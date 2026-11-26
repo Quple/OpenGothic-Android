@@ -69,7 +69,7 @@ A script that works for longer than 400 ms in one call (or 4 s at the start) is 
 |---|---|---|
 | `ready` | the script has run | - |
 | `shutdown` | the mod stops or is reset | - |
-| `tick` | every frame | `{dt, time}` (ms) |
+| `tick` | every frame | `{dt, time, gameTime}` (ms; `gameTime`: the time of the game, it does not change between two steps of the game and is -1 without a world) |
 | `world:change` | another world | `{from, to}` |
 | `player:damage` | the health of the player fell | `{damage, health, maxHealth}` |
 | `player:death` | the player died | - |

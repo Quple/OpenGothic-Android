@@ -49,7 +49,9 @@ class DialogView {
         this.fnSelf = "";
         this.fnResult = null;
         this.section = "Dialogs";
-        this.perFrame = 3;
+        // dialogs per step of the game (16 ms of the world in dlgall): the whole list takes ca. 5 s of the world, so that the
+        // events of the story that come with the time (a change of the world) do not come in the middle of the run
+        this.perFrame = 20;
     }
 
     refresh() {
@@ -109,10 +111,16 @@ class DialogView {
         this.refresh();
     }
 
-    // called every frame: some of the dialogs of the run of all
-    tickAll() {
+    // called every pass of the loop of the window: some of the dialogs of the run of all, once per step of the game
+    // (gameTime: the time of the world, the same in the passes between two steps), so that every dialog gets the same time
+    // of the world whatever the speed of the computer
+    tickAll(gameTime) {
         const q = this.queue;
         if (!q) return;
+        if (typeof gameTime === "number" && gameTime >= 0) {
+            if (gameTime === q.lastGameTime) return;
+            q.lastGameTime = gameTime;
+        }
         for (let i = 0; i < this.perFrame && q.pos < q.names.length; ++i) {
             // the position goes on before the call: a dialog that has run is not run again when the script is stopped after it
             const r = this.env.debug.dlgRun(q.names[q.pos++], this.solve, this.execute);

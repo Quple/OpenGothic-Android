@@ -19,7 +19,7 @@ if (typeof ui !== "undefined" && typeof debug !== "undefined") {
     const panel = createPanel({ ui, debug, player, npcs, world });
     ui.tab("Debug", panel.draw);
     // the run of all the dialogs goes on when the menu is closed
-    if (typeof events !== "undefined") events.on("tick", () => panel.views.Dialogs.tickAll());
+    if (typeof events !== "undefined") events.on("tick", (e) => panel.views.Dialogs.tickAll(e && e.gameTime));
     // the same run from the console, a few dialogs per frame (comcheck dlg all stops the game, so it takes at most 300):
     //   dlgall [words]   all the dialogs of the filter, the report goes to dialogtest_report.txt at the end
     //   dlgall resume    after a crash: goes on with the dialogs without a result (dialogtest_progress.txt)

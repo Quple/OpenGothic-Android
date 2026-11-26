@@ -1284,6 +1284,11 @@ uint64_t MainWindow::tick() {
 
   if(dt>50)
     dt=50;
+  // The run of all the dialogs (dlgall): every frame is the same step of the game, of its menus and of the camera. With the
+  // time of the frame a busy computer gave the world more time per dialog (up to 50 ms a frame instead of 16), other events
+  // of the story came (a change of the world) and the results were not the same from one run to the next.
+  if(DialogTest::guardExit)
+    dt = 1000/60;
 
   if(runtimeMode==R_Step) {
     runtimeMode = R_Suspended;
@@ -1307,11 +1312,8 @@ uint64_t MainWindow::tick() {
 #ifdef OPENGOTHIC_TOUCH_UI
   total = fastForwardDt(dt);
 #endif
-  // The run of all the dialogs (dlgall): every frame is the same step of the game. With the time of the frame a busy computer gave
-  // the world more time per dialog (up to 50 ms a frame instead of 16), other events of the story came (a change of the world) and
-  // the results were not the same from one run to the next.
   if(DialogTest::guardExit)
-    total = 1000/60;
+    total = dt;
   if(dialogs.isActive())
     ;//clearInput();
   const uint64_t steps = std::max<uint64_t>(1,(total+49)/50);

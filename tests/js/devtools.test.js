@@ -133,6 +133,21 @@ test("the run stops when there is no world", () => {
     assert.match(v.message, /There is no world/);
 });
 
+test("the dialogs run once per step of the game, not per frame of the window", () => {
+    const { DialogView } = lib("dialogview.js");
+    const debug = fakeDebug(10);
+    const v = new DialogView({ debug });
+    v.perFrame = 2;
+    v.startAll(false);
+    v.tickAll(100);
+    v.tickAll(100);   // the same time of the game: the window has drawn again, the game has not made a step
+    assert.equal(debug.ran.length, 2);
+    v.tickAll(116);
+    assert.equal(debug.ran.length, 4);
+    v.tickAll(-1);    // no world: the dialog is tried (and waits when there is no game)
+    assert.equal(debug.ran.length, 6);
+});
+
 test("no game for a while (another world loads): the dialogs wait, none is left out", () => {
     const { DialogView } = lib("dialogview.js");
     const debug = fakeDebug(6);
