@@ -1,6 +1,6 @@
 # Ikarus/LeGo bez obsługi: konwerter silnika, rejestr luk, przebieg gry bez człowieka
 
-Stan: **26.11.2026, PC: narzędzie dialogów szybkie i powtarzalne, kolej na zadania z worklisty** (sekcja „Postęp 26.11 na PC”
+Stan: **26.11.2026 wieczorem, PC: plan i stan w `docs/PLAN_0_100.md`** (sekcje „Postęp 26.11 na PC” i „po południu”
 niżej). Wszystko poniżej jest zaimplementowane,
 zbudowane (desktop, MSVC, z `-DOPENGOTHIC_TOUCH_UI=ON` i bez) i sprawdzone na Kronikach Myrtany, chyba że napisano inaczej.
 Pierwsza część zmian jest też w jednym pliku: `patches/025-ikarus-automation.patch` (zastosowanie: niżej).
@@ -177,6 +177,20 @@ HEAD sprzed tych zmian (do sprawdzenia osobno).
 Następne kroki: zadania z worklisty deterministycznego przebiegu od góry (`memory 0x00000070`, `0x38`, `0x0c`, `0x00`,
 `0x20`, `0x1c`: odczyty przez pusty wskaźnik; każde rozpoznać, czy to luka warstwy, czy dialog spoza swojego świata,
 patrz problem 8 niżej).
+
+## Postęp 26.11 po południu (PC)
+
+Plan dalszej pracy, stan i polecenia dla agenta: **`docs/PLAN_0_100.md`**. Krótko:
+
+- `15ae804a`: `MEM_GetBufferCRC32` natywnie (test w `comcheck test ikarus`), `Mem32` przydziela next-fit (profil funkcji
+  klatkowych LeGo: czas szedł w `MEM_Alloc` i w hash uchwytów).
+- `29fe7ada`: zdarzenie `tick` modów ma `gameTime`; `dlgall` uruchamia dialogi raz na krok gry (20 na krok), krok
+  1000/60 ms także dla menu i kamery. Wcześniej liczba dialogów na krok zależała od szybkości pętli okna.
+- `2ef21280`: wybór, którego dialog już nie oferuje, jest oznaczony (`applied` w wyniku, `context`/`contextCount` w
+  `ikarus-gaps.json`); `worklist.py` daje takie zadania na koniec z uwagą „Probably not a gap of the game”.
+- **Uwaga:** wynik „ok. 3 min” z sekcji wyżej był przy starym liczeniu dialogów na przejście pętli okna (dużo dialogów na
+  jeden krok gry). Przy stałej liczbie dialogów na krok przebieg przechodzi w okolicy 2700. dialogu do `ARCHOLOS_ENDGAME`
+  (`Q602_START`) i trwa ok. 26 min (5360 z 6145 w limicie 1565 s). To pierwszy punkt w `docs/PLAN_0_100.md`.
 
 ## Znane problemy i następne kroki
 
