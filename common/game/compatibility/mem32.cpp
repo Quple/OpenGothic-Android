@@ -331,7 +331,13 @@ Mem32::Region* Mem32::implAlloc(uint32_t size) {
     return nullptr;
   size = ((size+memAlign-1)/memAlign)*memAlign;
 
-  for(size_t i=0; i<region.size(); ++i) {
+  // next fit: the search starts where the last block was taken. From the first region every time it went over all the blocks
+  // that the scripts hold (LeGo: thousands of handles, prints and animations), once for every MEM_Alloc
+  const size_t n = region.size();
+  if(allocHint>=n)
+    allocHint = 0;
+  for(size_t k=0; k<n; ++k) {
+    const size_t i = (allocHint+k)%n;
     if(region[i].status!=S_Unused)
       continue;
     const uint32_t off = region[i].address % memAlign;
@@ -344,6 +350,7 @@ Mem32::Region* Mem32::implAlloc(uint32_t size) {
       region.insert(region.begin()+ptrdiff_t(i+1),p2);
       }
     region[i].size = size;
+    allocHint = i;
     return &region[i];
     }
 

@@ -209,6 +209,19 @@ function createSelfTests(env) {
         }
     });
 
+    test("ikarus", "CRC32 of a buffer (MEM_GetBufferCRC32, the hash of the handles of LeGo)", () => {
+        needIkarus();
+        needSymbol("MEM_GetBufferCRC32");
+        const p = call("MEM_Alloc", [4]);
+        try {
+            call("MEM_WriteInt", [p, 123456]);
+            eq(call("MEM_GetBufferCRC32", [p, 4]), 153989806, "CRC32 of the int 123456");   // zlib.crc32(struct.pack('<i', 123456))
+        } finally {
+            call("MEM_Free", [p]);
+        }
+        if (has("HASH")) eq(call("HASH", [1]), 435730553, "LeGo hash(1)");
+    });
+
     test("ikarus", "a pointer of a character is positive and the same every time", () => {
         needIkarus();
         needSymbol("MEM_InstToPtr");

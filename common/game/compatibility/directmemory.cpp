@@ -2281,6 +2281,23 @@ void DirectMemory::setupUtilityFunctions() {
       }
     return int32_t(c ^ 0xFFFFFFFF);
     });
+  // The same in the scripts: LeGo hashes every handle (_HT_Get: hash -> MEM_GetBufferCRC32) and Ikarus calls the engine
+  // through machine code that it writes for every call (CALL__cdecl: ASM_Open, ASM, ASM_RunOnce), a few hundred
+  // instructions of the scripts and of the x86 interpreter for four bytes. Answered here with the same result.
+  if(auto* sym = vm.find_symbol_by_name("MEM_GetBufferCRC32"); sym!=nullptr && sym->type()==zenkit::DaedalusDataType::FUNCTION) {
+    vm.override_function("MEM_GetBufferCRC32",[this](int buf, int bufLen) -> int32_t {
+      if(buf==0 || bufLen<=0)
+        return 0;
+      const auto ptr = reinterpret_cast<const uint8_t*>(mem32.deref(ptr32_t(buf),uint32_t(bufLen)));
+      if(ptr==nullptr)
+        return 0;
+      static auto table = generateCrcTable();
+      uint32_t c = 0xFFFFFFFF;
+      for(int i = 0; i < bufLen; ++i)
+        c = table[(c ^ ptr[i]) & 0xFF] ^ (c >> 8);
+      return int32_t(c ^ 0xFFFFFFFF);
+      });
+    }
 
   const ptr32_t QSORT_G2 = 8195951;
   // (the C function qsort: cdecl, the arguments are all on the stack; registered as thiscall the first one was read from ECX)

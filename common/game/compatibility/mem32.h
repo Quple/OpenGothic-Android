@@ -140,6 +140,7 @@ class Mem32 {
     void     memSyncWrite(Callback& cb, const Region& rgn, ptr32_t address, uint32_t size);
 
     ptr32_t             lastWrite = 0;
+    size_t              allocHint = 0;
     std::vector<Region> region;
     std::unordered_map<Type, Callback> memMap;
     std::unordered_map<Type, Observer> observers;
