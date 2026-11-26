@@ -133,6 +133,26 @@ test("the run stops when there is no world", () => {
     assert.match(v.message, /There is no world/);
 });
 
+test("no game for a while (another world loads): the dialogs wait, none is left out", () => {
+    const { DialogView } = lib("dialogview.js");
+    const debug = fakeDebug(6);
+    const run = debug.dlgRun.bind(debug);
+    let loading = 0, sent = false;
+    debug.dlgRun = (name, solve, execute) => {
+        if (loading > 0) { loading--; return null; }
+        const r = run(name, solve, execute);
+        if (name === "DIA_TEST_0002" && !sent) { sent = true; loading = 3; }   // this dialog sends the player to another world
+        return r;
+    };
+    const v = new DialogView({ debug });
+    v.perFrame = 3;
+    v.startAll(false);
+    for (let i = 0; i < 10 && v.queue; ++i) v.tickAll();
+    assert.equal(v.queue, null, "finished");
+    assert.deepEqual(debug.ran, ["DIA_TEST_0000", "DIA_TEST_0001", "DIA_TEST_0002", "DIA_TEST_0003", "DIA_TEST_0004", "DIA_TEST_0005"]);
+    assert.match(v.message, /Done: 6\/6/);
+});
+
 test("Stop: the report is written and the guard is off", () => {
     const { DialogView } = lib("dialogview.js");
     const debug = fakeDebug(20);

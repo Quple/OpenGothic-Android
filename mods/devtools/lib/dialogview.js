@@ -113,8 +113,17 @@ class DialogView {
         const q = this.queue;
         if (!q) return;
         for (let i = 0; i < this.perFrame && q.pos < q.names.length; ++i) {
-            const r = this.env.debug.dlgRun(q.names[q.pos++], this.solve, this.execute);
-            if (r && r.status === "no-world") { this.stopAll("There is no world"); return; }
+            const r = this.env.debug.dlgRun(q.names[q.pos], this.solve, this.execute);
+            // no game for a while (a dialog has sent the player to another world and it is loading): the dialog waits for the next
+            // frame, it is not left out
+            if (r === null || r === undefined) {
+                if (!q.noGame) q.noGame = Date.now();
+                if (Date.now() - q.noGame > 300000) { this.stopAll("There is no game for 5 minutes"); return; }
+                break;
+            }
+            q.noGame = 0;
+            q.pos++;
+            if (r.status === "no-world") { this.stopAll("There is no world"); return; }
         }
         if (Date.now() - q.lastRefresh > 1500) {
             q.lastRefresh = Date.now();
