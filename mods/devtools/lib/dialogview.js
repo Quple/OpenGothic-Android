@@ -82,7 +82,8 @@ class DialogView {
         const names = [];
         let skip = 0;
         for (;;) {
-            const r = this.env.debug.dlgList(this.filter, skip, 500);
+            // one call for the whole list (each call goes through all the dialogs of the scripts)
+            const r = this.env.debug.dlgList(this.filter, skip, 100000);
             if (!r || r.rows.length === 0) break;
             for (const row of r.rows) if (!resume || !row.status) names.push(row.name);
             skip += r.rows.length;
@@ -113,16 +114,17 @@ class DialogView {
         const q = this.queue;
         if (!q) return;
         for (let i = 0; i < this.perFrame && q.pos < q.names.length; ++i) {
-            const r = this.env.debug.dlgRun(q.names[q.pos], this.solve, this.execute);
+            // the position goes on before the call: a dialog that has run is not run again when the script is stopped after it
+            const r = this.env.debug.dlgRun(q.names[q.pos++], this.solve, this.execute);
             // no game for a while (a dialog has sent the player to another world and it is loading): the dialog waits for the next
             // frame, it is not left out
             if (r === null || r === undefined) {
+                q.pos--;
                 if (!q.noGame) q.noGame = Date.now();
                 if (Date.now() - q.noGame > 300000) { this.stopAll("There is no game for 5 minutes"); return; }
                 break;
             }
             q.noGame = 0;
-            q.pos++;
             if (r.status === "no-world") { this.stopAll("There is no world"); return; }
         }
         if (Date.now() - q.lastRefresh > 1500) {

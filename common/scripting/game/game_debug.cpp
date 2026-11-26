@@ -8,6 +8,7 @@
 #include "camera.h"
 #include "game/compatibility/gaplog.h"
 #include "game/dialogtest.h"
+#include "scripting/modhost.h"
 #include "game/gamescript.h"
 #include "gothic.h"
 #include <Tempest/Log>
@@ -548,6 +549,11 @@ JSValue moveNpc(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
 
 // --- the tool of the dialogs (game/dialogtest): the tab Dialogs of mods/devtools
 
+/// the time limit of the script starts again when the work of the game is done (see ModHost::renewDeadline)
+struct DeadlineAfter final {
+  ~DeadlineAfter() { Scripting::ModHost::inst().renewDeadline(); }
+  };
+
 DialogTest* dlgTool() {
   auto* w = world();
   return w==nullptr ? nullptr : &w->script().dialogTest();
@@ -579,6 +585,7 @@ JSValue dlgResult(JSContext* ctx, DialogTest& t, const DialogTest::Result& r) {
 
 /// debug.dlgList(filter, skip, max) -> {total, rows: [{name, npc, npcName, description, nr, important, permanent, trade, known, inWorld, status}]}
 JSValue dlgList(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  const DeadlineAfter renew;
   auto* t = dlgTool();
   if(t==nullptr)
     return JS_NULL;
@@ -609,6 +616,7 @@ JSValue dlgList(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
 
 /// debug.dlgAnalyze(info) -> text: what the condition of the dialog needs and what the tool can do about it
 JSValue dlgAnalyze(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  const DeadlineAfter renew;
   auto* t = dlgTool();
   if(t==nullptr || argc<1)
     return JS_NULL;
@@ -617,6 +625,7 @@ JSValue dlgAnalyze(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
 
 /// debug.dlgRun(info, solve, execute) -> the result of the run
 JSValue dlgRun(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  const DeadlineAfter renew;
   auto* t = dlgTool();
   if(t==nullptr || argc<1)
     return JS_NULL;
@@ -638,6 +647,7 @@ JSValue dlgRun(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
 
 /// debug.dlgRunFn(function, selfNpcInstance) -> the result of the run of a scene (a function of the scripts)
 JSValue dlgRunFn(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  const DeadlineAfter renew;
   auto* t = dlgTool();
   if(t==nullptr || argc<1)
     return JS_NULL;
@@ -655,12 +665,14 @@ JSValue dlgRunFn(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   }
 
 JSValue dlgReport(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  const DeadlineAfter renew;
   auto* t = dlgTool();
   return t==nullptr ? JS_NULL : JS_NewString(ctx,t->report().c_str());
   }
 
 /// debug.dlgSave(path) -> bool
 JSValue dlgSave(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  const DeadlineAfter renew;
   auto* t = dlgTool();
   if(t==nullptr || argc<1)
     return JS_FALSE;
@@ -704,11 +716,13 @@ JSValue dlgGuard(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
 
 /// debug.dlgResume() -> the number of results that were read from dialogtest_progress.txt (a run that the game did not finish)
 JSValue dlgResume(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+  const DeadlineAfter renew;
   auto* t = dlgTool();
   return JS_NewUint32(ctx,t==nullptr ? 0 : uint32_t(t->loadProgress()));
   }
 
 JSValue dlgReset(JSContext*, JSValueConst, int, JSValueConst*) {
+  const DeadlineAfter renew;
   if(auto* t = dlgTool())
     t->reset();
   return JS_TRUE;

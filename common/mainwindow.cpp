@@ -33,6 +33,7 @@
 #include "utils/dbgpainter.h"
 #include "utils/crashlog.h"
 #include "utils/autorun.h"
+#include "game/dialogtest.h"
 
 #include "commandline.h"
 #include "gothic.h"
@@ -1306,6 +1307,11 @@ uint64_t MainWindow::tick() {
 #ifdef OPENGOTHIC_TOUCH_UI
   total = fastForwardDt(dt);
 #endif
+  // The run of all the dialogs (dlgall): every frame is the same step of the game. With the time of the frame a busy computer gave
+  // the world more time per dialog (up to 50 ms a frame instead of 16), other events of the story came (a change of the world) and
+  // the results were not the same from one run to the next.
+  if(DialogTest::guardExit)
+    total = 1000/60;
   if(dialogs.isActive())
     ;//clearInput();
   const uint64_t steps = std::max<uint64_t>(1,(total+49)/50);

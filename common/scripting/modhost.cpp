@@ -37,6 +37,11 @@ int ModHost::interrupt(JSRuntime*, void* self) {
   return h->deadline!=0 && steadyMs()>h->deadline ? 1 : 0;
   }
 
+void ModHost::renewDeadline() {
+  if(deadline!=0)
+    deadline = std::max(deadline,steadyMs()+400);
+  }
+
 // import "./file.mjs" in the files of a mod
 char* ModHost::normalizeModule(JSContext* ctx, const char* base, const char* name, void*) {
   std::string joined = name;

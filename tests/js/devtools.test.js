@@ -85,7 +85,7 @@ test("Test all: fresh start forgets the old results, guards the exit, lists all 
     assert.equal(debug.resets, 1);
     assert.equal(debug.resumes, 0);
     assert.equal(debug.guard, true, "the scripts must not end the game during the run");
-    assert.equal(v.queue.names.length, 1250, "more than one page of the list (500 per page)");
+    assert.equal(v.queue.names.length, 1250, "the whole list");
     assert.equal(new Set(v.queue.names).size, 1250);
 });
 

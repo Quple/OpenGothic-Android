@@ -176,6 +176,10 @@ class ModHost final {
     /// A running mod has asked for the fast forward (touch.fastForward(true)): only then the touch interface shows
     /// the button on the HUD and the setting of the speed. Without such a mod the game is vanilla.
     bool   fastForwardWanted() const;
+    /// A function of the game that a mod calls has worked long (the tool of the dialogs: a dialog, the list of all of them, the
+    /// report): the time limit of the script (400 ms a call) starts again after it. The limit stops a loop of the script, not the
+    /// work of the game; on a busy computer that work alone went over it and the script was stopped in the middle.
+    void   renewDeadline();
     /// Options of the first running mod that has switched the combat display on (active==false when there is none)
     CombatOptions combatOptions() const;
     /// Gives `visualSink` the words of the visuals that the running mods want hidden (world.setHiddenVisuals). Nothing
