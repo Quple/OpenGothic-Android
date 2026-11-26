@@ -15,6 +15,7 @@
 #include <sstream>
 #include <unordered_map>
 
+#include "game/compatibility/gaplog.h"
 #include "game/gamescript.h"
 #include "utils/gamelog.h"
 #include "world/objects/interactive.h"
@@ -1840,6 +1841,21 @@ DialogTest::Result DialogTest::runImpl(std::string_view infoName, bool solve, bo
       todo.erase(todo.begin());
       if(fn==0 || !done.insert(fn).second)
         continue;
+      // The player picks only what the dialog offers now. A choice that a later one has taken away (Info_ClearChoices, a menu
+      // that goes back and sets the globals of the menu again) still runs, for the lines and the commands that it has, but
+      // what it lacks then is not a gap of the game: the gaps of that time are marked (GapLog context) and it is in the result
+      const bool stale = fn!=uint32_t(info->information) &&
+          std::none_of(info->choices.begin(),info->choices.end(),[fn](const auto& c){ return uint32_t(c.function)==fn; });
+      if(stale) {
+        auto* fs = symOf(env,fn);
+        const std::string fname = fs!=nullptr ? fs->name() : std::to_string(fn);
+        r.applied.push_back("the choice "+fname+" ran although the dialog no longer offered it");
+        Compatibility::GapLog::inst().setContext("dlgall: the choice "+fname+" of "+r.name+" ran although the dialog no longer offered it");
+        }
+      struct ContextOff {
+        bool on;
+        ~ContextOff() { if(on) Compatibility::GapLog::inst().setContext({}); }
+        } contextOff{stale};
       GameScript::DlgChoice ch;
       ch.title    = info->description;
       ch.scriptFn = fn;

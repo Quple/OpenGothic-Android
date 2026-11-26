@@ -90,6 +90,8 @@ void GapLog::note(Kind kind, uint32_t address, std::string_view name, std::strin
   auto it = entries.find(key);
   if(it!=entries.end()) {
     it->second.count++;
+    if(!context.empty() && it->second.contextCount++==0)
+      it->second.context = context;
     dirty = true;
     return;
     }
@@ -106,6 +108,10 @@ void GapLog::note(Kind kind, uint32_t address, std::string_view name, std::strin
   e.stack   = scriptStack();
   e.regs    = regs;
   e.count   = 1;
+  if(!context.empty()) {
+    e.contextCount = 1;
+    e.context      = context;
+    }
   auto& ref = entries.emplace(std::move(key),std::move(e)).first->second;
   dirty = true;
   Tempest::Log::i("IKGAP ",entryJson(ref));
@@ -135,8 +141,18 @@ std::string GapLog::entryJson(const Entry& e) const {
       s += ',';
     appendEscaped(s,e.stack[i]);
     }
-  s += "],\"count\":" + std::to_string(e.count) + "}";
+  s += "],\"count\":" + std::to_string(e.count);
+  if(e.contextCount>0) {
+    s += ",\"contextCount\":" + std::to_string(e.contextCount) + ",\"context\":";
+    appendEscaped(s,e.context);
+    }
+  s += "}";
   return s;
+  }
+
+void GapLog::setContext(std::string_view c) {
+  std::lock_guard<std::recursive_mutex> guard(sync);
+  context = std::string(c);
   }
 
 std::string GapLog::json() const {

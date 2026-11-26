@@ -47,6 +47,9 @@ class GapLog {
 
     /// Writes ikarus-gaps.json (all the gaps with their counts)
     void     flush();
+    /// What the game does now that is not play (the tool of the dialogs runs a choice that the dialog no longer offers): the
+    /// gaps of that time count also as `contextCount` with the first `context`; a gap with only such hits comes from the tool
+    void     setContext(std::string_view context);
     size_t   size() const;
     uint64_t total() const;
     /// The gaps as JSON, for the mods (debug.gaps()) and the autorun
@@ -64,6 +67,8 @@ class GapLog {
       std::vector<std::string> stack;
       std::vector<uint32_t>    regs;
       uint64_t                 count   = 0;
+      uint64_t                 contextCount = 0;
+      std::string              context;
       };
     using Key = std::tuple<uint8_t,uint32_t,std::string,std::string>;
 
@@ -72,6 +77,7 @@ class GapLog {
 
     mutable std::recursive_mutex sync;
     const zenkit::DaedalusVm*    vm = nullptr;
+    std::string                  context;
     std::map<Key,Entry>          entries;
     uint64_t                     all = 0;
     bool                         dirty = false;

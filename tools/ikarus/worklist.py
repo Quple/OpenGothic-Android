@@ -271,7 +271,10 @@ def main():
         t['story'] = sorted(f for f in reach if f.startswith(('DIA_', 'B_', 'ZS_', 'INIT_', 'STARTUP_')))[:12]
         hits = sum(g.get('count', 1) for g in t['runtime'])
         t['hits'] = hits
-        t['priority'] = (3 if t['kind'] == 'crash' else 2 if t['kind'] == 'check' else 1 if hits else 0, hits,
+        # every hit came while the tool of the dialogs ran a choice that the dialog no longer offered (GapLog context):
+        # not a gap of the game, at the end of the list
+        t['tool'] = bool(t['runtime']) and all(g.get('contextCount', 0) >= g.get('count', 1) for g in t['runtime'])
+        t['priority'] = (-1 if t['tool'] else 3 if t['kind'] == 'crash' else 2 if t['kind'] == 'check' else 1 if hits else 0, hits,
                          len(t['story']) > 0, t['reach'], t['static_call_sites'])
 
     ordered = sorted(tasks.values(), key=lambda t: t['priority'], reverse=True)
@@ -327,6 +330,10 @@ def render(t, db, dat, args, handled_by_class, functions):
                  f"reach it {t['reach']}, records of the game {t['hits']}.")
     if t.get('handler'):
         lines.append(f"Current handler: `{t['handler']}`.")
+    if t.get('tool'):
+        ctx = next((g.get('context') for g in t['runtime'] if g.get('context')), '')
+        lines += ['', f"**Probably not a gap of the game:** every record came while {ctx or 'the tool of the dialogs ran a choice that the dialog no longer offered'}. "
+                  'In the game the player cannot pick that choice in that state; check it in the game before you work on it.']
     lines.append('')
 
     if f:
