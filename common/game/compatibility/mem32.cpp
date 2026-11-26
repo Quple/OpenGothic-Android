@@ -116,9 +116,8 @@ Mem32::ptr32_t Mem32::alloc(uint32_t size, Type type, const char* comment) {
 void Mem32::free(ptr32_t address) {
   if(address==0)
     return;
-  for(size_t i=0; i<region.size(); ++i) {
-    if(region[i].address!=address)
-      continue;
+  const size_t i = regionAt(address);
+  if(i!=size_t(-1) && region[i].address==address) {
     if(region[i].status==S_Pin || region[i].status==S_Unused) {
       if(Compatibility::logBudget("mem32:free-pinned"))
         Log::e("mem_free: address is not an owned allocation: ",address);
@@ -128,7 +127,7 @@ void Mem32::free(ptr32_t address) {
     region[i].real   = nullptr;
     region[i].status = S_Unused;
     region[i].type   = Type::plain;
-    compactage();
+    mergeUnused(i);
     return;
     }
   Log::e("mem_free: heap block wan't allocated by script: ", reinterpret_cast<void*>(uint64_t(address)));
@@ -455,10 +454,11 @@ bool Mem32::implRealloc(ptr32_t address, uint32_t nsize) {
   if(address==0)
     return false;
   // NOTE: in place only
-  for(size_t i=0; i<region.size(); ++i) {
+  const size_t at = regionAt(address);
+  for(size_t i=(at==size_t(-1) ? region.size() : at); i<region.size(); ++i) {
     auto& rgn = region[i];
     if(rgn.address!=address)
-      continue; //TODO: binary-search
+      break;
 
     if(nsize==rgn.size)
       return true;
@@ -497,12 +497,42 @@ bool Mem32::implRealloc(ptr32_t address, uint32_t nsize) {
   return false;
   }
 
-Mem32::Region* Mem32::implTranslate(ptr32_t address) {
-  // TODO: binary-search
-  for(auto& rgn:region) {
-    if(rgn.address<=address && uint64_t(address)<uint64_t(rgn.address)+rgn.size && rgn.status!=S_Unused)
-      return &rgn;
+size_t Mem32::regionAt(ptr32_t address) const {
+  // the regions cover the address space in the order of the addresses, one after the other: the last one that begins at the
+  // address or before it is the one that can contain it
+  auto it = std::upper_bound(region.begin(),region.end(),address,[](ptr32_t a, const Region& r){ return a<r.address; });
+  if(it==region.begin())
+    return size_t(-1);
+  return size_t(std::distance(region.begin(),it))-1;
+  }
+
+void Mem32::mergeUnused(size_t i) {
+  // what compactage() does, for the neighbours of one region only
+  if(i+1<region.size()) {
+    auto& a = region[i];
+    auto& b = region[i+1];
+    if(a.status==S_Unused && b.status==S_Unused && a.address+a.size==b.address) {
+      a.size += b.size;
+      region.erase(region.begin()+ptrdiff_t(i+1));
+      }
     }
+  if(i>0 && i<region.size()) {
+    auto& a = region[i-1];
+    auto& b = region[i];
+    if(a.status==S_Unused && b.status==S_Unused && a.address+a.size==b.address) {
+      a.size += b.size;
+      region.erase(region.begin()+ptrdiff_t(i));
+      }
+    }
+  }
+
+Mem32::Region* Mem32::implTranslate(ptr32_t address) {
+  const size_t i = regionAt(address);
+  if(i==size_t(-1))
+    return nullptr;
+  auto& rgn = region[i];
+  if(uint64_t(address)<uint64_t(rgn.address)+rgn.size && rgn.status!=S_Unused)
+    return &rgn;
   return nullptr;
   }
 

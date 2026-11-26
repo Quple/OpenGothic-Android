@@ -1473,6 +1473,70 @@ void DirectMemory::setupMemoryFunctions() {
       }
     return 1;
     });
+  // The arrays of Ikarus (zCArray: +0 the elements, +8 their number) are searched in bytecode one MEM_ReadInt at a time; LeGo
+  // removes every deleted handle from the list of its class that way (_PM_RemoveFromForeachTable). With a few thousand handles
+  // that is most of the time of a frame, so the search is done here, with the same results as the scripts.
+  if(vm.find_symbol_by_name("MEM_ReadIntArray")!=nullptr)   // not in the old versions of Ikarus
+  vm.override_function("MEM_ReadIntArray",[this](int address, int offset) -> int32_t {
+    return mem_readint(int(uint32_t(address)+4u*uint32_t(offset)));
+    });
+  if(vm.find_symbol_by_name("MEM_WriteIntArray")!=nullptr)   // not in the old versions of Ikarus
+  vm.override_function("MEM_WriteIntArray",[this](int address, int offset, int value) {
+    mem_writeint(int(uint32_t(address)+4u*uint32_t(offset)),value);
+    });
+  if(vm.find_symbol_by_name("MEM_ArrayIndexOf")!=nullptr)   // not in the old versions of Ikarus
+  vm.override_function("MEM_ArrayIndexOf",[this](int array, int value) -> int32_t {
+    if(array==0) {
+      memError("MEM_ArrayIndexOf: Invalid address: zCArray_ptr may not be null!");
+      return -1;
+      }
+    const int32_t n = mem32.readInt(ptr32_t(array)+8);
+    return arrayFind(mem32.readInt(ptr32_t(array)),0,n,value);
+    });
+  if(vm.find_symbol_by_name("MEM_ArrayRemoveValue")!=nullptr)   // not in the old versions of Ikarus
+  vm.override_function("MEM_ArrayRemoveValue",[this](int array, int value) {
+    if(array==0) {
+      memError("MEM_ArrayRemoveValue: Invalid address: zCArray_ptr may not be null!");
+      return;
+      }
+    // MEM_ArrayRemoveValueOnce sets MEMINT_ArrayRemoveValue_OnlyOnce and expects 2 back when the value was found
+    auto* once = vm.find_symbol_by_name("MEMINT_ArrayRemoveValue_OnlyOnce");
+    const ptr32_t arr = ptr32_t(array);
+    int32_t i = 0;
+    for(;;) {
+      const int32_t n    = mem32.readInt(arr+8);
+      const ptr32_t data = ptr32_t(mem32.readInt(arr));
+      i = arrayFind(int32_t(data),i,n,value);
+      if(i<0)
+        return;
+      // the last element goes into the gap, the search goes on at the same place
+      mem_writeint(int(arr+8),n-1);
+      mem_writeint(int(data+4u*uint32_t(i)),mem32.readInt(data+4u*uint32_t(n-1)));
+      if(once!=nullptr && once->type()==zenkit::DaedalusDataType::INT && once->get_int()!=0) {
+        once->set_int(2);
+        return;
+        }
+      }
+    });
+  // MEM_ArrayRead/Write: every lookup of the hash tables of LeGo (_HT_Get: the handles of PermMem) goes through them
+  if(vm.find_symbol_by_name("MEM_ArrayRead")!=nullptr)
+  vm.override_function("MEM_ArrayRead",[this](int array, int pos) -> int32_t {
+    const int32_t n = mem32.readInt(ptr32_t(array)+8);
+    if(pos<0 || n<=pos) {
+      memError("MEM_ArrayRead: pos out of bounds: "+std::to_string(pos));
+      return 0;
+      }
+    return mem_readint(int(ptr32_t(mem32.readInt(ptr32_t(array)))+4u*uint32_t(pos)));
+    });
+  if(vm.find_symbol_by_name("MEM_ArrayWrite")!=nullptr)
+  vm.override_function("MEM_ArrayWrite",[this](int array, int pos, int value) {
+    const int32_t n = mem32.readInt(ptr32_t(array)+8);
+    if(pos<0 || n<=pos) {
+      memError("MEM_ArrayWrite: pos out of bounds: "+std::to_string(pos));
+      return;
+      }
+    mem_writeint(int(ptr32_t(mem32.readInt(ptr32_t(array)))+4u*uint32_t(pos)),value);
+    });
   vm.override_function("MEM_ReadString",       [this](int sym){ return mem_readstring(sym);           });
   vm.override_function("MEM_WriteString", [this](int location, std::string_view text) {
     const auto address = ptr32_t(location);
@@ -1651,6 +1715,40 @@ void DirectMemory::syncOwnedStrings(ptr32_t address, uint32_t size) {
       st.synced = dst;
       }
     }
+  }
+
+void DirectMemory::memError(const std::string& text) {
+  // MEM_Error of the scripts: the message goes where Ikarus sends it (zSpy, the log, a box in the debug mode)
+  if(auto* sym = vm.find_symbol_by_name("MEM_Error"); sym!=nullptr && sym->type()==zenkit::DaedalusDataType::FUNCTION) {
+    try {
+      vm.call_function<void>(sym,std::string_view(text));
+      return;
+      }
+    catch(const std::exception&) {}
+    }
+  Log::e(text);
+  }
+
+int DirectMemory::arrayFind(int32_t data, int32_t from, int32_t count, int32_t value) {
+  from = std::max(from,0);
+  if(from>=count)
+    return -1;
+  // the elements are one block of the memory (MEM_Alloc of MEM_ArrayInsert): read at once; otherwise one MEM_ReadInt after the other
+  const ptr32_t at = ptr32_t(data)+4u*uint32_t(from);
+  const uint64_t bytes = 4u*uint64_t(count-from);
+  if(auto* ptr = bytes<=UINT32_MAX ? reinterpret_cast<const uint8_t*>(mem32.deref(at,uint32_t(bytes))) : nullptr) {
+    for(int32_t k=0; k<count-from; ++k) {
+      int32_t v = 0;
+      std::memcpy(&v,ptr+4*k,4);
+      if(v==value)
+        return from+k;
+      }
+    return -1;
+    }
+  for(int32_t i=from; i<count; ++i)
+    if(mem_readint(int(ptr32_t(data)+4u*uint32_t(i)))==value)
+      return i;
+  return -1;
   }
 
 int DirectMemory::mem_readint(int address) {

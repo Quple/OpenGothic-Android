@@ -128,6 +128,9 @@ class Mem32 {
     bool     implRealloc(ptr32_t address, uint32_t size);
     Region*  implTranslate(ptr32_t address);
     Region*  translate(ptr32_t address);
+    /// the index of the region that begins at the address or before it (the regions are sorted by the address), -1 if none
+    size_t   regionAt(ptr32_t address) const;
+    void     mergeUnused(size_t i);
     void     compactage();
 
     void     memSyncRead(Type       t, const Region& rgn, ptr32_t address, uint32_t size);

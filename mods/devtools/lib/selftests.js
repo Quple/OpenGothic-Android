@@ -179,6 +179,36 @@ function createSelfTests(env) {
         }
     });
 
+    test("ikarus", "an array: index of a value, remove a value (all, once), read and write by position, as in Ikarus", () => {
+        needIkarus();
+        for (const f of ["MEM_ArrayCreate", "MEM_ArrayInsert", "MEM_ArrayIndexOf", "MEM_ArrayRemoveValue", "MEM_ArrayRemoveValueOnce",
+                         "MEM_ArrayRead", "MEM_ArrayWrite", "MEM_ArraySize", "MEM_ReadIntArray", "MEM_ArrayFree"]) needSymbol(f);
+        const arr = call("MEM_ArrayCreate", []);
+        const content = () => {
+            const out = [];
+            for (let i = 0, n = call("MEM_ArraySize", [arr]); i < n; ++i) out.push(call("MEM_ArrayRead", [arr, i]));
+            return JSON.stringify(out);
+        };
+        try {
+            for (const n of [5, 7, 5, 9, 5]) call("MEM_ArrayInsert", [arr, n]);
+            eq(call("MEM_ArrayIndexOf", [arr, 5]), 0, "index of 5");
+            eq(call("MEM_ArrayIndexOf", [arr, 9]), 3, "index of 9");
+            eq(call("MEM_ArrayIndexOf", [arr, 4]), -1, "index of a value that is not there");
+            // every 5 goes, the last element fills the gap each time: [5,7,5,9,5] -> [5,7,5,9] -> [9,7,5] -> [9,7]
+            call("MEM_ArrayRemoveValue", [arr, 5]);
+            eq(content(), "[9,7]", "after MEM_ArrayRemoveValue 5");
+            call("MEM_ArrayInsert", [arr, 7]);
+            call("MEM_ArrayRemoveValueOnce", [arr, 7]);
+            eq(content(), "[9,7]", "after MEM_ArrayRemoveValueOnce 7 (only the first one)");
+            if (has("MEMINT_ArrayRemoveValue_OnlyOnce")) eq(debug.symbol("MEMINT_ArrayRemoveValue_OnlyOnce").value, 0, "the flag of Once is back");
+            call("MEM_ArrayWrite", [arr, 1, 42]);
+            eq(call("MEM_ArrayRead", [arr, 1]), 42, "MEM_ArrayRead after MEM_ArrayWrite");
+            eq(call("MEM_ReadIntArray", [call("MEM_ReadInt", [arr]), 0]), 9, "MEM_ReadIntArray of the elements");
+        } finally {
+            call("MEM_ArrayFree", [arr]);
+        }
+    });
+
     test("ikarus", "a pointer of a character is positive and the same every time", () => {
         needIkarus();
         needSymbol("MEM_InstToPtr");

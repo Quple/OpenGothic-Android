@@ -308,6 +308,9 @@ class DirectMemory {
     int         mem_insttoptr(int index);
     auto        _takeref(zenkit::DaedalusVm& vm) -> zenkit::DaedalusNakedCall;
     int         mem_readint       (int address);
+    /// the index of the value among count ints at data, from the index from; -1 when it is not there
+    int         arrayFind         (int32_t data, int32_t from, int32_t count, int32_t value);
+    void        memError          (const std::string& text);
     void        mem_writeint      (int address, int val);
     void        mem_copybytes     (int src, int dst, int size);
     std::string mem_readstring    (int address);
