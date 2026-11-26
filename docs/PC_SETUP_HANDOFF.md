@@ -1,5 +1,14 @@
 # Handoff: przebieg wszystkich dialogów Kronik Myrtany na PC (Kiro CLI)
 
+> **Wykonane 26.11.2026.** Kroki 1–5 zrobione, potem naprawione narzędzie dialogów: pełny przebieg trwa ok. 3 min i daje
+> te same wyniki przy każdym uruchomieniu (szczegóły: `docs/IKARUS_AUTOMATION.md`, „Postęp 26.11 na PC”). Praca idzie
+> dalej na PC: zadania z worklisty. Różnice względem opisu niżej:
+> - Na PC jest Visual Studio Build Tools 18 (2026), a CMake 4.5.0-rc1 z `PATH` nie buduje (Ninja: brak
+>   `CXXInterfaceObjects.rsp`); `build-ikarus\build-pc.cmd` używa CMake z Visual Studio.
+> - Kroniki są w `F:\SteamLibrary\steamapps\common\TheChroniclesOfMyrtana`.
+> - Krok 4: `dlgall` zamiast `dlgall resume`, `waitfor Done: 900`, `--timeout 1000`; `Start-Process` i podział na części nie
+>   są już potrzebne.
+
 Dla agenta na PC użytkownika. Użytkownik skopiował cały folder repo z laptopa na PC i otworzył go w VS Code.
 Twoje zadanie: **sprawdzić i przygotować środowisko, zbudować grę desktop, zrobić krótki test, a potem uruchomić
 pełny przebieg dialogów i przekazać wyniki.** Tło: `docs/IKARUS_AUTOMATION.md` (przeczytaj sekcje „Użycie” i

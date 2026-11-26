@@ -1,6 +1,7 @@
 # Ikarus/LeGo bez obsługi: konwerter silnika, rejestr luk, przebieg gry bez człowieka
 
-Stan: **25.11.2026 wieczorem, praca wznowiona** (sekcja „Postęp 25.11 wieczorem” niżej). Wszystko poniżej jest zaimplementowane,
+Stan: **26.11.2026, PC: narzędzie dialogów szybkie i powtarzalne, kolej na zadania z worklisty** (sekcja „Postęp 26.11 na PC”
+niżej). Wszystko poniżej jest zaimplementowane,
 zbudowane (desktop, MSVC, z `-DOPENGOTHIC_TOUCH_UI=ON` i bez) i sprawdzone na Kronikach Myrtany, chyba że napisano inaczej.
 Pierwsza część zmian jest też w jednym pliku: `patches/025-ikarus-automation.patch` (zastosowanie: niżej).
 
@@ -25,7 +26,7 @@ modcheck.py  ->  DAT moda  ->  audyt statyczny  ->  gra bez człowieka (-autorun
 | Stos skryptu | `patches/zenkit-opengothic.patch` | ZenKit dostał `DaedalusVm::call_stack()` (sam akcesor, bez zmiany działania). |
 | Obserwator pamięci | `mem32.h/.cpp` | `Mem32::setObserver(Type, fn)`: odczyty i zapisy skryptów w regionach typowanych (readInt/writeInt/bajty/copyBytes). |
 | Gra bez człowieka | `common/utils/autorun.h/.cpp`, `commandline.*`, `mainwindow.cpp` | `-autorun "<komendy>"` i `-autoexit <s>`. Komendy po `;`: `wait <s>`, `waitfor <tekst> [s]`, `gaps`, `quit`, reszta do konsoli modów (`comcheck ...`, `dlgall`, `eval <mod> <kod>`). Po ostatniej komendzie gra sama się zamyka i pisze `autorun-report.json` (wynik, konsola modów, błędy logu, luki). |
-| Wszystkie dialogi z konsoli | `mods/devtools/index.js` | `dlgall [słowa]`, `dlgall resume` (po crashu, pomija dialog, który go wywołał), `dlgall stop` — to samo co przycisk „Test all”, kilka dialogów na klatkę. |
+| Wszystkie dialogi z konsoli | `mods/devtools/index.js` | `dlgall [słowa]`, `dlgall resume` (po crashu, pomija dialog, który go wywołał), `dlgall stop` — to samo co przycisk „Test all”, kilka dialogów na klatkę, stały krok gry 1000/60 ms (wyniki nie zależą od szybkości komputera). |
 | Lista zadań | `tools/ikarus/worklist.py` | Łączy audyt, DAT, bazę silnika, rekordy z gry (log.txt z telefonu, `ikarus-gaps.json`, `autorun-report.json`, crash) i oryginalny exe. Jedno zadanie = jeden plik `.md`: sygnatura, klasa i jej układ, gdzie są handlery tej samej klasy, bajtkod wywołujących funkcji z nazwami adresów, kod x86 w miejscu hooka wewnątrz funkcji (capstone), rekordy z gry, szkielet C++, kryterium „gotowe”, zasady warstwy. Kolejność: crash, nieudane testy, trafienia w grze, zasięg w skryptach. |
 | Jedna komenda | `tools/ikarus/modcheck.py` | Instalacja gry → GOTHIC.DAT (najnowszy wolumen, jak w VDF Gothica) → baza silnika → audyt → (opcjonalnie) przebieg gry → worklist → `SUMMARY.md`. Crash bez raportu jest zadaniem z ogonem logu i nazwą dialogu (`dialogtest_last.txt`). Folderu gry nie zmienia. |
 | `disasm.py` | `tools/ikarus/disasm.py` | `Dat.find`, `Dat.disasm_lines` (tekst z nazwami celów `bl` i wartościami stałych) dla worklist. |
@@ -41,13 +42,18 @@ pip install --target build-ikarus/pylib capstone                   # opcjonalnie
 cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake -S . -B build-desktop -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOPENGOTHIC_TOUCH_UI=ON && cmake --build build-desktop --target Gothic2Notr'
 ```
 
+CMake 4.5.0-rc1 (osobna instalacja w `PATH`) generuje dla Ninja regułę do `CXXInterfaceObjects.rsp`, którego nie tworzy:
+build kończy się `ninja: error: ... CXXInterfaceObjects.rsp ... missing`. CMake z Visual Studio (4.3.1-msvc1) działa: po
+`vcvars64.bat` dopisz `set "PATH=<VS>\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;%PATH%"` (na PC tak robi
+`build-ikarus\build-pc.cmd`). Visual Studio Build Tools 18 (2026) też działa, nie tylko 2022.
+
 Mod:
 
 ```powershell
 $g = 'C:/Program Files (x86)/Steam/steamapps/common/TheChroniclesOfMyrtana'
 python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini                        # tylko statycznie
 python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini --run "wait 30; comcheck test ikarus; comcheck fix all; wait 5" --timeout 300
-python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini --run "wait 30; dlgall; waitfor Done: 1700; wait 5" --timeout 1800 --out build-ikarus/com-dialogs   # ok. 630 dialogów; dalej: "wait 30; dlgall resume; waitfor Done: ..."
+python tools/ikarus/modcheck.py --game $g --ini TheChroniclesOfMyrtana.ini --run "wait 30; dlgall; waitfor Done: 900; wait 5" --timeout 1000 --out build-ikarus/com-dialogs   # wszystkie 6145 dialogów, ok. 3 min (PC, Ryzen 7 5800X3D); po crashu: "wait 30; dlgall resume; waitfor Done: ..."
 # log z telefonu:
 python tools/ikarus/worklist.py --audit build-ikarus/TheChroniclesOfMyrtana/audit --dat build-ikarus/TheChroniclesOfMyrtana/GOTHIC.DAT --gaps <log.txt> --out build-ikarus/phone
 ```
@@ -125,6 +131,52 @@ zanim te zadania zostaną zamknięte jako „jak w oryginale”.
 
 Następne kroki: wolność `dlgall` (profilowanie: co zajmuje ok. 3 s CPU na dialog), pełny przebieg dialogów
 (na szybszym PC albo w kilku częściach przez `dlgall resume`), potem zadania z `com-dialogs/worklist` od góry.
+(Zrobione 26.11 na PC, sekcja niżej.)
+
+## Postęp 26.11 na PC
+
+Pełny przebieg `dlgall` (6145 dialogów) trwa ok. 3 min zamiast ok. 5,5 h i daje te same wyniki przy każdym uruchomieniu,
+także na zajętym komputerze. Commity `130deac3`, `e964cbd6`, `4a1ff35f`.
+
+- **Wolność nie była w dialogach.** Pomiar czasu klatki: sam `dlgRun` 5–40 ms, reszta to funkcje klatkowe LeGo
+  (`_FF_Hook`: `_ANIM8_LOOP`, `GCPRINTS_ALPHA`, napisy ekranowe modu), z 130 ms do 11 s na klatkę po 600 dialogach.
+  Profil próbkujący licznik instrukcji VM: 84% w `MEM_ArrayRemoveValue`/`MEM_ReadIntArray`, potem `_HT_Get`/`MEM_ArrayRead`.
+  Przyczyna: `Mem32::implTranslate` szukał bloku liniowo (było „TODO: binary-search”), więc każdy `MEM_ReadInt` kosztował
+  tyle, ile bloków pamięci (uchwyty PermMem, napisy, Anim8), a bloków przybywało z każdym dialogiem.
+  - `Mem32`: blok szukany binarnie (`regionAt`, regiony są posortowane po adresie), także w `free` i `realloc`;
+    po zwolnieniu łączone są tylko sąsiednie wolne bloki.
+  - Tablice Ikarusa natywnie (`MEM_ArrayRead/Write`, `MEM_ArrayIndexOf`, `MEM_ArrayRemoveValue(Once)`,
+    `MEM_Read/WriteIntArray`), z semantyką skryptów: ostatni element w lukę, `MEMINT_ArrayRemoveValue_OnlyOnce`,
+    `MEM_Error` przy złym indeksie. Test w `comcheck test ikarus` („an array: index of a value, remove a value…”)
+    przechodzi tak samo na nadpisaniach i na oryginalnym kodzie Ikarusa.
+- **`dlgall` gubił dialogi przy zmianie świata.** Gdy dialog przenosił gracza do innego świata, `debug.dlgRun` przez czas
+  ładowania zwracał `null`, a kolejka szła dalej: ok. 340 dialogów (wszystkie `MIL_*`) nie miało wyniku. Teraz dialog czeka
+  na następną klatkę; po 5 min bez gry przebieg kończy się komunikatem „There is no game for 5 minutes”.
+- **Wyniki zależały od obciążenia komputera.** Dłuższa klatka to większy krok gry (do 50 ms zamiast 16), więc na dialog
+  przypadało więcej czasu świata: włączało się `Q602_START` (zmiana świata na `ARCHOLOS_ENDGAME`), mnożyły się napisy LeGo,
+  a przebieg trwał 7–26 min z innymi wynikami. Podczas `dlgall` (`DialogTest::guardExit`) krok gry wynosi 1000/60 ms
+  (`MainWindow::tick`). Do tego limit 400 ms na wywołanie skryptu liczył też pracę gry w `debug.dlg*`: przy obciążeniu
+  `dlgall` przerywał się przy budowie listy (`InternalError: interrupted`), a przerwanie po `dlgRun` powtarzało dialog.
+  Funkcje `dlg*` odnawiają limit po swojej pracy (`ModHost::renewDeadline`), kolejka przesuwa się przed wywołaniem,
+  lista dialogów to jedno wywołanie `dlgList`. Sprawdzone: bez obciążenia 2,8 min, przy 16 zajętych wątkach 4,4 min,
+  wyniki identyczne co do linii.
+- Wynik przebiegu: 5786 ok, 165 issues, 131 cond-false, 42 cond-unsolved, 21 skipped; świat do końca
+  `ARCHOLOS_MAINLAND.ZEN`; worklist 87 zadań (call 31, hook 38, log 10, script 1, unmapped 7).
+- Nocny przebieg na PC (stary kod, 5,5 h, `dlgall` + `dlgall resume`) jest w `build-ikarus/com-dialogs` i
+  `com-dialogs-part1`; jego worklist pochodzi w połowie ze świata `ARCHOLOS_ENDGAME` i nie nadaje się już na listę zadań.
+
+Zadanie `memory 0x00000194` (pierwsze na liście z nocnego przebiegu) to nie luka warstwy. `Q514_CHANGEDOOR_APPLY`
+(funkcja klatkowa z `DIA_KESSEL_Q514_GARGOYLE`, opóźnienie w czasie gry) szuka `Q514_MOVER_GARGOYLEDOOR_01/02`, a te
+drzwi są tylko w `ARCHOLOS_VOLFZACKE.ZEN` (`KM_Worlds.mod`). Narzędzie uruchomiło dialog w innym świecie,
+`MEM_SearchVobByName` zwróciło 0, a skrypt co klatkę czytał `moverState` przez pusty wskaźnik (0 + 0x194). W
+deterministycznym przebiegu ta funkcja nie zdąża się włączyć i luki nie ma. Handlera nie dodałem (zasady warstwy).
+
+Testy JS (`node --test tests/js`): `devtools` 22/22; w `comtest` 1, a w `fixcases` 2 testy nie przechodzą tak samo na
+HEAD sprzed tych zmian (do sprawdzenia osobno).
+
+Następne kroki: zadania z worklisty deterministycznego przebiegu od góry (`memory 0x00000070`, `0x38`, `0x0c`, `0x00`,
+`0x20`, `0x1c`: odczyty przez pusty wskaźnik; każde rozpoznać, czy to luka warstwy, czy dialog spoza swojego świata,
+patrz problem 8 niżej).
 
 ## Znane problemy i następne kroki
 
@@ -138,6 +190,14 @@ Następne kroki: wolność `dlgall` (profilowanie: co zajmuje ok. 3 s CPU na dia
 6. Inne mody: Spine/Sefaris na Androidzie **usuwają** mody z Ikarusem/LeGo przy instalacji (`SpineScan`). Na desktopie
    wystarczy rozpakowany mod i `modcheck.py --game <folder> --ini <ini>`; skompresowane wolumeny: `--dat` z ZenKit.
 7. Zasady warstwy (bez pustych handlerów, bez oznaczania adresu jako obsłużonego bez skutku) są w każdej karcie zadania.
+8. `dlgall` uruchamia wszystkie dialogi w jednym świecie (postać spoza świata stawia obok gracza). Dialog z innego
+   świata może zostawić luki, których w grze nie ma: skrypt szuka voba po nazwie (`Ikarus: MEM_SearchVobByName: there is
+   no vob X` w logu), dostaje 0 i czyta pola przez pusty wskaźnik (np. `memory 0x00000194`, drzwi z
+   `ARCHOLOS_VOLFZACKE.ZEN`). `worklist.py` jeszcze tego nie rozpoznaje; propozycja: przy luce `unmapped` z małym adresem
+   sprawdzić w logu nieznalezione voby z tego samego stosu i ich świat w plikach ZEN, i oznaczyć zadanie jako „dialog
+   spoza swojego świata”.
+9. `Mem32::implAlloc` (pierwszy pasujący wolny blok) dalej przegląda bloki liniowo; przy obecnej liczbie alokacji to nie
+   jest wąskie gardło.
 
 ## Stosowanie patcha na czystym repozytorium
 
