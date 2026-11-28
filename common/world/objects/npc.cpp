@@ -6046,6 +6046,10 @@ bool Npc::canSeeItem(const Item& it, bool freeLos) const {
       return false;
     }
 
+  // An item that is pressed into the surface it lies on (the stone plate in the treasure of the ice dragon is half in the pile of gold) is hit
+  // by the ray in the surface right at the item: that is not something that stands between the eyes and the item.
+  const float embedded = 30.f;
+
   if(auto bbox = it.bBox()) {
     // npc eyesight height
     auto  at     = it.midPosition();
@@ -6054,11 +6058,14 @@ bool Npc::canSeeItem(const Item& it, bool freeLos) const {
     float tHit   = DynamicWorld::rayBox(cen, dir, tMax, it.transform(), bbox[0], bbox[1]);
 
     const auto r = owner.physic()->ray(cen, cen+dir*tHit);
-    if(r.hasCol)
-      return false;
+    if(r.hasCol) {
+      const float reach = (bbox[1]-bbox[0]).length()*0.5f + embedded;
+      if((r.v-at).length()>reach)
+        return false;
+      }
     } else {
     const auto r = owner.physic()->ray(cen, itMid);
-    if(r.hasCol)
+    if(r.hasCol && (r.v-itMid).length()>embedded)
       return false;
     }
 
