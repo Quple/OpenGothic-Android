@@ -173,17 +173,26 @@ DamageCalculator::Val DamageCalculator::swordDamage(Npc& nsrc, Npc& nother) {
       critChance = -1;
       }
 
+    // The strength is added once to the sum of the damage of all types, the protections of the types are summed: the dragons have
+    // 200 (400 of the undead one) strength + 149 fire + 1 fly = 350 (650): with the strength added to every type the undead dragon hit
+    // the best armor of a dragon hunter for 950 (549 of fire and 401 of fly) and killed the hero with one blow.
     bool invincible = true;
+    int  dmg        = 0;
+    int  prot       = 0;
     for(unsigned int i=0; i<zenkit::DamageType::NUM; ++i) {
       if((dtype & (1<<i))==0)
         continue;
-      int vd = std::max(str + src.damage[i] - other.protection[i],0);
-      if(src.hitchance[tal]<=critChance)
-        vd = (vd-1)/10;
       if(other.protection[i]>=0) { // Filter immune
-        value += vd;
+        dmg  += src.damage[i];
+        prot += other.protection[i];
         invincible = false;
         }
+      }
+
+    if(!invincible) {
+      value = std::max(str + dmg - prot,0);
+      if(src.hitchance[tal]<=critChance)
+        value = (value-1)/10;
       }
 
     return Val(value,true,invincible);
