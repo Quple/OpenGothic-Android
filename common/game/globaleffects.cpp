@@ -262,7 +262,7 @@ GlobalFx GlobalEffects::addScreenBlend(const std::string* argv, size_t argc) {
     sc.frames = Resources::loadTextureAnim(argv[3]);
     }
 
-  if(4<argc) try {
+  if(4<argc && !argv[4].empty()) try {
     sc.fps    = size_t(std::stoi(argv[4]));
     }
   catch(...) {

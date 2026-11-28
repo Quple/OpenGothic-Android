@@ -3780,6 +3780,8 @@ bool Npc::startState(ScriptFn id, std::string_view wp, gtime endTime, bool noFin
     }
 
   auto& st = owner.script().aiState(id);
+  if(owner.isControlled(*this))
+    Log::d("[control] ",displayName()," (",instanceSymbol(),") is asked for the state ",st.name(),isPlayerEnabledState(st) ? ", allowed" : ", refused");
   if(isPlayer() && !isPlayerEnabledState(st)) {
     // disable for now, as it causes infinite lock in freeze state
     // https://github.com/Try/OpenGothic/issues/906
@@ -4147,6 +4149,13 @@ bool Npc::isTargetableBySpell(TargetType t) const {
   return false;
   }
 
+static bool spellTagIs(GameScript& script, int32_t splId, std::string_view name) {
+  std::string tag(script.spellTag(splId));
+  for(auto& c:tag)
+    c = char(std::toupper(static_cast<unsigned char>(c)));
+  return tag==name;
+  }
+
 void Npc::commitSpell() {
   auto active = invent.getItem(currentSpellCast);
   if(active==nullptr || !active->isSpellOrRune())
@@ -4202,12 +4211,20 @@ void Npc::commitSpell() {
           }
         }
       if(spl==nullptr) {
-        if(spellInfo==0)
+        // the transformation keeps the magic mode, the control (the info is only a flag of it) does not
+        if(spellInfo==0 || (owner.version().game==1 && spellTagIs(owner.script(),splId,"CONTROL")))
           aiPush(AiQueue::aiRemoveWeapon());
         } else {
         drawSpell(spl->spellId());
         }
       }
+    }
+
+  // Gothic 1: Spell_Logic_Control passes 1 as the info, it is not an instance of a transformation (it was INTTOSTRING)
+  if(spellInfo!=0 && owner.version().game==1 && spellTagIs(owner.script(),splId,"CONTROL")) {
+    spellInfo = 0;
+    if(currentTarget!=nullptr)
+      owner.startControl(*this,*currentTarget);
     }
 
   if(spellInfo!=0 && transformSpl==nullptr) {
@@ -5005,10 +5022,7 @@ bool Npc::blockSword() {
 static constexpr float IceLanceAnimSpeed = 1.5f;
 
 float Npc::spellAnimSpeed(const Item& spell) const {
-  std::string tag(owner.script().spellTag(spell.spellId()));
-  for(auto& c:tag)
-    c = char(std::toupper(static_cast<unsigned char>(c)));
-  return tag=="ICELANCE" ? IceLanceAnimSpeed : 1.f;
+  return spellTagIs(owner.script(),spell.spellId(),"ICELANCE") ? IceLanceAnimSpeed : 1.f;
   }
 
 Npc::BeginCastResult Npc::beginCastSpell() {
@@ -5323,7 +5337,8 @@ void Npc::setPerceptionDisable(PercType t) {
   }
 
 void Npc::startDialog(Npc& pl) {
-  if(pl.isDown() || pl.isInAir() || isPlayer())
+  // the talks are of the hero: the scripts do not expect the character that is played by the spell of control
+  if(pl.isDown() || pl.isInAir() || isPlayer() || owner.isControlled(pl))
     return;
   if(puppet)
     puppetInteract = true;
@@ -5700,7 +5715,31 @@ void Npc::startDive() {
   mvAlgo.startDive();
   }
 
+void Npc::suspendState() {
+  suspendedEnd = aiState.funcEnd;
+  clearState(true);
+  }
+
+void Npc::finishSuspendedState() {
+  const ScriptFn end = suspendedEnd;
+  suspendedEnd = ScriptFn();
+  if(!end.isValid())
+    return;
+  const bool prev = stateEnding;
+  stateEnding = true;
+  owner.script().invokeState(this,currentOther,currentVictim,end);  // ZS_CONTROLLED_END
+  stateEnding = prev;
+  }
+
+bool Npc::isTransformed() const {
+  return transformSpl!=nullptr || owner.isControlled(*this);
+  }
+
 void Npc::transformBack() {
+  if(owner.isControlled(*this)) {
+    owner.stopControl();
+    return;
+    }
   if(transformSpl==nullptr)
     return;
   transformSpl->undo(*this);

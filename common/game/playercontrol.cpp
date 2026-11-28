@@ -4,6 +4,8 @@
 #include <cmath>
 #include <vector>
 
+#include <Tempest/Log>
+
 #include "world/objects/npc.h"
 #include "world/objects/item.h"
 #include "world/objects/interactive.h"
@@ -659,6 +661,20 @@ void PlayerControl::implMove(uint64_t dt) {
   bool  allowRot  = !ctrl[KeyCodec::ActionGeneric] && pl.isRotationAllowed();
 
   Npc::Anim ani = Npc::Anim::Idle;
+
+  // DIAGNOSTICS: the player moves an npc that the spell of control has handed over; why it does not move (twice a second)
+  if(w->isControlled(pl)) {
+    static uint64_t lastLog = 0;
+    const uint64_t  now     = w->tickCount();
+    if(now-lastLog>=500) {
+      lastLog = now;
+      Tempest::Log::d("[control-move] ",pl.displayName()," (",pl.instanceSymbol(),") state=",pl.stateName()," bs=",int(bs)," queueEmpty=",pl.isAiQueueEmpty()," mobsi=",pl.interactive()!=nullptr,
+             " noState=",pl.isInState(ScriptFn())," dlg=",dlg.isActive()," canSwitchWeapon=",pl.canSwitchWeapon()," ws=",int(ws),
+             " casting=",casting," falling=",pl.isFalling()," inAir=",pl.isInAir()," allowRot=",allowRot,
+             " fwd=",ctrl[Action::Forward]," actFwd=",actrl[ActForward]," wantsFwd=",wantsToMoveForward(),
+             " rot=",rot," runAngle=",pl.runAngle()," moveYaw=",pl.moveYaw()," runAngleDest=",runAngleDest);
+      }
+    }
 
   if(bs==BS_DEAD)
     return;

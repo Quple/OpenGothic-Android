@@ -41,6 +41,11 @@ class World final {
     void                 createPlayer(std::string_view cls);
     void                 insertPlayer(std::unique_ptr<Npc>&& npc, std::string_view waypoint);
     void                 setPlayer(Npc* npc);
+    // The spell of control (Gothic 1): the player plays the target until Enter, or until the target or the hero dies
+    void                 startControl(Npc& hero, Npc& target);
+    void                 stopControl();
+    void                 tickControl();
+    bool                 isControlled(const Npc& npc) const { return controlHero!=nullptr && npcPlayer==&npc; }
     void                 postInit();
     std::string_view     name() const { return wname; }
 
@@ -239,6 +244,9 @@ class World final {
       } bsp;
 
     Npc*                                  npcPlayer=nullptr;
+    Npc*                                  controlHero=nullptr;
+    int32_t                               controlHeroHp=0;
+    std::unique_ptr<GlobalFx>             controlWarning;
 
     std::unique_ptr<DynamicWorld>         wdynamic;
     std::unique_ptr<WorldView>            wview;

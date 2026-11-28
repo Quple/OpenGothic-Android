@@ -388,6 +388,7 @@ class Npc final {
     void      setDetectedMob(Interactive* id);
 
     bool      isInState  (ScriptFn stateFn) const;
+    std::string_view stateName() const { return aiState.funcIni.isValid() ? std::string_view(aiState.hint) : std::string_view("none"); }
     bool      isInRoutine(ScriptFn stateFn) const;
     bool      wasInState (ScriptFn stateFn) const;
     uint64_t  stateTime() const;
@@ -410,7 +411,10 @@ class Npc final {
     void      startDive();
     void      transformBack();
     /// A transformation spell (a beetle, ...) is on: the key Enter turns the character back
-    bool      isTransformed() const { return transformSpl!=nullptr; }
+    bool      isTransformed() const;
+    // The control of the player (the spell Control): the state of the script is put aside, as the player moves only an npc without a state
+    void      suspendState();
+    void      finishSuspendedState();
 
     auto      dialogChoices(Npc &player, const std::vector<uint32_t> &except, bool includeImp) -> std::vector<GameScript::DlgChoice>;
 
@@ -711,6 +715,7 @@ class Npc final {
     size_t                         currentSpellCast = size_t(-1);
     uint64_t                       castNextTime     = 0;
     int32_t                        spellInfo        = 0;
+    ScriptFn                       suspendedEnd;
 
     // transform-backshape
     struct TransformBack;

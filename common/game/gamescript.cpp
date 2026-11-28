@@ -2998,6 +2998,9 @@ bool GameScript::npc_checkinfo(std::shared_ptr<zenkit::INpc> npcRef, int imp) {
   auto hero = findNpc(vm.global_other());
   if(n==nullptr || hero==nullptr)
     return false;
+  // the character that is played by the spell of control is not the hero: the others do not start their talks with it
+  if(world().isControlled(*hero))
+    return false;
 
   auto& pl  = hero->handle();
   auto& npc = n->handle();

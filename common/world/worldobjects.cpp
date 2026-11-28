@@ -263,7 +263,8 @@ void WorldObjects::tick(uint64_t dt, uint64_t dtPlayer) {
       dist = std::min(dist,(i->position()-r->position()).quadLength());
     if(dist<nearDist){
       npcNear.push_back(i.get());
-      if(i.get()!=pl)
+      // not the cached player: the control of a spell hands the player over in the middle of the tick of the npcs
+      if(!i->isPlayer())
         i->setProcessPolicy(NpcProcessPolicy::AiNormal);
       } else
     if(dist<farDist) {

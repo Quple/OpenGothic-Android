@@ -23,6 +23,8 @@
 #include "game/serialize.h"
 #include "utils/string_frm.h"
 #include "gothic.h"
+#include "camera.h"
+#include "world/aiqueue.h"
 #include "focus.h"
 #include "resources.h"
 
@@ -173,6 +175,103 @@ void World::setPlayer(Npc* npc) {
     npc->setPerceptionDisable(PercType(i));
   
   npcPlayer = npc;
+  }
+
+void World::startControl(Npc& hero, Npc& target) {
+  if(controlHero!=nullptr || &hero!=npcPlayer || &hero==&target || target.isDead())
+    return;
+  Tempest::Log::i("[control] ",hero.displayName()," takes the control of ",target.displayName());
+
+  // the hero stays where it is, in the state ZS_PC_CONTROLLING that the script of the spell has queued
+  controlHero   = &hero;
+  controlHeroHp = hero.attribute(ATR_HITPOINTS);
+  hero.setProcessPolicy(NpcProcessPolicy::AiNormal);
+
+  // the player moves only an npc without a state: ZS_CONTROLLED is put aside, and ends with ZS_CONTROLLED_END
+  target.setProcessPolicy(NpcProcessPolicy::Player);
+  target.suspendState();
+  target.clearAiQueue();
+  for(size_t i=0;i<PERC_Count;++i)
+    target.setPerceptionDisable(PercType(i));
+  npcPlayer = &target;
+
+  if(auto c = Gothic::inst().camera())
+    c->reset();
+  }
+
+void World::stopControl() {
+  if(controlHero==nullptr)
+    return;
+  Npc& hero   = *controlHero;
+  Npc& target = *npcPlayer;
+  controlHero = nullptr;
+  controlWarning.reset();
+  Tempest::Log::i("[control] ",hero.displayName()," gets back from ",target.displayName());
+
+  target.setProcessPolicy(NpcProcessPolicy::AiNormal);
+  hero  .setProcessPolicy(NpcProcessPolicy::Player);
+  npcPlayer = &hero;
+
+  // the hero leaves ZS_PC_CONTROLLING without the script: the script would continue the routine of the player
+  hero.clearAiQueue();
+  hero.clearState(true);
+  hero.aiPush(AiQueue::aiStandup());
+
+  // the target finishes ZS_CONTROLLED with ZS_CONTROLLED_END
+  if(!target.isDead())
+    target.finishSuspendedState();
+
+  // a scroll is used up by the cast: the hero does not stay in the magic mode with the effect of the spell in the hand
+  if(hero.weaponState()==WeaponState::Mage) {
+    bool hasSpell = false;
+    for(uint8_t i=0;i<8;++i)
+      if(hero.inventory().currentSpell(i)!=nullptr)
+        hasSpell = true;
+    if(!hasSpell)
+      hero.aiPush(AiQueue::aiRemoveWeapon());
+    }
+
+  if(auto c = Gothic::inst().camera())
+    c->reset();
+  }
+
+void World::tickControl() {
+  if(controlHero==nullptr)
+    return;
+  Npc& hero   = *controlHero;
+  Npc& target = *npcPlayer;
+
+  // the end of the control: the death of the target (or of the hero), damage of the hero, the distance
+  if(target.isDead() || hero.isDead()) {
+    stopControl();
+    return;
+    }
+  if(hero.attribute(ATR_HITPOINTS)<controlHeroHp) {
+    Tempest::Log::i("[control] ",hero.displayName()," is hit, the control ends");
+    stopControl();
+    return;
+    }
+  controlHeroHp = hero.attribute(ATR_HITPOINTS);
+
+  // from the scripts of the original: the green blinking of the screen (CONTROL_LEAVERANGEFX) from 3500, the end of the control from 4000
+  const float WarnRange = 3500.f;
+  const float EndRange  = 4000.f;
+  const float dist      = (hero.position()-target.position()).length();
+  if(dist>=EndRange) {
+    Tempest::Log::i("[control] ",target.displayName()," is ",dist," away from ",hero.displayName(),", the control ends");
+    stopControl();
+    return;
+    }
+  if(dist>=WarnRange) {
+    if(controlWarning==nullptr) {
+      if(const VisualFx* vfx = Gothic::inst().loadVisualFx("CONTROL_LEAVERANGEFX")) {
+        controlWarning.reset(new GlobalFx(addGlobalEffect(vfx->visName_S,0,vfx->userString,zenkit::IEffectBase::user_string_count)));
+        Tempest::Log::i("[control] ",target.displayName()," is ",dist," away from ",hero.displayName(),", the warning");
+        }
+      }
+    } else {
+    controlWarning.reset();
+    }
   }
 
 void World::postInit() {
@@ -418,6 +517,7 @@ void World::tick(uint64_t dt) {
     return;
   wobj.tick(dt,dt);
   wdynamic->tick(dt);
+  tickControl();
   if(auto pl = player())
     wsound.tick(*pl);
   globFx->tick(dt);
