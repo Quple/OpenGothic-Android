@@ -112,7 +112,7 @@ class MdlVisual final {
 
     bool                           startAnim      (Npc& npc, WeaponState st);
     const Animation::Sequence*     startAnimItem  (Npc& npc, std::string_view scheme, int state);
-    const Animation::Sequence*     startAnimSpell (Npc& npc, std::string_view scheme, bool invest);
+    const Animation::Sequence*     startAnimSpell (Npc& npc, std::string_view scheme, bool invest, float speed=1.f);
     bool                           startAnimDialog(Npc& npc);
     void                           startMMAnim    (Npc& npc, std::string_view anim, std::string_view node);
     void                           startFaceAnim  (Npc& npc, std::string_view anim, float intensity, uint64_t duration);

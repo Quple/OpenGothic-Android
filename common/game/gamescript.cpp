@@ -1197,6 +1197,10 @@ const zenkit::ISpell& GameScript::spellDesc(int32_t splId) {
   return spells->find(tag);
   }
 
+std::string_view GameScript::spellTag(int32_t splId) {
+  return spellFxInstanceNames->get_string(uint16_t(splId));
+  }
+
 const VisualFx* GameScript::spellVfx(int32_t splId) {
   auto& tag = spellFxInstanceNames->get_string(uint16_t(splId));
   string_frm name("spellFX_",tag);

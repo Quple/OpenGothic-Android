@@ -3,6 +3,9 @@
 #include <Tempest/Log>
 
 #include <exception>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 
 #include "graphics/mesh/skeleton.h"
 #include "game/serialize.h"
@@ -1058,15 +1061,49 @@ const Animation::Sequence* MdlVisual::startAnimItem(Npc &npc, std::string_view s
   return skInst->setAnimItem(solver,npc,scheme,state);
   }
 
-const Animation::Sequence* MdlVisual::startAnimSpell(Npc &npc, std::string_view scheme, bool invest) {
+/// The copy of a sequence that plays faster (a spell that is cast with a shorter animation than the original has).
+/// The animations are shared by all characters, so the copy is made once and kept: the pose compares the sequences by the pointer.
+static const Animation::Sequence* fasterSequence(const Animation::Sequence& src, float speed) {
+  struct Entry final {
+    std::shared_ptr<Animation::AnimData>  from;
+    float                                 speed = 1.f;
+    std::unique_ptr<Animation::Sequence>  seq;
+    };
+  static std::mutex                                          sync;
+  static std::unordered_map<const Animation::Sequence*,Entry> cache;
+
+  std::lock_guard<std::mutex> guard(sync);
+  auto& e = cache[&src];
+  if(e.seq!=nullptr && e.from==src.data && e.speed==speed)
+    return e.seq.get();
+
+  auto data = std::make_shared<Animation::AnimData>(*src.data);
+  data->fpsRate *= speed;
+  for(auto* v:{&data->defHitEnd,&data->defParFrame,&data->defWindow})
+    for(auto& t:*v)
+      t = uint64_t(float(t)/speed);
+
+  e.from  = src.data;
+  e.speed = speed;
+  e.seq   = std::make_unique<Animation::Sequence>(src);
+  e.seq->data     = std::move(data);
+  e.seq->blendIn  = uint64_t(float(src.blendIn )/speed);
+  e.seq->blendOut = uint64_t(float(src.blendOut)/speed);
+  return e.seq.get();
+  }
+
+const Animation::Sequence* MdlVisual::startAnimSpell(Npc &npc, std::string_view scheme, bool invest, float speed) {
   const bool run = (skInst->bodyState()&BS_MAX)==BS_RUN; // not really the case, as in Gothic player can't cast spell, while running
 
   const Animation::Sequence *sq = solver.solveAnim(scheme,run,invest);
+  if(sq!=nullptr && speed>1.f)
+    sq = fasterSequence(*sq,speed);
 
   // DIAGNOSTICS: the animation of a spell of a character (the golems cast with the animations of their own model script); once for a change
   static std::string lastLog;
   std::string        msg = std::string(npc.displayName())+" ("+std::to_string(npc.instanceSymbol())+") scheme "+std::string(scheme)+
-                           (invest ? " invest" : " shoot")+(run ? " run" : "")+" -> "+(sq!=nullptr ? sq->name : std::string("none"));
+                           (invest ? " invest" : " shoot")+(run ? " run" : "")+" -> "+(sq!=nullptr ? sq->name : std::string("none"))+
+                           (speed>1.f ? " x"+std::to_string(speed) : std::string());
   if(msg!=lastLog) {
     lastLog = msg;
     Log::d("[spell-anim] ",msg);

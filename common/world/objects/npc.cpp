@@ -5001,6 +5001,16 @@ bool Npc::blockSword() {
   // return setAnimAngGet(Anim::AttackBlock,calcAniComb())!=nullptr;
   }
 
+// The cast animation of the ice lance in the original is shorter than the one that is played
+static constexpr float IceLanceAnimSpeed = 1.5f;
+
+float Npc::spellAnimSpeed(const Item& spell) const {
+  std::string tag(owner.script().spellTag(spell.spellId()));
+  for(auto& c:tag)
+    c = char(std::toupper(static_cast<unsigned char>(c)));
+  return tag=="ICELANCE" ? IceLanceAnimSpeed : 1.f;
+  }
+
 Npc::BeginCastResult Npc::beginCastSpell() {
   if(castLevel!=CS_NoCast)
     return BeginCastResult::BC_No;
@@ -5040,7 +5050,7 @@ Npc::BeginCastResult Npc::beginCastSpell() {
     case SPL_NEXTLEVEL: {
       ++manaInvested;
       auto ani = owner.script().spellCastAnim(*this,*active);
-      if(!visual.startAnimSpell(*this,ani,true))
+      if(!visual.startAnimSpell(*this,ani,true,spellAnimSpeed(*active)))
         Log::d("Couldn't start animation for spell '",currentSpellCast,"'");
       castLevel = CS_Invest_0;
       return BeginCastResult::BC_Invest;
@@ -5084,7 +5094,7 @@ bool Npc::tickCast(uint64_t dt) {
       auto ani = owner.script().spellCastAnim(*this,*active);
       bool g2  = owner.version().game==2;
       if(g2 || visual.hasAnim(string_frm("T_MAGRUN_2_",ani,"CAST")))
-        if(!visual.startAnimSpell(*this,ani,false))
+        if(!visual.startAnimSpell(*this,ani,false,spellAnimSpeed(*active)))
           return true;
       }
     castLevel    = CastState(int(castLevel) + int(CS_Emit_0) - int(CS_Cast_0));

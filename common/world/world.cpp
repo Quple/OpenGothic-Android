@@ -747,7 +747,16 @@ Bullet& World::shootSpell(const Item &itm, const Npc &npc, const Npc *target) {
     pos  = npc.mapWeaponBone();
     }
 
-  auto& b = wobj.shootBullet(itm, pos, dir, tgRange, DynamicWorld::spellSpeed);
+  // the ice lance of the original flies faster than the other projectile spells
+  float speed = DynamicWorld::spellSpeed;
+  std::string tag(script().spellTag(itm.spellId()));
+  for(auto& c:tag)
+    c = char(std::toupper(static_cast<unsigned char>(c)));
+  if(tag=="ICELANCE")
+    speed *= 1.4f;
+  Tempest::Log::i("[spell] shoot id=",itm.spellId()," tag=",tag," speed=",speed);
+
+  auto& b = wobj.shootBullet(itm, pos, dir, tgRange, speed);
   b.setTarget(target);
   return b;
   }

@@ -581,6 +581,7 @@ class Npc final {
     void      tickRegen(int32_t& v,const int32_t max,const int32_t chg, const uint64_t dt);
     void      setViewPosition(const Tempest::Vec3& pos);
     bool      tickCast(uint64_t dt);
+    float     spellAnimSpeed(const Item& spell) const;
 
     int       aiOutputOrderId() const;
     bool      performOutput(const AiQueue::AiAction &ai);
