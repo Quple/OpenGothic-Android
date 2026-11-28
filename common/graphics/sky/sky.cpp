@@ -53,6 +53,16 @@ Sky::Sky(std::string_view wname) {
     clouds[1].lay[i] = skyTexture(name,false,i);
     }
 
+  // the clouds of the rain of the original game
+  {
+    auto* t = Resources::loadTextureWorld("SKYRAINCLOUDS.TGA");
+    if(t!=nullptr && t!=&Resources::fallbackTexture() && t!=&Resources::fallbackBlack()) {
+      rainClouds         = t;
+      stormNight         = clouds[1];
+      stormNight.lay[1]  = t;
+      }
+  }
+
   GSunIntensity  = DirectSunLux;
   GMoonIntensity = DirectMoonLux;
 

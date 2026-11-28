@@ -224,11 +224,21 @@ class World final {
     size_t               setVobVisual (std::string_view name, bool show, bool collide);
     bool                 vobPosition  (std::string_view name, Tempest::Vec3& pos) const;
 
+    /// The crowns of the trees (the rain does not fall under them, the ground there is wet): the center of the crown, its radius and the top of it
+    struct TreeCrown final {
+      Tempest::Vec3 at;
+      float         radius = 0;
+      float         top    = 0;
+      };
+    void                 addTreeCrown(const Tempest::Vec3& at, float radius, float top) { treeCrownArr.push_back({at,radius,top}); }
+    const std::vector<TreeCrown>& treeCrowns() const { return treeCrownArr; }
+
   private:
     const zenkit::IFocus& searchPolicy(const Npc& pl, TargetCollect& collAlgo, TargetType& collType, WorldObjects::SearchFlg& opt) const;
     std::string                           wname;
     GameSession&                          game;
     std::unordered_multimap<std::string,Vob*> vobNames;   // declared before the objects: they unregister while they are destroyed
+    std::vector<TreeCrown>                treeCrownArr;   // filled while the objects of the world are made
 
     std::unique_ptr<WayMatrix>            wmatrix;
 

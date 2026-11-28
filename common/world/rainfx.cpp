@@ -7,6 +7,8 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <functional>
 #include <string>
 
 #include "graphics/pfx/particlefx.h"
@@ -126,11 +128,11 @@ static std::unique_ptr<ParticleFx> makeSplashFx() {
   src.vis_tex_is_quadpoly   = 1;
   src.vis_tex_color_start_s = "235 240 250";
   src.vis_tex_color_end_s   = "235 240 250";
-  src.vis_size_start_s      = "6 16";
+  src.vis_size_start_s      = "3 8";
   src.vis_size_end_scale    = 1;
   src.vis_alpha_func_s      = "BLEND";
-  src.vis_alpha_start       = 235;
-  src.vis_alpha_end         = 90;
+  src.vis_alpha_start       = 118;   // half of it: the bounces of the heavy rain were too strong
+  src.vis_alpha_end         = 40;
   src.use_emitters_for      = 0;
 
   std::unique_ptr<ParticleFx> ret(new ParticleFx(src,"RAIN_SPLASH"));
@@ -271,9 +273,18 @@ void RainFx::updateCover(const Vec3& cam) {
     const float x = (float(cx)+0.5f)*RainCover::Cell;
     const float z = (float(cz)+0.5f)*RainCover::Cell;
     const auto  r = dyn->ray(Vec3(x,cam.y+3500.f,z), Vec3(x,cam.y-2500.f,z));
-    slot.cx  = float(cx);
-    slot.cz  = float(cz);
-    slot.top = r.hasCol ? r.v.y : RainCover::Open;
+    float top  = r.hasCol ? r.v.y : RainCover::Open;
+    // the crown of a tree: the rain ends at the top of it, the ground under it is wet (it is not a roof of the physics)
+    float crown = RainCover::Open;
+    for(const auto& c:owner.treeCrowns()) {
+      const float dx = x-c.at.x, dz = z-c.at.z;
+      if(dx*dx+dz*dz<c.radius*c.radius && c.top>crown && c.at.y<cam.y+3500.f && c.top>r.v.y+150.f)
+        crown = c.top;
+      }
+    slot.cx   = float(cx);
+    slot.cz   = float(cz);
+    slot.top  = top;
+    slot.crown = crown;
     ++rainCover->version;
     }
   coverScan = s;
@@ -315,6 +326,11 @@ bool RainFx::pickSplash(const Vec3& cam, Vec3& out) {
 
   const auto up = dyn->ray(down.v+Vec3(0,20,0), down.v+Vec3(0,1800,0));
   if(up.hasCol) {
+    ++missRoof;
+    return false;
+    }
+  // the roofs without the collision and the crowns of the trees (RainCover): no drops bounce there either
+  if(rainCover->topAt(down.v.x,down.v.z) > down.v.y+150.f) {
     ++missRoof;
     return false;
     }

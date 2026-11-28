@@ -18,14 +18,27 @@ class RainCover final {
       float top = Open;     // the height of the highest surface (cm)
       float cx  = 1.0e9f;   // the cell of the world that the slot keeps
       float cz  = 1.0e9f;
-      float pad = 0;
+      float pad  = 0;
+      float crown = Open;   // the top of the crown of a tree over the place: the rain ends there, the ground under it is wet
+      float pad0 = 0;       // the slot is two vec4 of the shader
+      float pad1 = 0;
+      float pad2 = 0;
       };
 
     static int cellOf(float v) { return int(std::floor(v/Cell)); }
     static int slotOf(int cx, int cz) { return (cx&(N-1))*N + (cz&(N-1)); }
 
-    /// The height of the highest surface over the point, Open when it is not known
+    /// The height of the highest thing that the rain does not fall through (a roof, a crown of a tree), Open when it is not known: the drops and the bounces end there
     float topAt(float x, float z) const {
+      const int cx = cellOf(x), cz = cellOf(z);
+      const Slot& s = slot[size_t(slotOf(cx,cz))];
+      if(int(s.cx)!=cx || int(s.cz)!=cz)
+        return Open;
+      return s.top>s.crown ? s.top : s.crown;
+      }
+
+    /// The height of the highest surface of the physics (not the crowns of the trees): what the ground under it is dry for
+    float roofAt(float x, float z) const {
       const int cx = cellOf(x), cz = cellOf(z);
       const Slot& s = slot[size_t(slotOf(cx,cz))];
       if(int(s.cx)!=cx || int(s.cz)!=cz)

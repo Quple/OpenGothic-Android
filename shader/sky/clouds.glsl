@@ -23,12 +23,17 @@ vec4 clouds(vec3 at, float nightPhase, vec3 highlight, float overcast, out float
   // how thick the clouds of the game are here (the textures of both layers): the dark core and the thin edge of the storm
   density      = (cloudDL0.a+cloudDL1.a)*0.5;
 
+  // the rain: the second night layer is SKYRAINCLOUDS.TGA now (Sky::cloudsNight), the dark clouds of the game: where they are thick and thin
+  // is the structure of the storm
+  const float rainW = smoothstep(0.05, 0.5, overcast);
+  density = mix(density, clamp(cloudNL1.a*1.3, 0.0, 1.0), rainW);
+
   // the rain: the layers get thicker, the gaps between the clouds are covered (the sky is closed by the cloud in the end, in applyClouds)
   const float cloudGain = 0.2 + 1.8*overcast;
   cloudDL0.a   = clamp(cloudDL0.a*cloudGain, 0.0, 1.0);
   cloudDL1.a   = clamp(cloudDL1.a*cloudGain, 0.0, 1.0);
   cloudNL0.a   = cloudNL0.a*1.0; // stars
-  cloudNL1.a   = cloudNL1.a*0.1;
+  cloudNL1.a   = cloudNL1.a*0.1*(1.0-rainW);
 
   vec4 day       = (cloudDL0+cloudDL1)*0.5;
   vec4 night     = (cloudNL0+cloudNL1)*0.5;

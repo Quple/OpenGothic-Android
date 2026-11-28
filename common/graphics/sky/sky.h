@@ -32,7 +32,8 @@ class Sky final {
     const Tempest::Texture2d& moonImage() const { return *moonImg; }
 
     const State&              cloudsDay()   const { return clouds[0]; }
-    const State&              cloudsNight() const { return clouds[1]; }
+    // while it rains the second night layer (it is nearly invisible) is SKYRAINCLOUDS.TGA, the dark clouds of the game: the shader takes the storm from it
+    const State&              cloudsNight() const { return (overcast>0.02f && rainClouds!=nullptr) ? stormNight : clouds[1]; }
     Tempest::Vec2             cloudsOffset(int layer, uint64_t tickCount) const;
     float                     isNight() const;
 
@@ -59,6 +60,8 @@ class Sky final {
     Tempest::Vec3                 ambient;
 
     State                         clouds[2]; //day, night;
+    State                         stormNight;
+    const Tempest::Texture2d*     rainClouds = nullptr;
 
     const Tempest::Texture2d*     sunImg   = &Resources::fallbackBlack();
     const Tempest::Texture2d*     moonImg  = &Resources::fallbackBlack();

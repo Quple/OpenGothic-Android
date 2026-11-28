@@ -31,17 +31,20 @@ layout(push_constant, std430) uniform UboPush {
   } push;
 
 // What is over the ground around the camera (RainCover of the CPU, the same ring of 64x64 cells of 1.2 m): the highest surface of every cell.
-// The ground under a roof (a hut, a porch, a bridge) is dry, it is seen through the doors and the windows too.
+// The ground under a roof (a hut, a porch, a bridge) is dry, it is seen through the doors and the windows too. The ground under the crown of a tree
+// is wet and reflects, only the rain does not fall there (no rings on the puddles).
 layout(binding = 7, std430) readonly buffer UboCover {
-  vec4 cell[]; // top, the cell of the world (x, z)
+  vec4 cell[]; // two for a cell: (top, the cell of the world x, z, 0), (the top of a crown of a tree, 0, 0, 0)
   } cover;
 
-bool wetCovered(vec3 p) {
+// x: a roof is over the place (dry), y: a crown of a tree is over it (the rain does not fall)
+vec2 wetCovered(vec3 p) {
   const ivec2 c = ivec2(floor(p.xz/1.2e2));
-  const vec4  e = cover.cell[(c.x&63)*64 + (c.y&63)];
+  const int   i = ((c.x&63)*64 + (c.y&63))*2;
+  const vec4  e = cover.cell[i];
   if(int(e.y)!=c.x || int(e.z)!=c.y)
-    return false; // the cell is not known (far away or not made yet): the sky is open
-  return e.x > p.y + 150.0;
+    return vec2(0.0); // the cell is not known (far away or not made yet): the sky is open
+  return vec2((e.x > p.y + 150.0) ? 1.0 : 0.0, (cover.cell[i+1].x > p.y + 150.0) ? 1.0 : 0.0);
   }
 float wetHash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx)*0.1031);
@@ -265,8 +268,10 @@ void main() {
 
   // the matrix of the view of the camera gives the position in the world (the Lwc one is relative to the camera): the puddles stay where they are
   const vec3  wpos = start;
-  if(wetCovered(wpos))
-    discard;
+  const vec2 covered = wetCovered(wpos);
+  if(covered.x>0.5)
+    discard;                      // under a roof: dry
+  const float rainHere = (covered.y>0.5) ? 0.0 : push.rain; // under the crown of a tree: wet, but no rain falls
   const float pud  = wetPuddle(wpos.xz, push.wet);
 
   // the wet ground is darker (the puddles more): the scene is multiplied by (1-alpha), the reflection is added
@@ -285,8 +290,8 @@ void main() {
 
   // the screen space reflection is the expensive part: only where it can be seen
   if(w>0.03) {
-    if(pud>0.0 && push.rain>0.0) {
-      const vec2 rip = wetRipples(wpos.xz, float(scene.tickCount32%1000000u)*0.001, push.rain)*pud;
+    if(pud>0.0 && rainHere>0.0) {
+      const vec2 rip = wetRipples(wpos.xz, float(scene.tickCount32%1000000u)*0.001, rainHere)*pud;
       n = normalize(n + vec3(rip.x, 0.0, rip.y)*0.8);
       }
 

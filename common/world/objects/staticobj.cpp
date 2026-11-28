@@ -8,6 +8,20 @@
 
 using namespace Tempest;
 
+/// The meshes of the trees that have a crown (not the stumps, the trunks, the roots and the dead trees): the rain does not fall under it
+static bool isTreeWithCrown(std::string_view name) {
+  std::string up(name);
+  for(auto& c:up)
+    c = char(std::toupper(static_cast<unsigned char>(c)));
+  if(up.find("TREE")==std::string::npos && up.find("BAUM")==std::string::npos)
+    return false;
+  static const char* no[] = {"STUMP","STAMM","ROOT","DEAD","DESTROY","FALLEN","FIRE","LOG","BRANCH"};
+  for(auto* n:no)
+    if(up.find(n)!=std::string::npos)
+      return false;
+  return true;
+  }
+
 StaticObj::StaticObj(Vob* parent, World& world, const zenkit::VirtualObject& vob, Flags flags)
   : Vob(parent, world, vob, flags) {
   visual.setVisual(vob,world,(flags & Flags::Static));
@@ -15,6 +29,14 @@ StaticObj::StaticObj(Vob* parent, World& world, const zenkit::VirtualObject& vob
 
   scheme = vob.visual->name;
   shown  = vob.show_visual;
+
+  // the crown of a tree: a disc in the bounding box of the mesh (the physics does not have the leaves, so the rain falls through them)
+  if(!scheme.empty() && isTreeWithCrown(scheme)) {
+    const auto& b = vob.bbox;
+    const float w = b.max.x-b.min.x, d = b.max.z-b.min.z, h = b.max.y-b.min.y;
+    if(h>350.f && w>220.f && d>220.f)
+      world.addTreeCrown(Vec3(0.5f*(b.min.x+b.max.x), b.min.y, 0.5f*(b.min.z+b.max.z)), 0.40f*std::max(w,d), b.max.y);
+    }
 
   // the world is made while a mod that hides some visuals is running: they are not drawn from the start
   if(!scheme.empty() && VisualFilter::inst().hides(scheme)) {
