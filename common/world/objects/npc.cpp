@@ -917,7 +917,8 @@ float Npc::qDistTo(const Item& p) const {
   return qDistTo(pos);
   }
 
-Tempest::Vec3 Npc::fightDistanceTo(const Npc& tg) const {
+/// The point of the character that the distance of the fight is measured from (see fightDistanceTo)
+Tempest::Vec3 Npc::fightPoint() const {
   //NOTE: game script decribe comabt distance as distance between BIP01
   // however, in practice, it's easier and more relieble to use rootTr
   //NOTE2: the root of the swamp shark is at the tip of its tail, 3.6 meters behind the origin of the model, and 2 meters
@@ -926,29 +927,56 @@ Tempest::Vec3 Npc::fightDistanceTo(const Npc& tg) const {
   // that is far outside of the body. The rotation and the scale of every character are its own.
   static const float rootFarOutside = 150;
 
-  auto fightPoint = [](const Npc& n) {
-    Vec3 pos = n.position();
-    auto sk  = n.visual.visualSkeleton();
-    if(sk==nullptr)
-      return pos;
+  Vec3 pos = position();
+  auto sk  = visual.visualSkeleton();
+  if(sk==nullptr)
+    return pos;
 
-    Vec3 root = sk->rootTr;
-    const auto& bMin = sk->bboxCol[0];
-    const auto& bMax = sk->bboxCol[1];
-    const float dx   = std::max(std::max(bMin.x-root.x, root.x-bMax.x), 0.f);
-    const float dz   = std::max(std::max(bMin.z-root.z, root.z-bMax.z), 0.f);
-    if(dx*dx+dz*dz>rootFarOutside*rootFarOutside) {
-      root.x = (bMin.x+bMax.x)*0.5f;
-      root.z = (bMin.z+bMax.z)*0.5f;
-      }
+  Vec3 root = sk->rootTr;
+  const auto& bMin = sk->bboxCol[0];
+  const auto& bMax = sk->bboxCol[1];
+  const float dx   = std::max(std::max(bMin.x-root.x, root.x-bMax.x), 0.f);
+  const float dz   = std::max(std::max(bMin.z-root.z, root.z-bMax.z), 0.f);
+  if(dx*dx+dz*dz>rootFarOutside*rootFarOutside) {
+    root.x = (bMin.x+bMax.x)*0.5f;
+    root.z = (bMin.z+bMax.z)*0.5f;
+    }
 
-    // the matrix of the model has the position too, and it can be one frame late: only the rotation and the scale are taken
-    Vec3 zero = {};
-    n.transform().project(zero);
-    n.transform().project(root);
-    return pos + (root-zero);
-    };
-  return fightPoint(*this) - fightPoint(tg);
+  // the matrix of the model has the position too, and it can be one frame late: only the rotation and the scale are taken
+  Vec3 zero = {};
+  transform().project(zero);
+  transform().project(root);
+  return pos + (root-zero);
+  }
+
+Tempest::Vec3 Npc::fightDistanceTo(const Npc& tg) const {
+  return fightPoint() - tg.fightPoint();
+  }
+
+float Npc::fightDistanceToBox(const Npc& tg) const {
+  auto sk = tg.visual.visualSkeleton();
+  if(sk==nullptr)
+    return -1.f;
+  Matrix4x4 inv = tg.transform();
+  inv.inverse();
+  Vec3 p = fightPoint();
+  inv.project(p);
+  const auto& bMin = sk->bboxCol[0];
+  const auto& bMax = sk->bboxCol[1];
+  const float dx   = std::max(std::max(bMin.x-p.x, p.x-bMax.x), 0.f);
+  const float dz   = std::max(std::max(bMin.z-p.z, p.z-bMax.z), 0.f);
+  return std::sqrt(dx*dx+dz*dz);
+  }
+
+std::string Npc::fightBodyInfo() const {
+  auto sk = visual.visualSkeleton();
+  if(sk==nullptr)
+    return "no skeleton";
+  const auto& bMin = sk->bboxCol[0];
+  const auto& bMax = sk->bboxCol[1];
+  const Vec3  c    = (bMin+bMax)*0.5f;
+  return "the box "+std::to_string(int(bMax.x-bMin.x))+" x "+std::to_string(int(bMax.z-bMin.z))+" x "+std::to_string(int(bMax.y-bMin.y))+
+         " cm, the root is "+std::to_string(int(sk->rootTr.x-c.x))+" (x) and "+std::to_string(int(sk->rootTr.z-c.z))+" (z) cm from the center of it";
   }
 
 uint8_t Npc::calcAniComb() const {
@@ -2396,7 +2424,17 @@ void Npc::commitDamage() {
     const float reach = fghAlgo.prefferedAttackDistance(*this,*currentTarget,owner.script());
     Log::d("[fight] ",displayName()," (",instanceSymbol(),") strikes ",currentTarget->displayName(),": distance ",int(d.length()),
            " (height ",int(d.y),"), reach ",int(reach),inRange ? "" : " OUT OF REACH",", angle ",inAngle ? "ok" : "OUT OF THE FOCUS ANGLE",
-           ", weapon state ",int(weaponState()));
+           ", weapon state ",int(weaponState()),", to the box of the target ",int(fightDistanceToBox(*currentTarget)),
+           ", the range of the weapon in the hand ",inventory().activeWeapon()!=nullptr ? int(inventory().activeWeapon()->swordLength()) : -1);
+    // the bodies: once for every kind of the characters (the root of the model against its box tells how the distance of the fight is measured)
+    static std::vector<size_t> seen;
+    for(const Npc* n:{this,currentTarget}) {
+      const size_t id = n->instanceSymbol();
+      if(std::find(seen.begin(),seen.end(),id)!=seen.end())
+        continue;
+      seen.push_back(id);
+      Log::d("[fight-body] ",n->displayName()," (",id,"): ",n->fightBodyInfo());
+      }
     }
   if(!inRange)
     return;

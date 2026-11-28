@@ -2,6 +2,9 @@
 
 #include <Tempest/Log>
 
+#include <algorithm>
+#include <vector>
+
 #include "game/serialize.h"
 #include "game/gamescript.h"
 #include "world/objects/npc.h"
@@ -311,7 +314,23 @@ int32_t Item::spellId() const {
   }
 
 int32_t Item::swordLength() const {
-  return hitem->range;
+  if(hitem->range>0)
+    return hitem->range;
+
+  // A weapon of the close combat without the range (the old sword of the hero in Gothic 1 had 0 in the game: its reach was shorter than the one of
+  // the fists, 50, and the hero did not hit the scavengers that stand a step away): the scripts of both games give 100 to the one handed weapons
+  // and 150 to the two handed ones.
+  if((uint32_t(mainFlag()) & ITM_CAT_NF)==0)
+    return 0;
+  const int32_t ret = is2H() ? 150 : 100;
+  static std::vector<size_t> seen;
+  const size_t id = hitem->symbol_index();
+  if(std::find(seen.begin(),seen.end(),id)==seen.end()) {
+    seen.push_back(id);
+    const auto* sym = world.script().findSymbol(id);
+    Tempest::Log::d("[fight] the weapon ",sym!=nullptr ? sym->name() : std::string("?")," has no range (",hitem->range,"): ",ret," is used");
+    }
+  return ret;
   }
 
 void Item::setCount(size_t cnt) {

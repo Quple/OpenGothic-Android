@@ -200,6 +200,10 @@ class Npc final {
     float      qDistTo(const Interactive& p) const;
     float      qDistTo(const Item& p) const;
     auto       fightDistanceTo(const Npc& npc) const -> Tempest::Vec3;
+    auto       fightPoint() const -> Tempest::Vec3;
+    // DIAGNOSTICS of the range of the fight: the distance from the fight point to the box of the collision of the other character (the plane XZ, 0 inside it)
+    float      fightDistanceToBox(const Npc& npc) const;
+    std::string fightBodyInfo() const;
 
     void       updateAnimation(uint64_t dt, bool force = false);
     void       updateTransform();
