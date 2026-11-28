@@ -360,6 +360,8 @@ class Npc final {
 
     bool      isEnemy(const Npc& other) const;
     bool      isDead() const;
+    // parked at the point TOT of the world (the scripts send there the characters that leave the story): it is in the rock and not in the game
+    bool      isAtDeadPoint() const;
     bool      isLie() const;
     bool      isUnconscious() const;
     bool      isDown() const;

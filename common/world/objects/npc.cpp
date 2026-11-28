@@ -586,6 +586,12 @@ float Npc::angleDir(float x, float z) {
   return a;
   }
 
+bool Npc::isAtDeadPoint() const {
+  if(isPlayer() || isDead())
+    return false;
+  return (position()-owner.deadPoint().position()).quadLength()<300.f*300.f;
+  }
+
 void Npc::leaveDeadPoint(std::string_view wpName) {
   if(isPlayer() || isDead() || wpName.empty() || wpName.compare(0,3,"TOT")==0 || !owner.script().hasDma())
     return;
@@ -5338,7 +5344,7 @@ void Npc::setPerceptionDisable(PercType t) {
 
 void Npc::startDialog(Npc& pl) {
   // the talks are of the hero: the scripts do not expect the character that is played by the spell of control
-  if(pl.isDown() || pl.isInAir() || isPlayer() || owner.isControlled(pl))
+  if(pl.isDown() || pl.isInAir() || isPlayer() || owner.isControlled(pl) || isAtDeadPoint())
     return;
   if(puppet)
     puppetInteract = true;
